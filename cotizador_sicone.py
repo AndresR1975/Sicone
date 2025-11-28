@@ -149,28 +149,28 @@ def inicializar_session_state():
     # ESTRUCTURA
     if 'estructura' not in st.session_state:
         st.session_state.estructura = ItemEstandar(
-            'Estructura General', 'gl', 1.03, 127386450, 0, 0
+            'Estructura General', 'gl', 1.03, 127386450.0, 0.0, 0.0
         )
     
     # MAMPOSTERÍA
     if 'mamposteria' not in st.session_state:
         st.session_state.mamposteria = ItemEstandar(
-            'Mampostería', 'm²', 845.0, 67000, 7500, 45000
+            'Mampostería', 'm²', 845.0, 67000.0, 7500.0, 45000.0
         )
     
     # MAMPOSTERÍA Y TECHOS (antes "Otros")
     if 'mamposteria_techos' not in st.session_state:
         st.session_state.mamposteria_techos = {
-            'Cubierta, Superboard y Manto': ItemEstandar('Cubierta, Superboard y Manto', 'm²', 120.0, 175000, 5000, 40000),
-            'Ruana': ItemEstandar('Ruana', 'ml', 0.0, 40000, 0, 20000),
-            'Contramarcos - Ventana': ItemEstandar('Contramarcos - Ventana', 'ml', 0.0, 15000, 1500, 8500),
-            'Contramarcos - Puerta': ItemEstandar('Contramarcos - Puerta', 'ml', 0.0, 15000, 1500, 8500),
-            'Embudos y Boquillas': ItemEstandar('Embudos y Boquillas', 'und', 0.0, 60000, 0, 10000),
-            'Cubierta, Superboard y Shingle': ItemEstandar('Cubierta, Superboard y Shingle', 'm²', 137.5, 210000, 5000, 50000),
-            'Entrepiso Placa Fácil': ItemEstandar('Entrepiso Placa Fácil', 'm²', 159.02, 175000, 5000, 35000),
-            'Canoas': ItemEstandar('Canoas', 'ml', 0.0, 85000, 10000, 35000),
-            'Pérgolas y Estructura sin Techo': ItemEstandar('Pérgolas y Estructura sin Techo', 'm²', 108.16, 175000, 15000, 45000),
-            'Tapacanal y Lagrimal': ItemEstandar('Tapacanal y Lagrimal', 'ml', 0.0, 80000, 5000, 35000)
+            'Cubierta, Superboard y Manto': ItemEstandar('Cubierta, Superboard y Manto', 'm²', 120.0, 175000.0, 5000.0, 40000.0),
+            'Ruana': ItemEstandar('Ruana', 'ml', 0.0, 40000.0, 0.0, 20000.0),
+            'Contramarcos - Ventana': ItemEstandar('Contramarcos - Ventana', 'ml', 0.0, 15000.0, 1500.0, 8500.0),
+            'Contramarcos - Puerta': ItemEstandar('Contramarcos - Puerta', 'ml', 0.0, 15000.0, 1500.0, 8500.0),
+            'Embudos y Boquillas': ItemEstandar('Embudos y Boquillas', 'und', 0.0, 60000.0, 0.0, 10000.0),
+            'Cubierta, Superboard y Shingle': ItemEstandar('Cubierta, Superboard y Shingle', 'm²', 137.5, 210000.0, 5000.0, 50000.0),
+            'Entrepiso Placa Fácil': ItemEstandar('Entrepiso Placa Fácil', 'm²', 159.02, 175000.0, 5000.0, 35000.0),
+            'Canoas': ItemEstandar('Canoas', 'ml', 0.0, 85000.0, 10000.0, 35000.0),
+            'Pérgolas y Estructura sin Techo': ItemEstandar('Pérgolas y Estructura sin Techo', 'm²', 108.16, 175000.0, 15000.0, 45000.0),
+            'Tapacanal y Lagrimal': ItemEstandar('Tapacanal y Lagrimal', 'ml', 0.0, 80000.0, 5000.0, 35000.0)
         }
     
     # CIMENTACIONES
@@ -179,64 +179,64 @@ def inicializar_session_state():
     
     if 'cimentacion_opcion1' not in st.session_state:
         st.session_state.cimentacion_opcion1 = {
-            'Pilas a 3m y 5m': ItemCimentacion('Pilas a 3m y 5m', 'und', 73, 1340000),
-            'Cimentación Vigas y Losa': ItemCimentacion('Cimentación Vigas y Losa', 'm²', 385.06, 280000)
+            'Pilas a 3m y 5m': ItemCimentacion('Pilas a 3m y 5m', 'und', 73.0, 1340000.0),
+            'Cimentación Vigas y Losa': ItemCimentacion('Cimentación Vigas y Losa', 'm²', 385.06, 280000.0)
         }
     
     if 'cimentacion_opcion2' not in st.session_state:
         st.session_state.cimentacion_opcion2 = {
-            'Pilotes de Apoyo': ItemCimentacion('Pilotes de Apoyo', 'und', 210, 320000),
-            'Cimentación Vigas y Losa': ItemCimentacion('Cimentación Vigas y Losa', 'm²', 385.06, 280000)
+            'Pilotes de Apoyo': ItemCimentacion('Pilotes de Apoyo', 'und', 210.0, 320000.0),
+            'Cimentación Vigas y Losa': ItemCimentacion('Cimentación Vigas y Losa', 'm²', 385.06, 280000.0)
         }
     
     # COMPLEMENTARIOS
     if 'complementarios' not in st.session_state:
         st.session_state.complementarios = {
-            'Red Aguas Lluvias': ItemCimentacion('Red Aguas Lluvias', 'gl', 1, 6150000),
-            'Red Hidrosanitaria': ItemCimentacion('Red Hidrosanitaria', 'gl', 1, 13520000),
-            'Estructura Escalas Metálicas': ItemCimentacion('Estructura Escalas Metálicas', 'und', 2, 8600000),
-            'Campamento y baño': ItemCimentacion('Campamento y baño', 'gl', 1, 3000000),
-            'Cerramiento en tela': ItemCimentacion('Cerramiento en tela', 'ml', 200, 14500),
-            'Canoa Metálica Calibre 24': ItemCimentacion('Canoa Metálica Calibre 24', 'ml', 51, 145000),
-            'Ruana Metálica Calibre 24': ItemCimentacion('Ruana Metálica Calibre 24', 'ml', 62, 58000),
-            'Revoque': ItemCimentacion('Revoque', 'm²', 1690, 32500),
-            'Fajas, Ranuras y Filetes': ItemCimentacion('Fajas, Ranuras y Filetes', 'ml', 1859, 7000),
-            'Otros conceptos': ItemCimentacion('Otros conceptos', 'gl', 0, 0)
+            'Red Aguas Lluvias': ItemCimentacion('Red Aguas Lluvias', 'gl', 1.0, 6150000.0),
+            'Red Hidrosanitaria': ItemCimentacion('Red Hidrosanitaria', 'gl', 1.0, 13520000.0),
+            'Estructura Escalas Metálicas': ItemCimentacion('Estructura Escalas Metálicas', 'und', 2.0, 8600000.0),
+            'Campamento y baño': ItemCimentacion('Campamento y baño', 'gl', 1.0, 3000000.0),
+            'Cerramiento en tela': ItemCimentacion('Cerramiento en tela', 'ml', 200.0, 14500.0),
+            'Canoa Metálica Calibre 24': ItemCimentacion('Canoa Metálica Calibre 24', 'ml', 51.0, 145000.0),
+            'Ruana Metálica Calibre 24': ItemCimentacion('Ruana Metálica Calibre 24', 'ml', 62.0, 58000.0),
+            'Revoque': ItemCimentacion('Revoque', 'm²', 1690.0, 32500.0),
+            'Fajas, Ranuras y Filetes': ItemCimentacion('Fajas, Ranuras y Filetes', 'ml', 1859.0, 7000.0),
+            'Otros conceptos': ItemCimentacion('Otros conceptos', 'gl', 0.0, 0.0)
         }
     
     # PERSONAL PROFESIONAL
     if 'personal_profesional' not in st.session_state:
         st.session_state.personal_profesional = {
-            'Director de Obra': PersonalAdmin('Director de Obra', 1, 4407865, 54.0, 0.5, 6),
-            'Supervisor Técnico': PersonalAdmin('Supervisor Técnico', 1, 1889085, 54.0, 0.3, 6),
-            'Profesional Presupuesto': PersonalAdmin('Profesional Presupuesto', 1, 2896597, 54.0, 0.3, 6),
-            'Arquitecto Diseñador': PersonalAdmin('Arquitecto Diseñador', 1, 1259390, 54.0, 0.3, 3),
-            'Oficial Obra': PersonalAdmin('Oficial Obra', 1, 2266902, 54.0, 0.3, 3),
-            'Ayudante de Obra': PersonalAdmin('Ayudante de Obra', 1, 811488, 54.0, 0.2, 2)
+            'Director de Obra': PersonalAdmin('Director de Obra', 1, 4407865.0, 54.0, 0.5, 6),
+            'Supervisor Técnico': PersonalAdmin('Supervisor Técnico', 1, 1889085.0, 54.0, 0.3, 6),
+            'Profesional Presupuesto': PersonalAdmin('Profesional Presupuesto', 1, 2896597.0, 54.0, 0.3, 6),
+            'Arquitecto Diseñador': PersonalAdmin('Arquitecto Diseñador', 1, 1259390.0, 54.0, 0.3, 3),
+            'Oficial Obra': PersonalAdmin('Oficial Obra', 1, 2266902.0, 54.0, 0.3, 3),
+            'Ayudante de Obra': PersonalAdmin('Ayudante de Obra', 1, 811488.0, 54.0, 0.2, 2)
         }
     
     # PERSONAL ADMINISTRATIVO
     if 'personal_administrativo' not in st.session_state:
         st.session_state.personal_administrativo = {
-            'Contador': PersonalAdmin('Contador', 1, 3000000, 54.0, 0.2, 6),
-            'Auxiliar Contable': PersonalAdmin('Auxiliar Contable', 1, 1500000, 54.0, 0.3, 6),
-            'Auxiliar Administrativa': PersonalAdmin('Auxiliar Administrativa', 1, 1200000, 54.0, 0.5, 6)
+            'Contador': PersonalAdmin('Contador', 1, 3000000.0, 54.0, 0.2, 6),
+            'Auxiliar Contable': PersonalAdmin('Auxiliar Contable', 1, 1500000.0, 54.0, 0.3, 6),
+            'Auxiliar Administrativa': PersonalAdmin('Auxiliar Administrativa', 1, 1200000.0, 54.0, 0.5, 6)
         }
     
     # OTROS CONCEPTOS ADMINISTRACIÓN
     if 'otros_admin' not in st.session_state:
         st.session_state.otros_admin = {
-            'Pólizas de Seguros': 3000000,
-            'Pagos Provisionales': 0,
-            'Pagos Mensuales': 7511240,
-            'Dotaciones': 0,
-            'Pagos de Obra': 0,
-            'SISO': 3000000,
-            'Asesores Externos': 0,
-            'Impuestos': 18199247,
-            'Costos Fijos': 4989444,
-            'Descuentos': 0,
-            'Pagos a Terceros': 0
+            'Pólizas de Seguros': 3000000.0,
+            'Pagos Provisionales': 0.0,
+            'Pagos Mensuales': 7511240.0,
+            'Dotaciones': 0.0,
+            'Pagos de Obra': 0.0,
+            'SISO': 3000000.0,
+            'Asesores Externos': 0.0,
+            'Impuestos': 18199247.0,
+            'Costos Fijos': 4989444.0,
+            'Descuentos': 0.0,
+            'Pagos a Terceros': 0.0
         }
     
     # CONFIGURACIÓN AIU
@@ -254,14 +254,14 @@ def inicializar_session_state():
         st.session_state.aiu_cimentacion = {
             'pct_comision': 3.0,
             'pct_aiu': 47.0,
-            'logistica': 0
+            'logistica': 0.0
         }
     
     if 'aiu_complementarios' not in st.session_state:
         st.session_state.aiu_complementarios = {
             'pct_comision': 0.0,
             'pct_aiu': 15.0,
-            'logistica': 0
+            'logistica': 0.0
         }
 
 # ============================================================================
