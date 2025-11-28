@@ -666,8 +666,8 @@ def calcular_impuestos_dinamicos():
     - Industria y Comercio = 0.25% * Base
     - Otros = 0%
     - 4*1000 = 0.4% * Base
-    - IVA sobre Utilidad = 19% * (utilidad estimada)
-    - Improrrenta = 34% * (utilidad estimada)
+    - IVA sobre Utilidad = 19% * (Utilidad / 3)  ← IMPORTANTE: divide entre 3
+    - Improrrenta = 34% * (Base IVA / 3)  ← IMPORTANTE: divide entre 3 nuevamente
     """
     
     # Calcular base imponible (costos directos)
@@ -692,16 +692,24 @@ def calcular_impuestos_dinamicos():
         total_complementarios
     )
     
-    # Calcular utilidad estimada (simplificado: 26.5% de los costos según AIU)
-    utilidad_estimada = base_imponible * (st.session_state.config_aiu.get('Utilidad (%)', 26.5) / 100)
+    # Calcular utilidad estimada según % de AIU (sobre costos directos base, no sobre todo)
+    costos_directos_base = total_disenos + total_estructura + total_mamposteria + total_techos
+    utilidad_estimada = costos_directos_base * (st.session_state.config_aiu.get('Utilidad (%)', 26.5) / 100)
     
     # Calcular cada impuesto
     fic = base_imponible * 0.0025
     industria_comercio = base_imponible * 0.0025
     otros = 0.0  # Según Excel está en 0
     cuatro_mil = base_imponible * 0.004
-    iva_utilidad = utilidad_estimada * 0.19
-    improrrenta = utilidad_estimada * 0.34
+    
+    # FÓRMULAS CORRECTAS DEL EXCEL:
+    # IVA = 19% × (Utilidad / 3)
+    base_iva = utilidad_estimada / 3
+    iva_utilidad = base_iva * 0.19
+    
+    # Improrrenta = 34% × (Base IVA / 3)
+    base_improrrenta = base_iva / 3
+    improrrenta = base_improrrenta * 0.34
     
     # Actualizar el ConceptoDetallado de Impuestos
     st.session_state.otros_admin['Impuestos'].items_detalle = {
