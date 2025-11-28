@@ -296,19 +296,25 @@ def inicializar_session_state():
     if 'otros_admin' not in st.session_state:
         st.session_state.otros_admin = {
             'Pólizas de Seguros': ConceptoDetallado('Pólizas de Seguros', {
-                'Póliza Todo Riesgo': 1500000.0,
-                'Responsabilidad Civil': 800000.0,
-                'Accidentes Laborales': 700000.0
+                'Buen Manejo y Correcta Inversión del Anticipo': 600000.0,
+                'Cumplimiento': 600000.0,
+                'Pago de Salarios, Prestaciones Sociales e Indemnizaciones': 600000.0,
+                'Estabilidad de Obra': 600000.0,
+                'Responsabilidad Social Extracontractual': 600000.0
             }),
             'Pagos Provisionales': ConceptoDetallado('Pagos Provisionales', {
-                'Provisión mes 1': 0.0,
-                'Provisión mes 2': 0.0
+                'Corte de Muros y Techador': 0.0,
+                'Bonificación Pronta Entrega Armadores': 0.0,
+                'Transporte de Operarios': 0.0,
+                'Adecuación Alcantarillado': 0.0
             }),
             'Pagos Mensuales': ConceptoDetallado('Pagos Mensuales', {
                 'Servicios públicos': 2511240.0,
                 'Mantenimiento oficina': 2000000.0,
                 'Comunicaciones': 1500000.0,
-                'Transporte': 1500000.0
+                'Transporte': 1500000.0,
+                'Papelería': 0.0,
+                'Caja Menor': 0.0
             }),
             'Dotaciones': ConceptoDetallado('Dotaciones', {
                 'Uniformes': 0.0,
@@ -316,33 +322,73 @@ def inicializar_session_state():
                 'Herramientas menores': 0.0
             }),
             'Pagos de Obra': ConceptoDetallado('Pagos de Obra', {
-                'Pagos directos obra': 0.0,
-                'Anticipos': 0.0
+                'Actualización de Planos': 0.0,
+                'Elaboración de Planos': 0.0,
+                'Amarre Geodésico ante Planeación': 0.0,
+                'Georreferenciación de redes de servicios públicos': 0.0,
+                'Diseño de Mezclas': 0.0,
+                'Fallada de Cilindros': 0.0,
+                'Fallada de Refuerzo': 0.0,
+                'Fallada de Ladrillos': 0.0,
+                'Ensayos de Tejas': 0.0,
+                'Valla 3.0m x 2.0m': 0.0,
+                'Valla 1.5m x 1.0m': 0.0
             }),
             'SISO': ConceptoDetallado('SISO', {
-                'Sistema de Seguridad': 1500000.0,
-                'Salud Ocupacional': 1500000.0
+                'Cinta Precaución y Peligro': 0.0,
+                'Tela Verde de Cerramiento': 0.0,
+                'Alquiler Señales Preventivas': 0.0,
+                'Cono PVC con cinta reflectiva 45cm': 0.0,
+                'Tubo Señalizador con Cinta': 0.0,
+                'Paleta para Pare y Siga': 0.0,
+                'Señales 15cm x 15cm': 0.0,
+                'Cascos de Seguridad Dieléctrico': 0.0,
+                'Arnes de 3 argollas': 161700.0,
+                'Cabo de Vida 5/8" x 1.80m': 103950.0,
+                'Camilla Rígida': 0.0,
+                'Respiradores RedLine por 50un': 42525.0,
+                'Protector Auditivo tipo Copa Plegable': 0.0,
+                'Chaleco Reflectivo': 0.0,
+                'Bota de Caucho Trepadora': 0.0,
+                'Bota Cuero Concord': 0.0,
+                'Capa Adulto 1.50m x 2.0m': 45864.0,
+                'Conjunto Industrial Nylon Poliéster': 0.0,
+                'Guantes de Nylon': 89775.0,
+                'Guantes de Hilaza': 0.0,
+                'Botiquín de Primeros Auxilios': 0.0,
+                'Extintor Multipropósito': 0.0,
+                'Ajuste SISO y Seguridad Industrial': 2556186.0
             }),
             'Asesores Externos': ConceptoDetallado('Asesores Externos', {
-                'Asesoría Legal': 0.0,
-                'Asesoría Técnica': 0.0,
-                'Consultoría': 0.0
+                'Suelos': 0.0,
+                'Hidráulica': 0.0,
+                'Estructuras': 0.0,
+                'Contable': 0.0,
+                'Jurídico': 0.0,
+                'Electricista': 0.0
             }),
             'Impuestos': ConceptoDetallado('Impuestos', {
-                'ICA': 9099623.0,
-                'Industria y Comercio': 9099624.0
+                'FIC': 1848754.0,
+                'Industria y Comercio': 1848754.0,
+                'Otros': 0.0,
+                '4*1000': 2958006.0,
+                'IVA sobre la Utilidad': 7230691.0,
+                'Improrrenta (34% de la utilidad)': 4313042.0
             }),
             'Costos Fijos': ConceptoDetallado('Costos Fijos', {
-                'Arriendo oficina': 2494722.0,
-                'Depreciación equipos': 2494722.0
+                'Gastos Sede Central': 2215224.0,
+                'Gastos Financieros': 1846020.0,
+                'Costo de Elaboración de la Propuesta': 928200.0
             }),
             'Descuentos': ConceptoDetallado('Descuentos', {
                 'Descuento pronto pago': 0.0,
                 'Bonificaciones': 0.0
             }),
             'Pagos a Terceros': ConceptoDetallado('Pagos a Terceros', {
-                'Subcontratistas': 0.0,
-                'Proveedores especiales': 0.0
+                'Cálculo Estructural': 0.0,
+                'Desarrollo del Proyecto': 0.0,
+                'Comisiones': 0.0,
+                'Otras Comisiones': 0.0
             })
         }
     
