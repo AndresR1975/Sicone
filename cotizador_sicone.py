@@ -1554,7 +1554,12 @@ def main():
     st.markdown('<h1 class="main-title">🏗️ SICONE v2.0 - Sistema de Cotización</h1>', unsafe_allow_html=True)
     
     # ============================================================================
-    # RESUMEN GLOBAL (siempre visible)
+    # SIDEBAR (PRIMERO para que los valores se actualicen ANTES de calcular)
+    # ============================================================================
+    render_sidebar()
+    
+    # ============================================================================
+    # RESUMEN GLOBAL (siempre visible) - AHORA con valores actualizados
     # ============================================================================
     resumen = calcular_resumen_global()
     
@@ -1584,9 +1589,6 @@ def main():
                 st.error(f"❌ Error al generar archivo: {str(e)}")
     
     st.markdown("---")
-    
-    # SIDEBAR
-    render_sidebar()
     
     # TABS PRINCIPALES
     tabs = st.tabs([
