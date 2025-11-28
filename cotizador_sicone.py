@@ -675,8 +675,13 @@ def calcular_impuestos_dinamicos():
     total_estructura = calcular_estructura()
     total_mamposteria = calcular_mamposteria()
     total_techos = calcular_mamposteria_techos()
-    total_cimentacion = calcular_cimentacion()
-    total_complementarios = calcular_complementarios()
+    
+    # Cimentación y Complementarios retornan diccionarios
+    cimentacion_dict = calcular_cimentacion()
+    total_cimentacion = cimentacion_dict['total'] if isinstance(cimentacion_dict, dict) else cimentacion_dict
+    
+    complementarios_dict = calcular_complementarios()
+    total_complementarios = complementarios_dict['total'] if isinstance(complementarios_dict, dict) else complementarios_dict
     
     base_imponible = (
         total_disenos +
