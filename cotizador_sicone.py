@@ -298,12 +298,12 @@ def main():
         aiu_config = {}
         for concepto, porcentaje_default in PORCENTAJES_AIU_DEFAULT.items():
             aiu_config[concepto] = st.number_input(
-                concepto,
+                f"{concepto} (%)",
                 min_value=0.0,
                 max_value=100.0,
                 value=st.session_state.cotizacion.get('aiu', {}).get(concepto, porcentaje_default),
                 step=0.5,
-                format="%.1f%%"
+                format="%.1f"
             )
         
         st.session_state.cotizacion['aiu'] = aiu_config
