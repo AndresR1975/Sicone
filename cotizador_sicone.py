@@ -158,7 +158,7 @@ def inicializar_session_state():
             'Mampostería', 'm²', 845.0, 67000.0, 7500.0, 45000.0
         )
     
-    # MAMPOSTERÍA Y TECHOS (antes "Otros")
+    # TECHOS Y OTROS
     if 'mamposteria_techos' not in st.session_state:
         st.session_state.mamposteria_techos = {
             'Cubierta, Superboard y Manto': ItemEstandar('Cubierta, Superboard y Manto', 'm²', 120.0, 175000.0, 5000.0, 40000.0),
@@ -218,9 +218,16 @@ def inicializar_session_state():
     # PERSONAL ADMINISTRATIVO
     if 'personal_administrativo' not in st.session_state:
         st.session_state.personal_administrativo = {
-            'Contador': PersonalAdmin('Contador', 1, 3000000.0, 54.0, 0.2, 6),
-            'Auxiliar Contable': PersonalAdmin('Auxiliar Contable', 1, 1500000.0, 54.0, 0.3, 6),
-            'Auxiliar Administrativa': PersonalAdmin('Auxiliar Administrativa', 1, 1200000.0, 54.0, 0.5, 6)
+            'Profesional de Procesos': PersonalAdmin('Profesional de Procesos', 1, 4407865.0, 54.0, 0.3, 6),
+            'Gerente General': PersonalAdmin('Gerente General', 1, 5667255.0, 54.0, 0.3, 6),
+            'Compras': PersonalAdmin('Compras', 1, 3148475.0, 54.0, 0.3, 6),
+            'Contabilidad': PersonalAdmin('Contabilidad', 1, 3148475.0, 54.0, 0.2, 6),
+            'Atención al Cliente': PersonalAdmin('Atención al Cliente', 1, 1259390.0, 54.0, 0.2, 3),
+            'Mantenimiento y Servicios Generales': PersonalAdmin('Mantenimiento y Servicios Generales', 1, 811489.0, 54.0, 0.2, 3),
+            'Desarrollo y Gestión Humana': PersonalAdmin('Desarrollo y Gestión Humana', 1, 2140963.0, 54.0, 0.2, 3),
+            'Personal Administrativo Planta': PersonalAdmin('Personal Administrativo Planta', 1, 3434700.0, 54.0, 0.3, 0),
+            'Personal Operativo Planta': PersonalAdmin('Personal Operativo Planta', 1, 737717.0, 54.0, 0.3, 0),
+            'Personal Gestión Ambiental': PersonalAdmin('Personal Gestión Ambiental', 1, 3000000.0, 54.0, 0.3, 0)
         }
     
     # OTROS CONCEPTOS ADMINISTRACIÓN
@@ -242,11 +249,11 @@ def inicializar_session_state():
     # CONFIGURACIÓN AIU
     if 'config_aiu' not in st.session_state:
         st.session_state.config_aiu = {
-            'Comisión de Ventas (%)': 3.0,
-            'Imprevistos (%)': 5.0,
-            'Administración (%)': 12.0,
-            'Logística (%)': 2.0,
-            'Utilidad (%)': 15.0
+            'Comisión de Ventas (%)': 5.5,
+            'Imprevistos (%)': 10.5,
+            'Administración (%)': 27.5,
+            'Logística (%)': 2.5,
+            'Utilidad (%)': 26.5
         }
     
     # % AIU CIMENTACIONES Y COMPLEMENTARIOS
@@ -558,11 +565,11 @@ def render_tab_disenos_estructura():
             df_disenos,
             column_config={
                 'Precio Unitario ($/m²)': st.column_config.NumberColumn(
-                    format="$%.2f",
+                    format="$%d",
                     min_value=0
                 ),
                 'Subtotal': st.column_config.NumberColumn(
-                    format="$%.2f",
+                    format="$%d",
                     disabled=True
                 )
             },
@@ -576,7 +583,7 @@ def render_tab_disenos_estructura():
             st.session_state.disenos[nombre].precio_unitario = row['Precio Unitario ($/m²)']
         
         total_disenos = calcular_disenos()
-        st.metric("**Total Diseños y Planificación**", f"${total_disenos:,.2f}")
+        st.metric("**Total Diseños y Planificación**", f"${total_disenos:,.0f}")
     
     # ESTRUCTURA
     with st.expander("🏗️ Estructura", expanded=True):
@@ -584,16 +591,16 @@ def render_tab_disenos_estructura():
         
         col1, col2, col3, col4 = st.columns(4)
         with col1:
-            item.cantidad = st.number_input("Cantidad", value=item.cantidad, min_value=0.0, step=0.01, key='est_cant')
+            item.cantidad = st.number_input("Cantidad", value=item.cantidad, min_value=0.0, step=0.01, key='est_cant', format="%.2f")
         with col2:
-            item.precio_materiales = st.number_input("Materiales ($)", value=item.precio_materiales, min_value=0.0, step=1000.0, key='est_mat')
+            item.precio_materiales = st.number_input("Materiales ($)", value=item.precio_materiales, min_value=0.0, step=1000.0, key='est_mat', format="%d")
         with col3:
-            item.precio_equipos = st.number_input("Equipos ($)", value=item.precio_equipos, min_value=0.0, step=1000.0, key='est_eq')
+            item.precio_equipos = st.number_input("Equipos ($)", value=item.precio_equipos, min_value=0.0, step=1000.0, key='est_eq', format="%d")
         with col4:
-            item.precio_mano_obra = st.number_input("Mano de Obra ($)", value=item.precio_mano_obra, min_value=0.0, step=1000.0, key='est_mo')
+            item.precio_mano_obra = st.number_input("Mano de Obra ($)", value=item.precio_mano_obra, min_value=0.0, step=1000.0, key='est_mo', format="%d")
         
         total_estructura = calcular_estructura()
-        st.metric("**Total Estructura**", f"${total_estructura:,.2f}")
+        st.metric("**Total Estructura**", f"${total_estructura:,.0f}")
     
     # MAMPOSTERÍA
     with st.expander("🧱 Mampostería", expanded=True):
@@ -601,19 +608,19 @@ def render_tab_disenos_estructura():
         
         col1, col2, col3, col4 = st.columns(4)
         with col1:
-            item.cantidad = st.number_input("Cantidad (m²)", value=item.cantidad, min_value=0.0, step=0.01, key='mam_cant')
+            item.cantidad = st.number_input("Cantidad (m²)", value=item.cantidad, min_value=0.0, step=0.01, key='mam_cant', format="%.2f")
         with col2:
-            item.precio_materiales = st.number_input("Materiales ($)", value=item.precio_materiales, min_value=0.0, step=1000.0, key='mam_mat')
+            item.precio_materiales = st.number_input("Materiales ($)", value=item.precio_materiales, min_value=0.0, step=1000.0, key='mam_mat', format="%d")
         with col3:
-            item.precio_equipos = st.number_input("Equipos ($)", value=item.precio_equipos, min_value=0.0, step=1000.0, key='mam_eq')
+            item.precio_equipos = st.number_input("Equipos ($)", value=item.precio_equipos, min_value=0.0, step=1000.0, key='mam_eq', format="%d")
         with col4:
-            item.precio_mano_obra = st.number_input("Mano de Obra ($)", value=item.precio_mano_obra, min_value=0.0, step=1000.0, key='mam_mo')
+            item.precio_mano_obra = st.number_input("Mano de Obra ($)", value=item.precio_mano_obra, min_value=0.0, step=1000.0, key='mam_mo', format="%d")
         
         total_mamposteria = calcular_mamposteria()
-        st.metric("**Total Mampostería**", f"${total_mamposteria:,.2f}")
+        st.metric("**Total Mampostería**", f"${total_mamposteria:,.0f}")
     
-    # MAMPOSTERÍA Y TECHOS
-    with st.expander("🏠 Mampostería y Techos", expanded=True):
+    # TECHOS Y OTROS
+    with st.expander("🏠 Techos y otros", expanded=True):
         
         df_mt_data = []
         for nombre, item in st.session_state.mamposteria_techos.items():
@@ -634,10 +641,10 @@ def render_tab_disenos_estructura():
             column_config={
                 'Unidad': st.column_config.TextColumn(disabled=True),
                 'Cantidad': st.column_config.NumberColumn(min_value=0, format="%.2f"),
-                'Materiales': st.column_config.NumberColumn(min_value=0, format="$%.2f"),
-                'Equipos': st.column_config.NumberColumn(min_value=0, format="$%.2f"),
-                'Mano de Obra': st.column_config.NumberColumn(min_value=0, format="$%.2f"),
-                'Subtotal': st.column_config.NumberColumn(format="$%.2f", disabled=True)
+                'Materiales': st.column_config.NumberColumn(min_value=0, format="%d"),
+                'Equipos': st.column_config.NumberColumn(min_value=0, format="%d"),
+                'Mano de Obra': st.column_config.NumberColumn(min_value=0, format="%d"),
+                'Subtotal': st.column_config.NumberColumn(format="%d", disabled=True)
             },
             hide_index=True,
             use_container_width=True
@@ -652,7 +659,7 @@ def render_tab_disenos_estructura():
             st.session_state.mamposteria_techos[nombre].precio_mano_obra = row['Mano de Obra']
         
         total_mt = calcular_mamposteria_techos()
-        st.metric("**Total Mampostería y Techos**", f"${total_mt:,.2f}")
+        st.metric("**Total Techos y otros**", f"${total_mt:,.0f}")
 
 # ============================================================================
 # INTERFAZ - TAB 2: CIMENTACIONES
@@ -667,7 +674,8 @@ def render_tab_cimentaciones():
         "Seleccione la opción de cimentación:",
         options=['Opción 1', 'Opción 2'],
         index=0 if st.session_state.opcion_cimentacion == 'Opción 1' else 1,
-        horizontal=True
+        horizontal=True,
+        key='radio_cimentacion'
     )
     
     if st.session_state.opcion_cimentacion == 'Opción 1':
@@ -694,8 +702,8 @@ def render_tab_cimentaciones():
         column_config={
             'Unidad': st.column_config.TextColumn(disabled=True),
             'Cantidad': st.column_config.NumberColumn(min_value=0, format="%.2f"),
-            'Precio Unitario': st.column_config.NumberColumn(min_value=0, format="$%.2f"),
-            'Subtotal': st.column_config.NumberColumn(format="$%.2f", disabled=True)
+            'Precio Unitario': st.column_config.NumberColumn(min_value=0, format="%d"),
+            'Subtotal': st.column_config.NumberColumn(format="%d", disabled=True)
         },
         hide_index=True,
         use_container_width=True
@@ -740,12 +748,12 @@ def render_tab_cimentaciones():
     
     cimentacion = calcular_cimentacion()
     
-    st.markdown("### Resumen Cimentación")
+    st.markdown('<p style="font-size: 18px; font-weight: bold; margin-top: 10px;">Resumen Cimentación</p>', unsafe_allow_html=True)
     col1, col2, col3, col4 = st.columns(4)
-    col1.metric("Subtotal", f"${cimentacion['subtotal']:,.2f}")
-    col2.metric("Comisión", f"${cimentacion['comision']:,.2f}")
-    col3.metric("AIU", f"${cimentacion['aiu']:,.2f}")
-    col4.metric("**TOTAL**", f"${cimentacion['total']:,.2f}")
+    col1.metric("Subtotal", f"${cimentacion['subtotal']:,.0f}")
+    col2.metric("Comisión", f"${cimentacion['comision']:,.0f}")
+    col3.metric("AIU", f"${cimentacion['aiu']:,.0f}")
+    col4.metric("**TOTAL**", f"${cimentacion['total']:,.0f}")
 
 # ============================================================================
 # INTERFAZ - TAB 3: COMPLEMENTARIOS
@@ -773,8 +781,8 @@ def render_tab_complementarios():
         column_config={
             'Unidad': st.column_config.TextColumn(disabled=True),
             'Cantidad': st.column_config.NumberColumn(min_value=0, format="%.2f"),
-            'Precio Unitario': st.column_config.NumberColumn(min_value=0, format="$%.2f"),
-            'Subtotal': st.column_config.NumberColumn(format="$%.2f", disabled=True)
+            'Precio Unitario': st.column_config.NumberColumn(min_value=0, format="%d"),
+            'Subtotal': st.column_config.NumberColumn(format="%d", disabled=True)
         },
         hide_index=True,
         use_container_width=True
@@ -819,12 +827,12 @@ def render_tab_complementarios():
     
     complementarios = calcular_complementarios()
     
-    st.markdown("### Resumen Complementarios")
+    st.markdown('<p style="font-size: 18px; font-weight: bold; margin-top: 10px;">Resumen Complementarios</p>', unsafe_allow_html=True)
     col1, col2, col3, col4 = st.columns(4)
-    col1.metric("Subtotal", f"${complementarios['subtotal']:,.2f}")
-    col2.metric("Comisión", f"${complementarios['comision']:,.2f}")
-    col3.metric("AIU", f"${complementarios['aiu']:,.2f}")
-    col4.metric("**TOTAL**", f"${complementarios['total']:,.2f}")
+    col1.metric("Subtotal", f"${complementarios['subtotal']:,.0f}")
+    col2.metric("Comisión", f"${complementarios['comision']:,.0f}")
+    col3.metric("AIU", f"${complementarios['aiu']:,.0f}")
+    col4.metric("**TOTAL**", f"${complementarios['total']:,.0f}")
 
 # ============================================================================
 # INTERFAZ - TAB 4: ADMINISTRACIÓN
@@ -865,11 +873,11 @@ def render_tab_administracion():
             column_config={
                 'Nombre': st.column_config.TextColumn(disabled=True),
                 'Cant': st.column_config.NumberColumn(min_value=0, format="%d"),
-                'Valor/Mes': st.column_config.NumberColumn(min_value=0, format="$%.2f"),
+                'Valor/Mes': st.column_config.NumberColumn(min_value=0, format="%d"),
                 '% Prest': st.column_config.NumberColumn(min_value=0, max_value=100, format="%.1f"),
                 'Dedicación': st.column_config.NumberColumn(min_value=0.0, max_value=1.0, format="%.2f"),
                 'Meses': st.column_config.NumberColumn(min_value=0, format="%d"),
-                'Total': st.column_config.NumberColumn(format="$%.2f", disabled=True)
+                'Total': st.column_config.NumberColumn(format="%d", disabled=True)
             },
             hide_index=True,
             use_container_width=True
@@ -884,6 +892,10 @@ def render_tab_administracion():
             p.pct_prestaciones = row['% Prest']
             p.dedicacion = row['Dedicación']
             p.meses = int(row['Meses'])
+        
+        # Subtotal Personal Profesional
+        total_prof = sum([p.calcular_total() for p in st.session_state.personal_profesional.values()])
+        st.metric("**Subtotal Personal Profesional y Técnico**", f"${total_prof:,.0f}")
     
     # SUB-TAB 2: PERSONAL ADMINISTRATIVO
     with subtab2:
@@ -908,11 +920,11 @@ def render_tab_administracion():
             column_config={
                 'Nombre': st.column_config.TextColumn(disabled=True),
                 'Cant': st.column_config.NumberColumn(min_value=0, format="%d"),
-                'Valor/Mes': st.column_config.NumberColumn(min_value=0, format="$%.2f"),
+                'Valor/Mes': st.column_config.NumberColumn(min_value=0, format="%d"),
                 '% Prest': st.column_config.NumberColumn(min_value=0, max_value=100, format="%.1f"),
                 'Dedicación': st.column_config.NumberColumn(min_value=0.0, max_value=1.0, format="%.2f"),
                 'Meses': st.column_config.NumberColumn(min_value=0, format="%d"),
-                'Total': st.column_config.NumberColumn(format="$%.2f", disabled=True)
+                'Total': st.column_config.NumberColumn(format="%d", disabled=True)
             },
             hide_index=True,
             use_container_width=True
@@ -927,6 +939,10 @@ def render_tab_administracion():
             p.pct_prestaciones = row['% Prest']
             p.dedicacion = row['Dedicación']
             p.meses = int(row['Meses'])
+        
+        # Subtotal Personal Administrativo
+        total_admin = sum([p.calcular_total() for p in st.session_state.personal_administrativo.values()])
+        st.metric("**Subtotal Personal Administrativo**", f"${total_admin:,.0f}")
     
     # SUB-TAB 3: OTROS CONCEPTOS
     with subtab3:
@@ -945,7 +961,7 @@ def render_tab_administracion():
             df_otros,
             column_config={
                 'Concepto': st.column_config.TextColumn(disabled=True),
-                'Valor': st.column_config.NumberColumn(min_value=0, format="$%.2f")
+                'Valor': st.column_config.NumberColumn(min_value=0, format="%d")
             },
             hide_index=True,
             use_container_width=True
@@ -955,6 +971,10 @@ def render_tab_administracion():
         for idx, row in edited_otros.iterrows():
             nombre = row['Concepto']
             st.session_state.otros_admin[nombre] = row['Valor']
+        
+        # Subtotal Otros Conceptos
+        total_otros = sum(st.session_state.otros_admin.values())
+        st.metric("**Subtotal Otros Conceptos**", f"${total_otros:,.0f}")
     
     # SUB-TAB 4: RESUMEN
     with subtab4:
@@ -964,10 +984,10 @@ def render_tab_administracion():
         resumen = calcular_resumen_global()
         
         col1, col2, col3, col4 = st.columns(4)
-        col1.metric("Personal Profesional", f"${admin_det['personal_profesional']:,.2f}")
-        col2.metric("Personal Administrativo", f"${admin_det['personal_administrativo']:,.2f}")
-        col3.metric("Otros Conceptos", f"${admin_det['otros_conceptos']:,.2f}")
-        col4.metric("**TOTAL**", f"${admin_det['total']:,.2f}")
+        col1.metric("Personal Profesional", f"${admin_det['personal_profesional']:,.0f}")
+        col2.metric("Personal Administrativo", f"${admin_det['personal_administrativo']:,.0f}")
+        col3.metric("Otros Conceptos", f"${admin_det['otros_conceptos']:,.0f}")
+        col4.metric("**TOTAL**", f"${admin_det['total']:,.0f}")
         
         st.markdown("---")
         
@@ -991,8 +1011,8 @@ def render_tab_resumen():
     
     # MÉTRICAS PRINCIPALES
     col1, col2, col3 = st.columns(3)
-    col1.metric("💰 Total Proyecto", f"${resumen['total_proyecto']:,.2f}")
-    col2.metric("📐 Precio por m²", f"${resumen['precio_m2']:,.2f}")
+    col1.metric("💰 Total Proyecto", f"${resumen['total_proyecto']:,.0f}")
+    col2.metric("📐 Precio por m²", f"${resumen['precio_m2']:,.0f}")
     col3.metric("🏗️ Área Base", f"{st.session_state.proyecto.area_base:.2f} m²")
     
     st.markdown("---")
@@ -1006,21 +1026,21 @@ def render_tab_resumen():
         cot1 = resumen['cotizacion1']
         
         st.markdown("**Costos Directos:**")
-        st.write(f"- Diseños: ${cot1['disenos']:,.2f}")
-        st.write(f"- Estructura: ${cot1['estructura']:,.2f}")
-        st.write(f"- Mampostería: ${cot1['mamposteria']:,.2f}")
-        st.write(f"- Mampostería y Techos: ${cot1['mamposteria_techos']:,.2f}")
-        st.write(f"**Subtotal Costos Directos: ${cot1['costos_directos']:,.2f}**")
+        st.write(f"- Diseños: ${cot1['disenos']:,.0f}")
+        st.write(f"- Estructura: ${cot1['estructura']:,.0f}")
+        st.write(f"- Mampostería: ${cot1['mamposteria']:,.0f}")
+        st.write(f"- Techos y otros: ${cot1['mamposteria_techos']:,.0f}")
+        st.write(f"**Subtotal Costos Directos: ${cot1['costos_directos']:,.0f}**")
         
         st.markdown("**AIU:**")
-        st.write(f"- Comisión Ventas: ${cot1['aiu']['comision_ventas']:,.2f}")
-        st.write(f"- Imprevistos: ${cot1['aiu']['imprevistos']:,.2f}")
-        st.write(f"- Administración: ${cot1['aiu']['administracion']:,.2f}")
-        st.write(f"- Logística: ${cot1['aiu']['logistica']:,.2f}")
-        st.write(f"- Utilidad: ${cot1['aiu']['utilidad']:,.2f}")
-        st.write(f"**Total AIU: ${cot1['aiu']['total']:,.2f}**")
+        st.write(f"- Comisión Ventas: ${cot1['aiu']['comision_ventas']:,.0f}")
+        st.write(f"- Imprevistos: ${cot1['aiu']['imprevistos']:,.0f}")
+        st.write(f"- Administración: ${cot1['aiu']['administracion']:,.0f}")
+        st.write(f"- Logística: ${cot1['aiu']['logistica']:,.0f}")
+        st.write(f"- Utilidad: ${cot1['aiu']['utilidad']:,.0f}")
+        st.write(f"**Total AIU: ${cot1['aiu']['total']:,.0f}**")
         
-        st.success(f"### **TOTAL COTIZACIÓN 1: ${cot1['total']:,.2f}**")
+        st.success(f"### **TOTAL COTIZACIÓN 1: ${cot1['total']:,.0f}**")
     
     with col_cot2:
         st.markdown("### 📋 Cotización 2: Cimentaciones + Complementarios")
@@ -1028,18 +1048,18 @@ def render_tab_resumen():
         cot2 = resumen['cotizacion2']
         
         st.markdown("**Cimentaciones:**")
-        st.write(f"- Subtotal: ${cot2['cimentacion']['subtotal']:,.2f}")
-        st.write(f"- Comisión: ${cot2['cimentacion']['comision']:,.2f}")
-        st.write(f"- AIU: ${cot2['cimentacion']['aiu']:,.2f}")
-        st.write(f"**Total Cimentación: ${cot2['cimentacion']['total']:,.2f}**")
+        st.write(f"- Subtotal: ${cot2['cimentacion']['subtotal']:,.0f}")
+        st.write(f"- Comisión: ${cot2['cimentacion']['comision']:,.0f}")
+        st.write(f"- AIU: ${cot2['cimentacion']['aiu']:,.0f}")
+        st.write(f"**Total Cimentación: ${cot2['cimentacion']['total']:,.0f}**")
         
         st.markdown("**Complementarios:**")
-        st.write(f"- Subtotal: ${cot2['complementarios']['subtotal']:,.2f}")
-        st.write(f"- Comisión: ${cot2['complementarios']['comision']:,.2f}")
-        st.write(f"- AIU: ${cot2['complementarios']['aiu']:,.2f}")
-        st.write(f"**Total Complementarios: ${cot2['complementarios']['total']:,.2f}**")
+        st.write(f"- Subtotal: ${cot2['complementarios']['subtotal']:,.0f}")
+        st.write(f"- Comisión: ${cot2['complementarios']['comision']:,.0f}")
+        st.write(f"- AIU: ${cot2['complementarios']['aiu']:,.0f}")
+        st.write(f"**Total Complementarios: ${cot2['complementarios']['total']:,.0f}**")
         
-        st.success(f"### **TOTAL COTIZACIÓN 2: ${cot2['total']:,.2f}**")
+        st.success(f"### **TOTAL COTIZACIÓN 2: ${cot2['total']:,.0f}**")
     
     st.markdown("---")
     
@@ -1053,7 +1073,7 @@ def render_tab_resumen():
             'Diseños': resumen['cotizacion1']['disenos'],
             'Estructura': resumen['cotizacion1']['estructura'],
             'Mampostería': resumen['cotizacion1']['mamposteria'],
-            'Mampostería y Techos': resumen['cotizacion1']['mamposteria_techos'],
+            'Techos y otros': resumen['cotizacion1']['mamposteria_techos'],
             'Cimentaciones': resumen['cotizacion2']['cimentacion']['subtotal'],
             'Complementarios': resumen['cotizacion2']['complementarios']['subtotal']
         }
