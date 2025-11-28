@@ -367,14 +367,7 @@ def inicializar_session_state():
                 'Jurídico': 0.0,
                 'Electricista': 0.0
             }),
-            'Impuestos': ConceptoDetallado('Impuestos', {
-                'FIC': 1848754.0,
-                'Industria y Comercio': 1848754.0,
-                'Otros': 0.0,
-                '4*1000': 2958006.0,
-                'IVA sobre la Utilidad': 7230691.0,
-                'Improrrenta (34% de la utilidad)': 4313042.0
-            }),
+            'Impuestos': ConceptoDetallado('Impuestos', {}),  # Se calcula dinámicamente
             'Costos Fijos': ConceptoDetallado('Costos Fijos', {
                 'Gastos Sede Central': 2215224.0,
                 'Gastos Financieros': 1846020.0,
@@ -496,6 +489,9 @@ def calcular_complementarios():
 
 def calcular_administracion_detallada():
     """Calcula administración detallada"""
+    # Primero calcular impuestos dinámicamente
+    calcular_impuestos_dinamicos()
+    
     total_prof = sum([
         p.calcular_total() 
         for p in st.session_state.personal_profesional.values()
@@ -520,6 +516,199 @@ def calcular_administracion_detallada():
         'otros_conceptos': total_otros,
         'total': total
     }
+
+def exportar_a_excel():
+    """
+    Exporta la cotización completa a un archivo Excel
+    """
+    from io import BytesIO
+    import openpyxl
+    from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
+    
+    # Crear workbook
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "Cotización"
+    
+    # Estilos
+    header_fill = PatternFill(start_color="4472C4", end_color="4472C4", fill_type="solid")
+    header_font = Font(bold=True, color="FFFFFF", size=12)
+    section_fill = PatternFill(start_color="D9E1F2", end_color="D9E1F2", fill_type="solid")
+    section_font = Font(bold=True, size=11)
+    border = Border(
+        left=Side(style='thin'),
+        right=Side(style='thin'),
+        top=Side(style='thin'),
+        bottom=Side(style='thin')
+    )
+    
+    row = 1
+    
+    # ============================================================================
+    # ENCABEZADO
+    # ============================================================================
+    ws[f'A{row}'] = "SICONE v2.0 - Sistema de Cotización"
+    ws[f'A{row}'].font = Font(bold=True, size=16, color="4472C4")
+    ws.merge_cells(f'A{row}:E{row}')
+    row += 2
+    
+    # Resumen global
+    resumen = calcular_resumen_global()
+    ws[f'A{row}'] = "RESUMEN GLOBAL DEL PROYECTO"
+    ws[f'A{row}'].font = section_font
+    ws[f'A{row}'].fill = section_fill
+    ws.merge_cells(f'A{row}:E{row}')
+    row += 1
+    
+    ws[f'A{row}'] = "Total Proyecto:"
+    ws[f'B{row}'] = resumen['total_proyecto']
+    ws[f'B{row}'].number_format = '$#,##0'
+    ws[f'C{row}'] = "Precio por m²:"
+    ws[f'D{row}'] = resumen['precio_m2']
+    ws[f'D{row}'].number_format = '$#,##0'
+    row += 1
+    
+    ws[f'A{row}'] = "Área Base:"
+    ws[f'B{row}'] = st.session_state.area_base
+    ws[f'B{row}'].number_format = '0.00'
+    ws[f'C{row}'] = "m²"
+    row += 2
+    
+    # ============================================================================
+    # DISEÑOS Y PLANIFICACIÓN
+    # ============================================================================
+    ws[f'A{row}'] = "DISEÑOS Y PLANIFICACIÓN"
+    ws[f'A{row}'].font = section_font
+    ws[f'A{row}'].fill = section_fill
+    ws.merge_cells(f'A{row}:D{row}')
+    row += 1
+    
+    ws[f'A{row}'] = "Ítem"
+    ws[f'B{row}'] = "Precio Unitario ($/m²)"
+    ws[f'C{row}'] = "Área Base (m²)"
+    ws[f'D{row}'] = "Subtotal"
+    for col in ['A', 'B', 'C', 'D']:
+        ws[f'{col}{row}'].font = header_font
+        ws[f'{col}{row}'].fill = header_fill
+    row += 1
+    
+    for nombre, item in st.session_state.disenos.items():
+        ws[f'A{row}'] = nombre
+        ws[f'B{row}'] = item.precio_unitario
+        ws[f'B{row}'].number_format = '$#,##0'
+        ws[f'C{row}'] = st.session_state.area_base
+        ws[f'C{row}'].number_format = '0.00'
+        subtotal = item.calcular_subtotal(st.session_state.area_base)
+        ws[f'D{row}'] = subtotal
+        ws[f'D{row}'].number_format = '$#,##0'
+        row += 1
+    
+    ws[f'C{row}'] = "TOTAL:"
+    ws[f'C{row}'].font = Font(bold=True)
+    ws[f'D{row}'] = calcular_disenos()
+    ws[f'D{row}'].number_format = '$#,##0'
+    ws[f'D{row}'].font = Font(bold=True)
+    row += 2
+    
+    # ============================================================================
+    # ADMINISTRACIÓN
+    # ============================================================================
+    admin_det = calcular_administracion_detallada()
+    
+    ws[f'A{row}'] = "ADMINISTRACIÓN"
+    ws[f'A{row}'].font = section_font
+    ws[f'A{row}'].fill = section_fill
+    ws.merge_cells(f'A{row}:D{row}')
+    row += 1
+    
+    ws[f'A{row}'] = "Personal Profesional:"
+    ws[f'B{row}'] = admin_det['personal_profesional']
+    ws[f'B{row}'].number_format = '$#,##0'
+    row += 1
+    
+    ws[f'A{row}'] = "Personal Administrativo:"
+    ws[f'B{row}'] = admin_det['personal_administrativo']
+    ws[f'B{row}'].number_format = '$#,##0'
+    row += 1
+    
+    ws[f'A{row}'] = "Otros Conceptos:"
+    ws[f'B{row}'] = admin_det['otros_conceptos']
+    ws[f'B{row}'].number_format = '$#,##0'
+    row += 1
+    
+    ws[f'A{row}'] = "TOTAL ADMINISTRACIÓN:"
+    ws[f'A{row}'].font = Font(bold=True)
+    ws[f'B{row}'] = admin_det['total']
+    ws[f'B{row}'].number_format = '$#,##0'
+    ws[f'B{row}'].font = Font(bold=True)
+    row += 2
+    
+    # Ajustar anchos de columna
+    ws.column_dimensions['A'].width = 40
+    ws.column_dimensions['B'].width = 20
+    ws.column_dimensions['C'].width = 20
+    ws.column_dimensions['D'].width = 20
+    ws.column_dimensions['E'].width = 20
+    
+    # Guardar en BytesIO
+    excel_buffer = BytesIO()
+    wb.save(excel_buffer)
+    excel_buffer.seek(0)
+    
+    return excel_buffer
+
+def calcular_impuestos_dinamicos():
+    """
+    Calcula impuestos basándose en los totales reales de la cotización
+    Fórmulas del Excel:
+    - Base = Diseños + Estructura + Mampostería + Techos + Cimentaciones + Complementarios
+    - FIC = 0.25% * Base
+    - Industria y Comercio = 0.25% * Base
+    - Otros = 0%
+    - 4*1000 = 0.4% * Base
+    - IVA sobre Utilidad = 19% * (utilidad estimada)
+    - Improrrenta = 34% * (utilidad estimada)
+    """
+    
+    # Calcular base imponible (costos directos)
+    total_disenos = calcular_disenos()
+    total_estructura = calcular_estructura()
+    total_mamposteria = calcular_mamposteria()
+    total_techos = calcular_mamposteria_techos()
+    total_cimentacion = calcular_cimentacion()
+    total_complementarios = calcular_complementarios()
+    
+    base_imponible = (
+        total_disenos +
+        total_estructura +
+        total_mamposteria +
+        total_techos +
+        total_cimentacion +
+        total_complementarios
+    )
+    
+    # Calcular utilidad estimada (simplificado: 26.5% de los costos según AIU)
+    utilidad_estimada = base_imponible * (st.session_state.config_aiu.get('Utilidad (%)', 26.5) / 100)
+    
+    # Calcular cada impuesto
+    fic = base_imponible * 0.0025
+    industria_comercio = base_imponible * 0.0025
+    otros = 0.0  # Según Excel está en 0
+    cuatro_mil = base_imponible * 0.004
+    iva_utilidad = utilidad_estimada * 0.19
+    improrrenta = utilidad_estimada * 0.34
+    
+    # Actualizar el ConceptoDetallado de Impuestos
+    st.session_state.otros_admin['Impuestos'].items_detalle = {
+        'FIC': fic,
+        'Industria y Comercio': industria_comercio,
+        'Otros': otros,
+        '4*1000': cuatro_mil,
+        'IVA sobre la Utilidad': iva_utilidad,
+        'Improrrenta (34% de la utilidad)': improrrenta
+    }
+    
+    return fic + industria_comercio + otros + cuatro_mil + iva_utilidad + improrrenta
 
 def calcular_resumen_global():
     """Calcula resumen global del proyecto"""
@@ -1112,7 +1301,13 @@ def render_tab_administracion():
         
         # Iterar sobre cada concepto
         for concepto_nombre, concepto_obj in st.session_state.otros_admin.items():
-            with st.expander(f"📋 {concepto_nombre} - Subtotal: ${concepto_obj.calcular_subtotal():,.0f}", expanded=False):
+            # Indicador especial para impuestos (calculados automáticamente)
+            if concepto_nombre == 'Impuestos':
+                expander_label = f"🧮 {concepto_nombre} - Subtotal: ${concepto_obj.calcular_subtotal():,.0f} (⚙️ Calculado automáticamente)"
+            else:
+                expander_label = f"📋 {concepto_nombre} - Subtotal: ${concepto_obj.calcular_subtotal():,.0f}"
+            
+            with st.expander(expander_label, expanded=False):
                 
                 # Crear DataFrame con los ítems detallados
                 df_detalle_data = []
@@ -1126,22 +1321,35 @@ def render_tab_administracion():
                     df_detalle = pd.DataFrame(df_detalle_data)
                     
                     # Editor de ítems detallados
-                    edited_detalle = st.data_editor(
-                        df_detalle,
-                        column_config={
-                            'Ítem': st.column_config.TextColumn(disabled=True),
-                            'Valor': st.column_config.NumberColumn(min_value=0, format="%.0f")
-                        },
-                        hide_index=True,
-                        use_container_width=True,
-                        key=f"detalle_{concepto_nombre.replace(' ', '_')}"
-                    )
-                    
-                    # Actualizar los valores en session_state
-                    for idx, row in edited_detalle.iterrows():
-                        item_nombre = row['Ítem']
-                        nuevo_valor = row['Valor']
-                        concepto_obj.items_detalle[item_nombre] = nuevo_valor
+                    # Los impuestos son solo lectura (calculados automáticamente)
+                    if concepto_nombre == 'Impuestos':
+                        st.dataframe(
+                            df_detalle,
+                            column_config={
+                                'Ítem': st.column_config.TextColumn(),
+                                'Valor': st.column_config.NumberColumn(format="%.0f")
+                            },
+                            hide_index=True,
+                            use_container_width=True
+                        )
+                        st.info("ℹ️ Los impuestos se calculan automáticamente basándose en los totales de la cotización")
+                    else:
+                        edited_detalle = st.data_editor(
+                            df_detalle,
+                            column_config={
+                                'Ítem': st.column_config.TextColumn(disabled=True),
+                                'Valor': st.column_config.NumberColumn(min_value=0, format="%.0f")
+                            },
+                            hide_index=True,
+                            use_container_width=True,
+                            key=f"detalle_{concepto_nombre.replace(' ', '_')}"
+                        )
+                        
+                        # Actualizar los valores en session_state
+                        for idx, row in edited_detalle.iterrows():
+                            item_nombre = row['Ítem']
+                            nuevo_valor = row['Valor']
+                            concepto_obj.items_detalle[item_nombre] = nuevo_valor
                     
                     # Mostrar subtotal del concepto
                     st.metric(f"Subtotal {concepto_nombre}", f"${concepto_obj.calcular_subtotal():,.0f}")
@@ -1331,6 +1539,38 @@ def main():
     
     # TÍTULO
     st.markdown('<h1 class="main-title">🏗️ SICONE v2.0 - Sistema de Cotización</h1>', unsafe_allow_html=True)
+    
+    # ============================================================================
+    # RESUMEN GLOBAL (siempre visible)
+    # ============================================================================
+    resumen = calcular_resumen_global()
+    
+    st.markdown("---")
+    st.markdown("### 📊 Resumen Global del Proyecto")
+    
+    col1, col2, col3, col4 = st.columns(4)
+    with col1:
+        st.metric("💰 Total Proyecto", f"${resumen['total_proyecto']:,.0f}")
+    with col2:
+        st.metric("📐 Precio por m²", f"${resumen['precio_m2']:,.0f}")
+    with col3:
+        st.metric("📏 Área Base", f"{st.session_state.area_base:.2f} m²")
+    with col4:
+        # Botón de exportación a Excel
+        if st.button("📥 Exportar a Excel", type="primary"):
+            try:
+                excel_file = exportar_a_excel()
+                st.download_button(
+                    label="💾 Descargar Cotización.xlsx",
+                    data=excel_file,
+                    file_name=f"Cotizacion_SICONE_{pd.Timestamp.now().strftime('%Y%m%d_%H%M%S')}.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                )
+                st.success("✅ Archivo Excel generado correctamente")
+            except Exception as e:
+                st.error(f"❌ Error al generar archivo: {str(e)}")
+    
+    st.markdown("---")
     
     # SIDEBAR
     render_sidebar()
