@@ -48,28 +48,6 @@ st.markdown("""
         border-radius: 5px;
         margin-bottom: 1rem;
     }
-    
-    /* CONSISTENCIA DE FORMATO: Editables grises, Calculados blancos */
-    /* Invertir colores de fondo en data_editor para mantener consistencia con number_input */
-    
-    /* Celdas editables (sin disabled) - fondo gris como number_input */
-    div[data-testid="stDataFrameResizable"] div[data-testid="stDataFrameDataCell"]:not([aria-readonly="true"]) {
-        background-color: #f0f2f6 !important;
-    }
-    
-    /* Celdas calculadas (disabled=True) - fondo blanco como métricas */
-    div[data-testid="stDataFrameResizable"] div[data-testid="stDataFrameDataCell"][aria-readonly="true"] {
-        background-color: white !important;
-    }
-    
-    /* También aplicar a celdas por clase si el atributo no funciona */
-    .stDataFrame [data-baseweb="data-table"] [role="gridcell"]:not(.disabled-cell) {
-        background-color: #f0f2f6 !important;
-    }
-    
-    .stDataFrame [data-baseweb="data-table"] [role="gridcell"].disabled-cell {
-        background-color: white !important;
-    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -587,11 +565,11 @@ def render_tab_disenos_estructura():
             df_disenos,
             column_config={
                 'Precio Unitario ($/m²)': st.column_config.NumberColumn(
-                    format="%d",
+                    format=",.0f",
                     min_value=0
                 ),
                 'Subtotal': st.column_config.NumberColumn(
-                    format="%d",
+                    format=",.0f",
                     disabled=True
                 )
             },
@@ -644,7 +622,7 @@ def render_tab_disenos_estructura():
     # TECHOS Y OTROS
     with st.expander("🏠 Techos y otros", expanded=True):
         
-        st.caption("📝 Campos editables: Cantidad, Materiales, Equipos, Mano de Obra")
+        st.caption("📝 Editables (fondo blanco): Cantidad, Materiales, Equipos, Mano de Obra | Calculados (fondo gris): Subtotal")
         
         df_mt_data = []
         for nombre, item in st.session_state.mamposteria_techos.items():
@@ -666,10 +644,10 @@ def render_tab_disenos_estructura():
                 'Ítem': st.column_config.TextColumn(disabled=True),
                 'Unidad': st.column_config.TextColumn(disabled=True),
                 'Cantidad': st.column_config.NumberColumn(min_value=0, format="%.2f"),
-                'Materiales': st.column_config.NumberColumn(min_value=0, format="%d"),
-                'Equipos': st.column_config.NumberColumn(min_value=0, format="%d"),
-                'Mano de Obra': st.column_config.NumberColumn(min_value=0, format="%d"),
-                'Subtotal': st.column_config.NumberColumn(format="%d", disabled=True)
+                'Materiales': st.column_config.NumberColumn(min_value=0, format=",.0f"),
+                'Equipos': st.column_config.NumberColumn(min_value=0, format=",.0f"),
+                'Mano de Obra': st.column_config.NumberColumn(min_value=0, format=",.0f"),
+                'Subtotal': st.column_config.NumberColumn(format=",.0f", disabled=True)
             },
             hide_index=True,
             use_container_width=True
@@ -710,7 +688,7 @@ def render_tab_cimentaciones():
         st.markdown("### Opción 2: Pilotes de Apoyo")
         items = st.session_state.cimentacion_opcion2
     
-    st.caption("📝 Campos editables: Cantidad, Precio Unitario")
+    st.caption("📝 Editables (fondo blanco): Cantidad, Precio Unitario | Calculados (fondo gris): Subtotal")
     
     df_cim_data = []
     for nombre, item in items.items():
@@ -730,8 +708,8 @@ def render_tab_cimentaciones():
             'Ítem': st.column_config.TextColumn(disabled=True),
             'Unidad': st.column_config.TextColumn(disabled=True),
             'Cantidad': st.column_config.NumberColumn(min_value=0, format="%.2f"),
-            'Precio Unitario': st.column_config.NumberColumn(min_value=0, format="%d"),
-            'Subtotal': st.column_config.NumberColumn(format="%d", disabled=True)
+            'Precio Unitario': st.column_config.NumberColumn(min_value=0, format=",.0f"),
+            'Subtotal': st.column_config.NumberColumn(format=",.0f", disabled=True)
         },
         hide_index=True,
         use_container_width=True
@@ -792,7 +770,7 @@ def render_tab_complementarios():
     
     st.markdown('<h2 class="section-title">🔧 Complementarios</h2>', unsafe_allow_html=True)
     
-    st.caption("📝 Campos editables: Cantidad, Precio Unitario")
+    st.caption("📝 Editables (fondo blanco): Cantidad, Precio Unitario | Calculados (fondo gris): Subtotal")
     
     df_comp_data = []
     for nombre, item in st.session_state.complementarios.items():
@@ -812,8 +790,8 @@ def render_tab_complementarios():
             'Ítem': st.column_config.TextColumn(disabled=True),
             'Unidad': st.column_config.TextColumn(disabled=True),
             'Cantidad': st.column_config.NumberColumn(min_value=0, format="%.2f"),
-            'Precio Unitario': st.column_config.NumberColumn(min_value=0, format="%d"),
-            'Subtotal': st.column_config.NumberColumn(format="%d", disabled=True)
+            'Precio Unitario': st.column_config.NumberColumn(min_value=0, format=",.0f"),
+            'Subtotal': st.column_config.NumberColumn(format=",.0f", disabled=True)
         },
         hide_index=True,
         use_container_width=True
@@ -884,7 +862,7 @@ def render_tab_administracion():
     # SUB-TAB 1: PERSONAL PROFESIONAL
     with subtab1:
         st.markdown("### Personal Profesional y Técnico")
-        st.caption("📝 Campos editables: Cant, Valor/Mes, % Prest, Dedicación, Meses")
+        st.caption("📝 Editables (fondo blanco): Cant, Valor/Mes, % Prest, Dedicación, Meses | Calculados (fondo gris): Total")
         
         df_prof_data = []
         for nombre, p in st.session_state.personal_profesional.items():
@@ -905,11 +883,11 @@ def render_tab_administracion():
             column_config={
                 'Nombre': st.column_config.TextColumn(disabled=True),
                 'Cant': st.column_config.NumberColumn(min_value=0, format="%d"),
-                'Valor/Mes': st.column_config.NumberColumn(min_value=0, format="%d"),
+                'Valor/Mes': st.column_config.NumberColumn(min_value=0, format=",.0f"),
                 '% Prest': st.column_config.NumberColumn(min_value=0, max_value=100, format="%.1f"),
                 'Dedicación': st.column_config.NumberColumn(min_value=0.0, max_value=1.0, format="%.2f"),
                 'Meses': st.column_config.NumberColumn(min_value=0, format="%d"),
-                'Total': st.column_config.NumberColumn(format="%d", disabled=True)
+                'Total': st.column_config.NumberColumn(format=",.0f", disabled=True)
             },
             hide_index=True,
             use_container_width=True
@@ -932,7 +910,7 @@ def render_tab_administracion():
     # SUB-TAB 2: PERSONAL ADMINISTRATIVO
     with subtab2:
         st.markdown("### Personal Administrativo")
-        st.caption("📝 Campos editables: Cant, Valor/Mes, % Prest, Dedicación, Meses")
+        st.caption("📝 Editables (fondo blanco): Cant, Valor/Mes, % Prest, Dedicación, Meses | Calculados (fondo gris): Total")
         
         df_admin_data = []
         for nombre, p in st.session_state.personal_administrativo.items():
@@ -953,11 +931,11 @@ def render_tab_administracion():
             column_config={
                 'Nombre': st.column_config.TextColumn(disabled=True),
                 'Cant': st.column_config.NumberColumn(min_value=0, format="%d"),
-                'Valor/Mes': st.column_config.NumberColumn(min_value=0, format="%d"),
+                'Valor/Mes': st.column_config.NumberColumn(min_value=0, format=",.0f"),
                 '% Prest': st.column_config.NumberColumn(min_value=0, max_value=100, format="%.1f"),
                 'Dedicación': st.column_config.NumberColumn(min_value=0.0, max_value=1.0, format="%.2f"),
                 'Meses': st.column_config.NumberColumn(min_value=0, format="%d"),
-                'Total': st.column_config.NumberColumn(format="%d", disabled=True)
+                'Total': st.column_config.NumberColumn(format=",.0f", disabled=True)
             },
             hide_index=True,
             use_container_width=True
@@ -980,7 +958,7 @@ def render_tab_administracion():
     # SUB-TAB 3: OTROS CONCEPTOS
     with subtab3:
         st.markdown("### Otros Conceptos Administrativos")
-        st.caption("📝 Campo editable: Valor")
+        st.caption("📝 Editable (fondo blanco): Valor")
         
         df_otros_data = []
         for nombre, valor in st.session_state.otros_admin.items():
@@ -995,7 +973,7 @@ def render_tab_administracion():
             df_otros,
             column_config={
                 'Concepto': st.column_config.TextColumn(disabled=True),
-                'Valor': st.column_config.NumberColumn(min_value=0, format="%d")
+                'Valor': st.column_config.NumberColumn(min_value=0, format=",.0f")
             },
             hide_index=True,
             use_container_width=True
