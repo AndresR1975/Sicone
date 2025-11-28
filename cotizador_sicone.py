@@ -169,6 +169,26 @@ class PersonalAdmin:
             self.meses
         )
 
+class ConceptoDetallado:
+    """Concepto administrativo con ítems detallados expandibles"""
+    def __init__(self, nombre, items_detalle=None):
+        self.nombre = nombre
+        self.items_detalle = items_detalle if items_detalle is not None else {}
+    
+    def calcular_subtotal(self):
+        return sum(self.items_detalle.values())
+    
+    def agregar_item(self, nombre_item, valor):
+        self.items_detalle[nombre_item] = float(valor)
+    
+    def editar_item(self, nombre_item, nuevo_valor):
+        if nombre_item in self.items_detalle:
+            self.items_detalle[nombre_item] = float(nuevo_valor)
+    
+    def eliminar_item(self, nombre_item):
+        if nombre_item in self.items_detalle:
+            del self.items_detalle[nombre_item]
+
 # ============================================================================
 # INICIALIZACIÓN DE SESSION STATE
 # ============================================================================
@@ -272,20 +292,58 @@ def inicializar_session_state():
             'Personal Gestión Ambiental': PersonalAdmin('Personal Gestión Ambiental', 1, 3000000.0, 54.0, 0.3, 0)
         }
     
-    # OTROS CONCEPTOS ADMINISTRACIÓN
+    # OTROS CONCEPTOS ADMINISTRACIÓN (con detalle expandible)
     if 'otros_admin' not in st.session_state:
         st.session_state.otros_admin = {
-            'Pólizas de Seguros': 3000000.0,
-            'Pagos Provisionales': 0.0,
-            'Pagos Mensuales': 7511240.0,
-            'Dotaciones': 0.0,
-            'Pagos de Obra': 0.0,
-            'SISO': 3000000.0,
-            'Asesores Externos': 0.0,
-            'Impuestos': 18199247.0,
-            'Costos Fijos': 4989444.0,
-            'Descuentos': 0.0,
-            'Pagos a Terceros': 0.0
+            'Pólizas de Seguros': ConceptoDetallado('Pólizas de Seguros', {
+                'Póliza Todo Riesgo': 1500000.0,
+                'Responsabilidad Civil': 800000.0,
+                'Accidentes Laborales': 700000.0
+            }),
+            'Pagos Provisionales': ConceptoDetallado('Pagos Provisionales', {
+                'Provisión mes 1': 0.0,
+                'Provisión mes 2': 0.0
+            }),
+            'Pagos Mensuales': ConceptoDetallado('Pagos Mensuales', {
+                'Servicios públicos': 2511240.0,
+                'Mantenimiento oficina': 2000000.0,
+                'Comunicaciones': 1500000.0,
+                'Transporte': 1500000.0
+            }),
+            'Dotaciones': ConceptoDetallado('Dotaciones', {
+                'Uniformes': 0.0,
+                'EPP': 0.0,
+                'Herramientas menores': 0.0
+            }),
+            'Pagos de Obra': ConceptoDetallado('Pagos de Obra', {
+                'Pagos directos obra': 0.0,
+                'Anticipos': 0.0
+            }),
+            'SISO': ConceptoDetallado('SISO', {
+                'Sistema de Seguridad': 1500000.0,
+                'Salud Ocupacional': 1500000.0
+            }),
+            'Asesores Externos': ConceptoDetallado('Asesores Externos', {
+                'Asesoría Legal': 0.0,
+                'Asesoría Técnica': 0.0,
+                'Consultoría': 0.0
+            }),
+            'Impuestos': ConceptoDetallado('Impuestos', {
+                'ICA': 9099623.0,
+                'Industria y Comercio': 9099624.0
+            }),
+            'Costos Fijos': ConceptoDetallado('Costos Fijos', {
+                'Arriendo oficina': 2494722.0,
+                'Depreciación equipos': 2494722.0
+            }),
+            'Descuentos': ConceptoDetallado('Descuentos', {
+                'Descuento pronto pago': 0.0,
+                'Bonificaciones': 0.0
+            }),
+            'Pagos a Terceros': ConceptoDetallado('Pagos a Terceros', {
+                'Subcontratistas': 0.0,
+                'Proveedores especiales': 0.0
+            })
         }
     
     # CONFIGURACIÓN AIU
@@ -402,7 +460,11 @@ def calcular_administracion_detallada():
         for p in st.session_state.personal_administrativo.values()
     ])
     
-    total_otros = sum(st.session_state.otros_admin.values())
+    # Actualizado para ConceptoDetallado
+    total_otros = sum([
+        concepto.calcular_subtotal() 
+        for concepto in st.session_state.otros_admin.values()
+    ])
     
     total = total_prof + total_admin + total_otros
     
@@ -1000,35 +1062,50 @@ def render_tab_administracion():
     # SUB-TAB 3: OTROS CONCEPTOS
     with subtab3:
         st.markdown("### Otros Conceptos Administrativos")
-        st.caption("📝 Editable: Valor")
+        st.caption("📝 Expanda cada concepto para editar los ítems detallados")
         
-        df_otros_data = []
-        for nombre, valor in st.session_state.otros_admin.items():
-            df_otros_data.append({
-                'Concepto': nombre,
-                'Valor': valor
-            })
+        # Iterar sobre cada concepto
+        for concepto_nombre, concepto_obj in st.session_state.otros_admin.items():
+            with st.expander(f"📋 {concepto_nombre} - Subtotal: ${concepto_obj.calcular_subtotal():,.0f}", expanded=False):
+                
+                # Crear DataFrame con los ítems detallados
+                df_detalle_data = []
+                for item_nombre, item_valor in concepto_obj.items_detalle.items():
+                    df_detalle_data.append({
+                        'Ítem': item_nombre,
+                        'Valor': item_valor
+                    })
+                
+                if df_detalle_data:
+                    df_detalle = pd.DataFrame(df_detalle_data)
+                    
+                    # Editor de ítems detallados
+                    edited_detalle = st.data_editor(
+                        df_detalle,
+                        column_config={
+                            'Ítem': st.column_config.TextColumn(disabled=True),
+                            'Valor': st.column_config.NumberColumn(min_value=0, format="%.0f")
+                        },
+                        hide_index=True,
+                        use_container_width=True,
+                        key=f"detalle_{concepto_nombre.replace(' ', '_')}"
+                    )
+                    
+                    # Actualizar los valores en session_state
+                    for idx, row in edited_detalle.iterrows():
+                        item_nombre = row['Ítem']
+                        nuevo_valor = row['Valor']
+                        concepto_obj.items_detalle[item_nombre] = nuevo_valor
+                    
+                    # Mostrar subtotal del concepto
+                    st.metric(f"Subtotal {concepto_nombre}", f"${concepto_obj.calcular_subtotal():,.0f}")
+                else:
+                    st.info("No hay ítems detallados para este concepto")
         
-        df_otros = pd.DataFrame(df_otros_data)
-        
-        edited_otros = st.data_editor(
-            df_otros,
-            column_config={
-                'Concepto': st.column_config.TextColumn(disabled=True),
-                'Valor': st.column_config.NumberColumn(min_value=0, format="%.0f")
-            },
-            hide_index=True,
-            use_container_width=True
-        )
-        
-        # Actualizar session state
-        for idx, row in edited_otros.iterrows():
-            nombre = row['Concepto']
-            st.session_state.otros_admin[nombre] = row['Valor']
-        
-        # Subtotal Otros Conceptos
-        total_otros = sum(st.session_state.otros_admin.values())
-        st.metric("**Subtotal Otros Conceptos**", f"${total_otros:,.0f}")
+        # Subtotal Total de Otros Conceptos
+        total_otros = sum(concepto.calcular_subtotal() for concepto in st.session_state.otros_admin.values())
+        st.markdown("---")
+        st.metric("**💰 Subtotal Total Otros Conceptos**", f"${total_otros:,.0f}")
     
     # SUB-TAB 4: RESUMEN
     with subtab4:
