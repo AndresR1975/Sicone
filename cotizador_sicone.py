@@ -569,7 +569,7 @@ def exportar_a_excel():
     row += 1
     
     ws[f'A{row}'] = "Área Base:"
-    ws[f'B{row}'] = st.session_state.area_base
+    ws[f'B{row}'] = st.session_state.proyecto.area_base
     ws[f'B{row}'].number_format = '0.00'
     ws[f'C{row}'] = "m²"
     row += 2
@@ -596,9 +596,9 @@ def exportar_a_excel():
         ws[f'A{row}'] = nombre
         ws[f'B{row}'] = item.precio_unitario
         ws[f'B{row}'].number_format = '$#,##0'
-        ws[f'C{row}'] = st.session_state.area_base
+        ws[f'C{row}'] = st.session_state.proyecto.area_base
         ws[f'C{row}'].number_format = '0.00'
-        subtotal = item.calcular_subtotal(st.session_state.area_base)
+        subtotal = item.calcular_subtotal(st.session_state.proyecto.area_base)
         ws[f'D{row}'] = subtotal
         ws[f'D{row}'].number_format = '$#,##0'
         row += 1
@@ -1559,7 +1559,7 @@ def main():
     with col2:
         st.metric("📐 Precio por m²", f"${resumen['precio_m2']:,.0f}")
     with col3:
-        st.metric("📏 Área Base", f"{st.session_state.area_base:.2f} m²")
+        st.metric("📏 Área Base", f"{st.session_state.proyecto.area_base:.2f} m²")
     with col4:
         # Botón de exportación a Excel
         if st.button("📥 Exportar a Excel", type="primary"):
