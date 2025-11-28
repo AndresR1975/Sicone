@@ -519,7 +519,7 @@ def calcular_administracion_detallada():
 
 def exportar_a_excel():
     """
-    Exporta la cotización completa a un archivo Excel
+    Exporta la cotización completa a un archivo Excel con todas las secciones
     """
     from io import BytesIO
     import openpyxl
@@ -528,54 +528,198 @@ def exportar_a_excel():
     # Crear workbook
     wb = openpyxl.Workbook()
     ws = wb.active
-    ws.title = "Cotización"
+    ws.title = "Cotización SICONE"
     
     # Estilos
+    title_font = Font(bold=True, size=16, color="4472C4")
     header_fill = PatternFill(start_color="4472C4", end_color="4472C4", fill_type="solid")
-    header_font = Font(bold=True, color="FFFFFF", size=12)
+    header_font = Font(bold=True, color="FFFFFF", size=11)
     section_fill = PatternFill(start_color="D9E1F2", end_color="D9E1F2", fill_type="solid")
-    section_font = Font(bold=True, size=11)
-    border = Border(
-        left=Side(style='thin'),
-        right=Side(style='thin'),
-        top=Side(style='thin'),
-        bottom=Side(style='thin')
-    )
+    section_font = Font(bold=True, size=12)
+    subsection_font = Font(bold=True, size=11)
+    total_fill = PatternFill(start_color="C5E0B4", end_color="C5E0B4", fill_type="solid")
     
     row = 1
     
     # ============================================================================
-    # ENCABEZADO
+    # ENCABEZADO PRINCIPAL
     # ============================================================================
     ws[f'A{row}'] = "SICONE v2.0 - Sistema de Cotización"
-    ws[f'A{row}'].font = Font(bold=True, size=16, color="4472C4")
-    ws.merge_cells(f'A{row}:E{row}')
+    ws[f'A{row}'].font = title_font
+    ws.merge_cells(f'A{row}:F{row}')
     row += 2
     
-    # Resumen global
+    # Información del Proyecto
+    ws[f'A{row}'] = "Proyecto:"
+    ws[f'B{row}'] = st.session_state.proyecto.nombre
+    ws[f'D{row}'] = "Cliente:"
+    ws[f'E{row}'] = st.session_state.proyecto.cliente
+    row += 1
+    
+    ws[f'A{row}'] = "Dirección:"
+    ws[f'B{row}'] = st.session_state.proyecto.direccion
+    ws[f'D{row}'] = "Área Base:"
+    ws[f'E{row}'] = st.session_state.proyecto.area_base
+    ws[f'E{row}'].number_format = '0.00'
+    ws[f'F{row}'] = "m²"
+    row += 2
+    
+    # RESUMEN GLOBAL
     resumen = calcular_resumen_global()
+    
     ws[f'A{row}'] = "RESUMEN GLOBAL DEL PROYECTO"
     ws[f'A{row}'].font = section_font
     ws[f'A{row}'].fill = section_fill
-    ws.merge_cells(f'A{row}:E{row}')
+    ws.merge_cells(f'A{row}:F{row}')
     row += 1
     
     ws[f'A{row}'] = "Total Proyecto:"
     ws[f'B{row}'] = resumen['total_proyecto']
     ws[f'B{row}'].number_format = '$#,##0'
-    ws[f'C{row}'] = "Precio por m²:"
-    ws[f'D{row}'] = resumen['precio_m2']
-    ws[f'D{row}'].number_format = '$#,##0'
-    row += 1
-    
-    ws[f'A{row}'] = "Área Base:"
-    ws[f'B{row}'] = st.session_state.proyecto.area_base
-    ws[f'B{row}'].number_format = '0.00'
-    ws[f'C{row}'] = "m²"
+    ws[f'D{row}'] = "Precio por m²:"
+    ws[f'E{row}'] = resumen['precio_m2']
+    ws[f'E{row}'].number_format = '$#,##0'
     row += 2
     
     # ============================================================================
-    # DISEÑOS Y PLANIFICACIÓN
+    # COTIZACIÓN 1 Y 2
+    # ============================================================================
+    ws[f'A{row}'] = "📋 Cotización 1: Diseños + Estructura + Mampostería"
+    ws[f'A{row}'].font = subsection_font
+    ws.merge_cells(f'A{row}:C{row}')
+    
+    ws[f'D{row}'] = "📋 Cotización 2: Cimentaciones + Complementarios"
+    ws[f'D{row}'].font = subsection_font
+    ws.merge_cells(f'D{row}:F{row}')
+    row += 1
+    
+    # Cotización 1 - Costos Directos
+    cot1 = resumen['cotizacion1']
+    ws[f'A{row}'] = "Costos Directos:"
+    ws[f'A{row}'].font = Font(bold=True)
+    ws[f'D{row}'] = "Cimentaciones:"
+    ws[f'D{row}'].font = Font(bold=True)
+    row += 1
+    
+    ws[f'A{row}'] = f"• Diseños:"
+    ws[f'B{row}'] = cot1['disenos']
+    ws[f'B{row}'].number_format = '$#,##0'
+    
+    ws[f'D{row}'] = f"Subtotal:"
+    ws[f'E{row}'] = resumen['cotizacion2']['cimentacion']['subtotal']
+    ws[f'E{row}'].number_format = '$#,##0'
+    row += 1
+    
+    ws[f'A{row}'] = f"• Estructura:"
+    ws[f'B{row}'] = cot1['estructura']
+    ws[f'B{row}'].number_format = '$#,##0'
+    
+    ws[f'D{row}'] = f"Comisión:"
+    ws[f'E{row}'] = resumen['cotizacion2']['cimentacion']['comision']
+    ws[f'E{row}'].number_format = '$#,##0'
+    row += 1
+    
+    ws[f'A{row}'] = f"• Mampostería:"
+    ws[f'B{row}'] = cot1['mamposteria']
+    ws[f'B{row}'].number_format = '$#,##0'
+    
+    ws[f'D{row}'] = f"AIU:"
+    ws[f'E{row}'] = resumen['cotizacion2']['cimentacion']['aiu']
+    ws[f'E{row}'].number_format = '$#,##0'
+    row += 1
+    
+    ws[f'A{row}'] = f"• Techos y otros:"
+    ws[f'B{row}'] = cot1['mamposteria_techos']
+    ws[f'B{row}'].number_format = '$#,##0'
+    
+    ws[f'D{row}'] = f"Total Cimentación:"
+    ws[f'E{row}'] = resumen['cotizacion2']['cimentacion']['total']
+    ws[f'E{row}'].number_format = '$#,##0'
+    ws[f'E{row}'].font = Font(bold=True)
+    row += 1
+    
+    ws[f'A{row}'] = "Subtotal Costos Directos:"
+    ws[f'B{row}'] = cot1['costos_directos']
+    ws[f'B{row}'].number_format = '$#,##0'
+    ws[f'B{row}'].font = Font(bold=True)
+    
+    ws[f'D{row}'] = "Complementarios:"
+    ws[f'D{row}'].font = Font(bold=True)
+    row += 1
+    
+    # AIU Cotización 1
+    ws[f'A{row}'] = "AIU:"
+    ws[f'A{row}'].font = Font(bold=True)
+    
+    ws[f'D{row}'] = f"Subtotal:"
+    ws[f'E{row}'] = resumen['cotizacion2']['complementarios']['subtotal']
+    ws[f'E{row}'].number_format = '$#,##0'
+    row += 1
+    
+    ws[f'A{row}'] = f"• Comisión Ventas:"
+    ws[f'B{row}'] = cot1['aiu']['comision_ventas']
+    ws[f'B{row}'].number_format = '$#,##0'
+    
+    ws[f'D{row}'] = f"Comisión:"
+    ws[f'E{row}'] = resumen['cotizacion2']['complementarios']['comision']
+    ws[f'E{row}'].number_format = '$#,##0'
+    row += 1
+    
+    ws[f'A{row}'] = f"• Imprevistos:"
+    ws[f'B{row}'] = cot1['aiu']['imprevistos']
+    ws[f'B{row}'].number_format = '$#,##0'
+    
+    ws[f'D{row}'] = f"AIU:"
+    ws[f'E{row}'] = resumen['cotizacion2']['complementarios']['aiu']
+    ws[f'E{row}'].number_format = '$#,##0'
+    row += 1
+    
+    ws[f'A{row}'] = f"• Administración:"
+    ws[f'B{row}'] = cot1['aiu']['administracion']
+    ws[f'B{row}'].number_format = '$#,##0'
+    
+    ws[f'D{row}'] = f"Total Complementarios:"
+    ws[f'E{row}'] = resumen['cotizacion2']['complementarios']['total']
+    ws[f'E{row}'].number_format = '$#,##0'
+    ws[f'E{row}'].font = Font(bold=True)
+    row += 1
+    
+    ws[f'A{row}'] = f"• Logística:"
+    ws[f'B{row}'] = cot1['aiu']['logistica']
+    ws[f'B{row}'].number_format = '$#,##0'
+    row += 1
+    
+    ws[f'A{row}'] = f"• Utilidad:"
+    ws[f'B{row}'] = cot1['aiu']['utilidad']
+    ws[f'B{row}'].number_format = '$#,##0'
+    row += 1
+    
+    ws[f'A{row}'] = "Total AIU:"
+    ws[f'B{row}'] = cot1['aiu']['total']
+    ws[f'B{row}'].number_format = '$#,##0'
+    ws[f'B{row}'].font = Font(bold=True)
+    row += 1
+    
+    # Totales por cotización
+    ws[f'A{row}'] = "TOTAL COTIZACIÓN 1:"
+    ws[f'B{row}'] = cot1['total']
+    ws[f'B{row}'].number_format = '$#,##0'
+    ws[f'A{row}'].font = Font(bold=True, size=12)
+    ws[f'B{row}'].font = Font(bold=True, size=12)
+    ws[f'A{row}'].fill = total_fill
+    ws[f'B{row}'].fill = total_fill
+    
+    ws[f'D{row}'] = "TOTAL COTIZACIÓN 2:"
+    ws[f'E{row}'] = resumen['cotizacion2']['total']
+    ws[f'E{row}'].number_format = '$#,##0'
+    ws[f'D{row}'].font = Font(bold=True, size=12)
+    ws[f'E{row}'].font = Font(bold=True, size=12)
+    ws[f'D{row}'].fill = total_fill
+    ws[f'E{row}'].fill = total_fill
+    row += 3
+    
+    # ============================================================================
+    # DISEÑOS Y PLANIFICACIÓN (DETALLADO)
     # ============================================================================
     ws[f'A{row}'] = "DISEÑOS Y PLANIFICACIÓN"
     ws[f'A{row}'].font = section_font
@@ -611,7 +755,236 @@ def exportar_a_excel():
     row += 2
     
     # ============================================================================
-    # ADMINISTRACIÓN
+    # ESTRUCTURA (DETALLADO)
+    # ============================================================================
+    ws[f'A{row}'] = "ESTRUCTURA"
+    ws[f'A{row}'].font = section_font
+    ws[f'A{row}'].fill = section_fill
+    ws.merge_cells(f'A{row}:F{row}')
+    row += 1
+    
+    ws[f'A{row}'] = "Ítem"
+    ws[f'B{row}'] = "Cantidad"
+    ws[f'C{row}'] = "Materiales"
+    ws[f'D{row}'] = "Equipos"
+    ws[f'E{row}'] = "Mano de Obra"
+    ws[f'F{row}'] = "Subtotal"
+    for col in ['A', 'B', 'C', 'D', 'E', 'F']:
+        ws[f'{col}{row}'].font = header_font
+        ws[f'{col}{row}'].fill = header_fill
+    row += 1
+    
+    estructura = st.session_state.estructura
+    ws[f'A{row}'] = "Estructura"
+    ws[f'B{row}'] = estructura.cantidad
+    ws[f'B{row}'].number_format = '0.00'
+    ws[f'C{row}'] = estructura.precio_materiales
+    ws[f'C{row}'].number_format = '$#,##0'
+    ws[f'D{row}'] = estructura.precio_equipos
+    ws[f'D{row}'].number_format = '$#,##0'
+    ws[f'E{row}'] = estructura.precio_mano_obra
+    ws[f'E{row}'].number_format = '$#,##0'
+    ws[f'F{row}'] = estructura.calcular_subtotal()
+    ws[f'F{row}'].number_format = '$#,##0'
+    row += 1
+    
+    ws[f'E{row}'] = "TOTAL:"
+    ws[f'E{row}'].font = Font(bold=True)
+    ws[f'F{row}'] = calcular_estructura()
+    ws[f'F{row}'].number_format = '$#,##0'
+    ws[f'F{row}'].font = Font(bold=True)
+    row += 2
+    
+    # ============================================================================
+    # MAMPOSTERÍA (DETALLADO)
+    # ============================================================================
+    ws[f'A{row}'] = "MAMPOSTERÍA"
+    ws[f'A{row}'].font = section_font
+    ws[f'A{row}'].fill = section_fill
+    ws.merge_cells(f'A{row}:F{row}')
+    row += 1
+    
+    ws[f'A{row}'] = "Ítem"
+    ws[f'B{row}'] = "Cantidad (m²)"
+    ws[f'C{row}'] = "Materiales"
+    ws[f'D{row}'] = "Equipos"
+    ws[f'E{row}'] = "Mano de Obra"
+    ws[f'F{row}'] = "Subtotal"
+    for col in ['A', 'B', 'C', 'D', 'E', 'F']:
+        ws[f'{col}{row}'].font = header_font
+        ws[f'{col}{row}'].fill = header_fill
+    row += 1
+    
+    mamposteria = st.session_state.mamposteria
+    ws[f'A{row}'] = "Mampostería"
+    ws[f'B{row}'] = mamposteria.cantidad
+    ws[f'B{row}'].number_format = '0.00'
+    ws[f'C{row}'] = mamposteria.precio_materiales
+    ws[f'C{row}'].number_format = '$#,##0'
+    ws[f'D{row}'] = mamposteria.precio_equipos
+    ws[f'D{row}'].number_format = '$#,##0'
+    ws[f'E{row}'] = mamposteria.precio_mano_obra
+    ws[f'E{row}'].number_format = '$#,##0'
+    ws[f'F{row}'] = mamposteria.calcular_subtotal()
+    ws[f'F{row}'].number_format = '$#,##0'
+    row += 1
+    
+    ws[f'E{row}'] = "TOTAL:"
+    ws[f'E{row}'].font = Font(bold=True)
+    ws[f'F{row}'] = calcular_mamposteria()
+    ws[f'F{row}'].number_format = '$#,##0'
+    ws[f'F{row}'].font = Font(bold=True)
+    row += 2
+    
+    # ============================================================================
+    # TECHOS Y OTROS (DETALLADO)
+    # ============================================================================
+    ws[f'A{row}'] = "TECHOS Y OTROS"
+    ws[f'A{row}'].font = section_font
+    ws[f'A{row}'].fill = section_fill
+    ws.merge_cells(f'A{row}:F{row}')
+    row += 1
+    
+    ws[f'A{row}'] = "Ítem"
+    ws[f'B{row}'] = "Cantidad"
+    ws[f'C{row}'] = "Materiales"
+    ws[f'D{row}'] = "Equipos"
+    ws[f'E{row}'] = "Mano de Obra"
+    ws[f'F{row}'] = "Subtotal"
+    for col in ['A', 'B', 'C', 'D', 'E', 'F']:
+        ws[f'{col}{row}'].font = header_font
+        ws[f'{col}{row}'].fill = header_fill
+    row += 1
+    
+    for nombre, item in st.session_state.mamposteria_techos.items():
+        ws[f'A{row}'] = nombre
+        ws[f'B{row}'] = item.cantidad
+        ws[f'B{row}'].number_format = '0.00'
+        ws[f'C{row}'] = item.precio_materiales
+        ws[f'C{row}'].number_format = '$#,##0'
+        ws[f'D{row}'] = item.precio_equipos
+        ws[f'D{row}'].number_format = '$#,##0'
+        ws[f'E{row}'] = item.precio_mano_obra
+        ws[f'E{row}'].number_format = '$#,##0'
+        ws[f'F{row}'] = item.calcular_subtotal()
+        ws[f'F{row}'].number_format = '$#,##0'
+        row += 1
+    
+    ws[f'E{row}'] = "TOTAL:"
+    ws[f'E{row}'].font = Font(bold=True)
+    ws[f'F{row}'] = calcular_mamposteria_techos()
+    ws[f'F{row}'].number_format = '$#,##0'
+    ws[f'F{row}'].font = Font(bold=True)
+    row += 2
+    
+    # ============================================================================
+    # CIMENTACIONES (DETALLADO)
+    # ============================================================================
+    ws[f'A{row}'] = "CIMENTACIONES"
+    ws[f'A{row}'].font = section_font
+    ws[f'A{row}'].fill = section_fill
+    ws.merge_cells(f'A{row}:D{row}')
+    row += 1
+    
+    ws[f'A{row}'] = "Ítem"
+    ws[f'B{row}'] = "Cantidad"
+    ws[f'C{row}'] = "Precio Unitario"
+    ws[f'D{row}'] = "Subtotal"
+    for col in ['A', 'B', 'C', 'D']:
+        ws[f'{col}{row}'].font = header_font
+        ws[f'{col}{row}'].fill = header_fill
+    row += 1
+    
+    # Usar opción seleccionada
+    opcion = st.session_state.opcion_cimentacion
+    items_cim = st.session_state.cimentacion_opcion1 if opcion == 'Opción 1' else st.session_state.cimentacion_opcion2
+    
+    for nombre, item in items_cim.items():
+        ws[f'A{row}'] = nombre
+        ws[f'B{row}'] = item.cantidad
+        ws[f'B{row}'].number_format = '0.00'
+        ws[f'C{row}'] = item.precio_unitario
+        ws[f'C{row}'].number_format = '$#,##0'
+        ws[f'D{row}'] = item.calcular_subtotal()
+        ws[f'D{row}'].number_format = '$#,##0'
+        row += 1
+    
+    cim_calc = calcular_cimentacion()
+    ws[f'C{row}'] = "Subtotal:"
+    ws[f'D{row}'] = cim_calc['subtotal']
+    ws[f'D{row}'].number_format = '$#,##0'
+    row += 1
+    
+    ws[f'C{row}'] = "Comisión:"
+    ws[f'D{row}'] = cim_calc['comision']
+    ws[f'D{row}'].number_format = '$#,##0'
+    row += 1
+    
+    ws[f'C{row}'] = "AIU:"
+    ws[f'D{row}'] = cim_calc['aiu']
+    ws[f'D{row}'].number_format = '$#,##0'
+    row += 1
+    
+    ws[f'C{row}'] = "TOTAL:"
+    ws[f'C{row}'].font = Font(bold=True)
+    ws[f'D{row}'] = cim_calc['total']
+    ws[f'D{row}'].number_format = '$#,##0'
+    ws[f'D{row}'].font = Font(bold=True)
+    row += 2
+    
+    # ============================================================================
+    # COMPLEMENTARIOS (DETALLADO)
+    # ============================================================================
+    ws[f'A{row}'] = "COMPLEMENTARIOS"
+    ws[f'A{row}'].font = section_font
+    ws[f'A{row}'].fill = section_fill
+    ws.merge_cells(f'A{row}:D{row}')
+    row += 1
+    
+    ws[f'A{row}'] = "Ítem"
+    ws[f'B{row}'] = "Cantidad"
+    ws[f'C{row}'] = "Precio Unitario"
+    ws[f'D{row}'] = "Subtotal"
+    for col in ['A', 'B', 'C', 'D']:
+        ws[f'{col}{row}'].font = header_font
+        ws[f'{col}{row}'].fill = header_fill
+    row += 1
+    
+    for nombre, item in st.session_state.complementarios.items():
+        ws[f'A{row}'] = nombre
+        ws[f'B{row}'] = item.cantidad
+        ws[f'B{row}'].number_format = '0.00'
+        ws[f'C{row}'] = item.precio_unitario
+        ws[f'C{row}'].number_format = '$#,##0'
+        ws[f'D{row}'] = item.calcular_subtotal()
+        ws[f'D{row}'].number_format = '$#,##0'
+        row += 1
+    
+    comp_calc = calcular_complementarios()
+    ws[f'C{row}'] = "Subtotal:"
+    ws[f'D{row}'] = comp_calc['subtotal']
+    ws[f'D{row}'].number_format = '$#,##0'
+    row += 1
+    
+    ws[f'C{row}'] = "Comisión:"
+    ws[f'D{row}'] = comp_calc['comision']
+    ws[f'D{row}'].number_format = '$#,##0'
+    row += 1
+    
+    ws[f'C{row}'] = "AIU:"
+    ws[f'D{row}'] = comp_calc['aiu']
+    ws[f'D{row}'].number_format = '$#,##0'
+    row += 1
+    
+    ws[f'C{row}'] = "TOTAL:"
+    ws[f'C{row}'].font = Font(bold=True)
+    ws[f'D{row}'] = comp_calc['total']
+    ws[f'D{row}'].number_format = '$#,##0'
+    ws[f'D{row}'].font = Font(bold=True)
+    row += 2
+    
+    # ============================================================================
+    # ADMINISTRACIÓN (DETALLADO)
     # ============================================================================
     admin_det = calcular_administracion_detallada()
     
@@ -621,34 +994,77 @@ def exportar_a_excel():
     ws.merge_cells(f'A{row}:D{row}')
     row += 1
     
+    # Personal Profesional
     ws[f'A{row}'] = "Personal Profesional:"
+    ws[f'A{row}'].font = subsection_font
+    row += 1
+    
+    for nombre, persona in st.session_state.personal_profesional.items():
+        ws[f'A{row}'] = f"  • {nombre}"
+        ws[f'B{row}'] = persona.calcular_total()
+        ws[f'B{row}'].number_format = '$#,##0'
+        row += 1
+    
+    ws[f'A{row}'] = "Subtotal Personal Profesional:"
     ws[f'B{row}'] = admin_det['personal_profesional']
     ws[f'B{row}'].number_format = '$#,##0'
-    row += 1
-    
-    ws[f'A{row}'] = "Personal Administrativo:"
-    ws[f'B{row}'] = admin_det['personal_administrativo']
-    ws[f'B{row}'].number_format = '$#,##0'
-    row += 1
-    
-    ws[f'A{row}'] = "Otros Conceptos:"
-    ws[f'B{row}'] = admin_det['otros_conceptos']
-    ws[f'B{row}'].number_format = '$#,##0'
-    row += 1
-    
-    ws[f'A{row}'] = "TOTAL ADMINISTRACIÓN:"
     ws[f'A{row}'].font = Font(bold=True)
-    ws[f'B{row}'] = admin_det['total']
-    ws[f'B{row}'].number_format = '$#,##0'
     ws[f'B{row}'].font = Font(bold=True)
     row += 2
     
+    # Personal Administrativo
+    ws[f'A{row}'] = "Personal Administrativo:"
+    ws[f'A{row}'].font = subsection_font
+    row += 1
+    
+    for nombre, persona in st.session_state.personal_administrativo.items():
+        ws[f'A{row}'] = f"  • {nombre}"
+        ws[f'B{row}'] = persona.calcular_total()
+        ws[f'B{row}'].number_format = '$#,##0'
+        row += 1
+    
+    ws[f'A{row}'] = "Subtotal Personal Administrativo:"
+    ws[f'B{row}'] = admin_det['personal_administrativo']
+    ws[f'B{row}'].number_format = '$#,##0'
+    ws[f'A{row}'].font = Font(bold=True)
+    ws[f'B{row}'].font = Font(bold=True)
+    row += 2
+    
+    # Otros Conceptos
+    ws[f'A{row}'] = "Otros Conceptos:"
+    ws[f'A{row}'].font = subsection_font
+    row += 1
+    
+    for concepto_nombre, concepto_obj in st.session_state.otros_admin.items():
+        ws[f'A{row}'] = f"  • {concepto_nombre}"
+        ws[f'B{row}'] = concepto_obj.calcular_subtotal()
+        ws[f'B{row}'].number_format = '$#,##0'
+        row += 1
+    
+    ws[f'A{row}'] = "Subtotal Otros Conceptos:"
+    ws[f'B{row}'] = admin_det['otros_conceptos']
+    ws[f'B{row}'].number_format = '$#,##0'
+    ws[f'A{row}'].font = Font(bold=True)
+    ws[f'B{row}'].font = Font(bold=True)
+    row += 2
+    
+    # Total Administración
+    ws[f'A{row}'] = "TOTAL ADMINISTRACIÓN:"
+    ws[f'B{row}'] = admin_det['total']
+    ws[f'B{row}'].number_format = '$#,##0'
+    ws[f'A{row}'].font = Font(bold=True, size=12)
+    ws[f'B{row}'].font = Font(bold=True, size=12)
+    ws[f'A{row}'].fill = total_fill
+    ws[f'B{row}'].fill = total_fill
+    row += 2
+    
     # Ajustar anchos de columna
-    ws.column_dimensions['A'].width = 40
-    ws.column_dimensions['B'].width = 20
-    ws.column_dimensions['C'].width = 20
-    ws.column_dimensions['D'].width = 20
-    ws.column_dimensions['E'].width = 20
+    ws.column_dimensions['A'].width = 45
+    ws.column_dimensions['B'].width = 18
+    ws.column_dimensions['C'].width = 18
+    ws.column_dimensions['D'].width = 18
+    ws.column_dimensions['E'].width = 18
+    ws.column_dimensions['F'].width = 18
     
     # Guardar en BytesIO
     excel_buffer = BytesIO()
@@ -1590,17 +2006,31 @@ def render_tab_exportar():
     
     ---
     
-    **Cotización 1 (Diseños + Estructura + Mampostería):** ${resumen['cotizacion1']['total']:,.2f}  
-    **Cotización 2 (Cimentaciones + Complementarios):** ${resumen['cotizacion2']['total']:,.2f}  
-    **TOTAL PROYECTO:** ${resumen['total_proyecto']:,.2f}  
-    **Precio por m²:** ${resumen['precio_m2']:,.2f}
+    **Cotización 1 (Diseños + Estructura + Mampostería):** ${resumen['cotizacion1']['total']:,.0f}  
+    **Cotización 2 (Cimentaciones + Complementarios):** ${resumen['cotizacion2']['total']:,.0f}  
+    **TOTAL PROYECTO:** ${resumen['total_proyecto']:,.0f}  
+    **Precio por m²:** ${resumen['precio_m2']:,.0f}
     """)
     
     st.markdown("---")
     
-    # GENERAR EXCEL (simplificado por ahora)
-    if st.button("📥 Generar y Descargar Excel", type="primary"):
-        st.info("Funcionalidad de exportación Excel en desarrollo. Por ahora usa el resumen visual.")
+    # GENERAR EXCEL
+    st.markdown("### 📥 Generar y Descargar Excel")
+    
+    try:
+        excel_file = exportar_a_excel()
+        st.download_button(
+            label="📥 Generar y Descargar Cotización.xlsx",
+            data=excel_file,
+            file_name=f"Cotizacion_SICONE_{st.session_state.proyecto.nombre.replace(' ', '_')}_{pd.Timestamp.now().strftime('%Y%m%d')}.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            type="primary"
+        )
+        st.success("✅ Archivo Excel generado correctamente")
+    except Exception as e:
+        st.error(f"❌ Error al generar archivo: {str(e)}")
+    
+    st.info("📋 Funcionalidad de exportación Excel en desarrollo. Por ahora usa el resumen visual.")
 
 # ============================================================================
 # MAIN APP
@@ -1635,19 +2065,19 @@ def main():
     with col3:
         st.metric("📏 Área Base", f"{st.session_state.proyecto.area_base:.2f} m²")
     with col4:
-        # Botón de exportación a Excel
-        if st.button("📥 Exportar a Excel", type="primary"):
-            try:
-                excel_file = exportar_a_excel()
-                st.download_button(
-                    label="💾 Descargar Cotización.xlsx",
-                    data=excel_file,
-                    file_name=f"Cotizacion_SICONE_{pd.Timestamp.now().strftime('%Y%m%d_%H%M%S')}.xlsx",
-                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                )
-                st.success("✅ Archivo Excel generado correctamente")
-            except Exception as e:
-                st.error(f"❌ Error al generar archivo: {str(e)}")
+        # Botón de exportación a Excel con descarga directa
+        try:
+            excel_file = exportar_a_excel()
+            st.download_button(
+                label="📥 Exportar a Excel",
+                data=excel_file,
+                file_name=f"Cotizacion_SICONE_{st.session_state.proyecto.nombre.replace(' ', '_')}_{pd.Timestamp.now().strftime('%Y%m%d')}.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                type="primary",
+                use_container_width=True
+            )
+        except Exception as e:
+            st.error(f"❌ Error: {str(e)}")
     with col5:
         # Botón para forzar actualización
         if st.button("🔄", help="Actualizar resumen", use_container_width=True):
