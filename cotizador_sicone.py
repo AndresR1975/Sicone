@@ -807,88 +807,131 @@ def render_sidebar():
     with st.sidebar:
         st.markdown("### 📋 Información del Proyecto")
         
-        st.session_state.proyecto.nombre = st.text_input(
+        nuevo_nombre = st.text_input(
             "Nombre del Proyecto", 
-            value=st.session_state.proyecto.nombre
+            value=st.session_state.proyecto.nombre,
+            key="input_nombre_proyecto"
         )
+        if nuevo_nombre != st.session_state.proyecto.nombre:
+            st.session_state.proyecto.nombre = nuevo_nombre
         
-        st.session_state.proyecto.cliente = st.text_input(
+        nuevo_cliente = st.text_input(
             "Cliente", 
-            value=st.session_state.proyecto.cliente
+            value=st.session_state.proyecto.cliente,
+            key="input_cliente"
         )
+        if nuevo_cliente != st.session_state.proyecto.cliente:
+            st.session_state.proyecto.cliente = nuevo_cliente
         
-        st.session_state.proyecto.direccion = st.text_input(
+        nueva_direccion = st.text_input(
             "Dirección", 
-            value=st.session_state.proyecto.direccion
+            value=st.session_state.proyecto.direccion,
+            key="input_direccion"
         )
+        if nueva_direccion != st.session_state.proyecto.direccion:
+            st.session_state.proyecto.direccion = nueva_direccion
         
         col1, col2 = st.columns(2)
         with col1:
-            st.session_state.proyecto.telefono = st.text_input(
+            nuevo_telefono = st.text_input(
                 "Teléfono", 
-                value=st.session_state.proyecto.telefono
+                value=st.session_state.proyecto.telefono,
+                key="input_telefono"
             )
+            if nuevo_telefono != st.session_state.proyecto.telefono:
+                st.session_state.proyecto.telefono = nuevo_telefono
         with col2:
-            st.session_state.proyecto.business_manager = st.text_input(
+            nuevo_bm = st.text_input(
                 "Business Manager", 
-                value=st.session_state.proyecto.business_manager
+                value=st.session_state.proyecto.business_manager,
+                key="input_business_manager"
             )
+            if nuevo_bm != st.session_state.proyecto.business_manager:
+                st.session_state.proyecto.business_manager = nuevo_bm
         
-        st.session_state.proyecto.medio_contacto = st.text_input(
+        nuevo_medio = st.text_input(
             "Medio de Contacto", 
-            value=st.session_state.proyecto.medio_contacto
+            value=st.session_state.proyecto.medio_contacto,
+            key="input_medio_contacto"
         )
+        if nuevo_medio != st.session_state.proyecto.medio_contacto:
+            st.session_state.proyecto.medio_contacto = nuevo_medio
         
         st.markdown("---")
         st.markdown("### 📐 Áreas del Proyecto")
         
-        st.session_state.proyecto.area_base = st.number_input(
+        nueva_area_base = st.number_input(
             "Área de la Base (m²)",
             min_value=0.0,
-            value=st.session_state.proyecto.area_base,
+            value=float(st.session_state.proyecto.area_base),
             step=0.01,
-            help="Área principal que se usa como multiplicador en Diseños"
+            format="%.2f",
+            help="Área principal que se usa como multiplicador en Diseños",
+            key="input_area_base"
         )
+        if nueva_area_base != st.session_state.proyecto.area_base:
+            st.session_state.proyecto.area_base = nueva_area_base
         
-        st.session_state.proyecto.area_cubierta = st.number_input(
+        nueva_area_cubierta = st.number_input(
             "Área de Cubierta (m²)",
             min_value=0.0,
-            value=st.session_state.proyecto.area_cubierta,
-            step=0.01
+            value=float(st.session_state.proyecto.area_cubierta),
+            step=0.01,
+            format="%.2f",
+            key="input_area_cubierta"
         )
+        if nueva_area_cubierta != st.session_state.proyecto.area_cubierta:
+            st.session_state.proyecto.area_cubierta = nueva_area_cubierta
         
-        st.session_state.proyecto.area_entrepiso = st.number_input(
+        nueva_area_entrepiso = st.number_input(
             "Área de Entrepiso (m²)",
             min_value=0.0,
-            value=st.session_state.proyecto.area_entrepiso,
-            step=0.01
+            value=float(st.session_state.proyecto.area_entrepiso),
+            step=0.01,
+            format="%.2f",
+            key="input_area_entrepiso"
         )
+        if nueva_area_entrepiso != st.session_state.proyecto.area_entrepiso:
+            st.session_state.proyecto.area_entrepiso = nueva_area_entrepiso
         
-        st.session_state.proyecto.niveles = st.number_input(
+        nuevos_niveles = st.number_input(
             "Niveles",
             min_value=1,
-            value=st.session_state.proyecto.niveles
+            value=int(st.session_state.proyecto.niveles),
+            key="input_niveles"
         )
+        if nuevos_niveles != st.session_state.proyecto.niveles:
+            st.session_state.proyecto.niveles = nuevos_niveles
         
-        st.session_state.proyecto.muro_tipo = st.selectbox(
+        nuevo_muro_tipo = st.selectbox(
             "Tipo de Muro",
             options=["sencillo", "doble"],
-            index=0 if st.session_state.proyecto.muro_tipo == "sencillo" else 1
+            index=0 if st.session_state.proyecto.muro_tipo == "sencillo" else 1,
+            key="input_muro_tipo"
         )
+        if nuevo_muro_tipo != st.session_state.proyecto.muro_tipo:
+            st.session_state.proyecto.muro_tipo = nuevo_muro_tipo
         
         st.markdown("---")
         st.markdown("### 💼 Configuración AIU General")
         st.caption("Aplica a Diseños + Estructura + Mampostería + Techos")
         
-        for concepto in st.session_state.config_aiu.keys():
-            st.session_state.config_aiu[concepto] = st.number_input(
+        for concepto in list(st.session_state.config_aiu.keys()):
+            # Usar key para vincular directamente con session_state
+            # Esto evita conflictos de sincronización
+            nuevo_valor = st.number_input(
                 concepto,
                 min_value=0.0,
                 max_value=100.0,
-                value=st.session_state.config_aiu[concepto],
+                value=float(st.session_state.config_aiu[concepto]),
                 step=0.5,
-                format="%.1f"
+                format="%.1f",
+                key=f"aiu_input_{concepto.replace(' ', '_').replace('(', '').replace(')', '').replace('%', 'pct')}"
             )
+            # Actualizar inmediatamente en session_state
+            if nuevo_valor != st.session_state.config_aiu[concepto]:
+                st.session_state.config_aiu[concepto] = nuevo_valor
+
 
 # ============================================================================
 # INTERFAZ - TAB 1: DISEÑOS, ESTRUCTURA Y MAMPOSTERÍA
@@ -1078,31 +1121,40 @@ def render_tab_cimentaciones():
     
     col1, col2, col3 = st.columns(3)
     with col1:
-        st.session_state.aiu_cimentacion['pct_comision'] = st.number_input(
+        nueva_comision_cim = st.number_input(
             "Comisión (%)",
-            value=st.session_state.aiu_cimentacion['pct_comision'],
+            value=float(st.session_state.aiu_cimentacion['pct_comision']),
             min_value=0.0,
             max_value=100.0,
             step=0.5,
+            format="%.1f",
             key='cim_com'
         )
+        if nueva_comision_cim != st.session_state.aiu_cimentacion['pct_comision']:
+            st.session_state.aiu_cimentacion['pct_comision'] = nueva_comision_cim
     with col2:
-        st.session_state.aiu_cimentacion['pct_aiu'] = st.number_input(
+        nuevo_aiu_cim = st.number_input(
             "AIU (%)",
-            value=st.session_state.aiu_cimentacion['pct_aiu'],
+            value=float(st.session_state.aiu_cimentacion['pct_aiu']),
             min_value=0.0,
             max_value=100.0,
             step=0.5,
+            format="%.1f",
             key='cim_aiu'
         )
+        if nuevo_aiu_cim != st.session_state.aiu_cimentacion['pct_aiu']:
+            st.session_state.aiu_cimentacion['pct_aiu'] = nuevo_aiu_cim
     with col3:
-        st.session_state.aiu_cimentacion['logistica'] = st.number_input(
+        nueva_logistica_cim = st.number_input(
             "Logística ($)",
-            value=st.session_state.aiu_cimentacion['logistica'],
+            value=float(st.session_state.aiu_cimentacion['logistica']),
             min_value=0.0,
             step=1000.0,
+            format="%.0f",
             key='cim_log'
         )
+        if nueva_logistica_cim != st.session_state.aiu_cimentacion['logistica']:
+            st.session_state.aiu_cimentacion['logistica'] = nueva_logistica_cim
     
     cimentacion = calcular_cimentacion()
     
@@ -1160,31 +1212,40 @@ def render_tab_complementarios():
     
     col1, col2, col3 = st.columns(3)
     with col1:
-        st.session_state.aiu_complementarios['pct_comision'] = st.number_input(
+        nueva_comision_comp = st.number_input(
             "Comisión (%)",
-            value=st.session_state.aiu_complementarios['pct_comision'],
+            value=float(st.session_state.aiu_complementarios['pct_comision']),
             min_value=0.0,
             max_value=100.0,
             step=0.5,
+            format="%.1f",
             key='comp_com'
         )
+        if nueva_comision_comp != st.session_state.aiu_complementarios['pct_comision']:
+            st.session_state.aiu_complementarios['pct_comision'] = nueva_comision_comp
     with col2:
-        st.session_state.aiu_complementarios['pct_aiu'] = st.number_input(
+        nuevo_aiu_comp = st.number_input(
             "AIU (%)",
-            value=st.session_state.aiu_complementarios['pct_aiu'],
+            value=float(st.session_state.aiu_complementarios['pct_aiu']),
             min_value=0.0,
             max_value=100.0,
             step=0.5,
+            format="%.1f",
             key='comp_aiu'
         )
+        if nuevo_aiu_comp != st.session_state.aiu_complementarios['pct_aiu']:
+            st.session_state.aiu_complementarios['pct_aiu'] = nuevo_aiu_comp
     with col3:
-        st.session_state.aiu_complementarios['logistica'] = st.number_input(
+        nueva_logistica_comp = st.number_input(
             "Logística ($)",
-            value=st.session_state.aiu_complementarios['logistica'],
+            value=float(st.session_state.aiu_complementarios['logistica']),
             min_value=0.0,
             step=1000.0,
+            format="%.0f",
             key='comp_log'
         )
+        if nueva_logistica_comp != st.session_state.aiu_complementarios['logistica']:
+            st.session_state.aiu_complementarios['logistica'] = nueva_logistica_comp
     
     complementarios = calcular_complementarios()
     
