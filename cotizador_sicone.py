@@ -48,6 +48,28 @@ st.markdown("""
         border-radius: 5px;
         margin-bottom: 1rem;
     }
+    
+    /* CONSISTENCIA DE FORMATO: Editables grises, Calculados blancos */
+    /* Invertir colores de fondo en data_editor para mantener consistencia con number_input */
+    
+    /* Celdas editables (sin disabled) - fondo gris como number_input */
+    div[data-testid="stDataFrameResizable"] div[data-testid="stDataFrameDataCell"]:not([aria-readonly="true"]) {
+        background-color: #f0f2f6 !important;
+    }
+    
+    /* Celdas calculadas (disabled=True) - fondo blanco como métricas */
+    div[data-testid="stDataFrameResizable"] div[data-testid="stDataFrameDataCell"][aria-readonly="true"] {
+        background-color: white !important;
+    }
+    
+    /* También aplicar a celdas por clase si el atributo no funciona */
+    .stDataFrame [data-baseweb="data-table"] [role="gridcell"]:not(.disabled-cell) {
+        background-color: #f0f2f6 !important;
+    }
+    
+    .stDataFrame [data-baseweb="data-table"] [role="gridcell"].disabled-cell {
+        background-color: white !important;
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -565,11 +587,11 @@ def render_tab_disenos_estructura():
             df_disenos,
             column_config={
                 'Precio Unitario ($/m²)': st.column_config.NumberColumn(
-                    format="$%d",
+                    format="%d",
                     min_value=0
                 ),
                 'Subtotal': st.column_config.NumberColumn(
-                    format="$%d",
+                    format="%d",
                     disabled=True
                 )
             },
@@ -593,11 +615,11 @@ def render_tab_disenos_estructura():
         with col1:
             item.cantidad = st.number_input("Cantidad", value=item.cantidad, min_value=0.0, step=0.01, key='est_cant', format="%.2f")
         with col2:
-            item.precio_materiales = st.number_input("Materiales ($)", value=item.precio_materiales, min_value=0.0, step=1000.0, key='est_mat', format="%d")
+            item.precio_materiales = st.number_input("Materiales ($)", value=item.precio_materiales, min_value=0.0, step=1000.0, key='est_mat', format="%.0f")
         with col3:
-            item.precio_equipos = st.number_input("Equipos ($)", value=item.precio_equipos, min_value=0.0, step=1000.0, key='est_eq', format="%d")
+            item.precio_equipos = st.number_input("Equipos ($)", value=item.precio_equipos, min_value=0.0, step=1000.0, key='est_eq', format="%.0f")
         with col4:
-            item.precio_mano_obra = st.number_input("Mano de Obra ($)", value=item.precio_mano_obra, min_value=0.0, step=1000.0, key='est_mo', format="%d")
+            item.precio_mano_obra = st.number_input("Mano de Obra ($)", value=item.precio_mano_obra, min_value=0.0, step=1000.0, key='est_mo', format="%.0f")
         
         total_estructura = calcular_estructura()
         st.metric("**Total Estructura**", f"${total_estructura:,.0f}")
@@ -610,17 +632,19 @@ def render_tab_disenos_estructura():
         with col1:
             item.cantidad = st.number_input("Cantidad (m²)", value=item.cantidad, min_value=0.0, step=0.01, key='mam_cant', format="%.2f")
         with col2:
-            item.precio_materiales = st.number_input("Materiales ($)", value=item.precio_materiales, min_value=0.0, step=1000.0, key='mam_mat', format="%d")
+            item.precio_materiales = st.number_input("Materiales ($)", value=item.precio_materiales, min_value=0.0, step=1000.0, key='mam_mat', format="%.0f")
         with col3:
-            item.precio_equipos = st.number_input("Equipos ($)", value=item.precio_equipos, min_value=0.0, step=1000.0, key='mam_eq', format="%d")
+            item.precio_equipos = st.number_input("Equipos ($)", value=item.precio_equipos, min_value=0.0, step=1000.0, key='mam_eq', format="%.0f")
         with col4:
-            item.precio_mano_obra = st.number_input("Mano de Obra ($)", value=item.precio_mano_obra, min_value=0.0, step=1000.0, key='mam_mo', format="%d")
+            item.precio_mano_obra = st.number_input("Mano de Obra ($)", value=item.precio_mano_obra, min_value=0.0, step=1000.0, key='mam_mo', format="%.0f")
         
         total_mamposteria = calcular_mamposteria()
         st.metric("**Total Mampostería**", f"${total_mamposteria:,.0f}")
     
     # TECHOS Y OTROS
     with st.expander("🏠 Techos y otros", expanded=True):
+        
+        st.caption("📝 Campos editables: Cantidad, Materiales, Equipos, Mano de Obra")
         
         df_mt_data = []
         for nombre, item in st.session_state.mamposteria_techos.items():
@@ -639,6 +663,7 @@ def render_tab_disenos_estructura():
         edited_mt = st.data_editor(
             df_mt,
             column_config={
+                'Ítem': st.column_config.TextColumn(disabled=True),
                 'Unidad': st.column_config.TextColumn(disabled=True),
                 'Cantidad': st.column_config.NumberColumn(min_value=0, format="%.2f"),
                 'Materiales': st.column_config.NumberColumn(min_value=0, format="%d"),
@@ -685,6 +710,8 @@ def render_tab_cimentaciones():
         st.markdown("### Opción 2: Pilotes de Apoyo")
         items = st.session_state.cimentacion_opcion2
     
+    st.caption("📝 Campos editables: Cantidad, Precio Unitario")
+    
     df_cim_data = []
     for nombre, item in items.items():
         df_cim_data.append({
@@ -700,6 +727,7 @@ def render_tab_cimentaciones():
     edited_cim = st.data_editor(
         df_cim,
         column_config={
+            'Ítem': st.column_config.TextColumn(disabled=True),
             'Unidad': st.column_config.TextColumn(disabled=True),
             'Cantidad': st.column_config.NumberColumn(min_value=0, format="%.2f"),
             'Precio Unitario': st.column_config.NumberColumn(min_value=0, format="%d"),
@@ -764,6 +792,8 @@ def render_tab_complementarios():
     
     st.markdown('<h2 class="section-title">🔧 Complementarios</h2>', unsafe_allow_html=True)
     
+    st.caption("📝 Campos editables: Cantidad, Precio Unitario")
+    
     df_comp_data = []
     for nombre, item in st.session_state.complementarios.items():
         df_comp_data.append({
@@ -779,6 +809,7 @@ def render_tab_complementarios():
     edited_comp = st.data_editor(
         df_comp,
         column_config={
+            'Ítem': st.column_config.TextColumn(disabled=True),
             'Unidad': st.column_config.TextColumn(disabled=True),
             'Cantidad': st.column_config.NumberColumn(min_value=0, format="%.2f"),
             'Precio Unitario': st.column_config.NumberColumn(min_value=0, format="%d"),
@@ -853,6 +884,7 @@ def render_tab_administracion():
     # SUB-TAB 1: PERSONAL PROFESIONAL
     with subtab1:
         st.markdown("### Personal Profesional y Técnico")
+        st.caption("📝 Campos editables: Cant, Valor/Mes, % Prest, Dedicación, Meses")
         
         df_prof_data = []
         for nombre, p in st.session_state.personal_profesional.items():
@@ -900,6 +932,7 @@ def render_tab_administracion():
     # SUB-TAB 2: PERSONAL ADMINISTRATIVO
     with subtab2:
         st.markdown("### Personal Administrativo")
+        st.caption("📝 Campos editables: Cant, Valor/Mes, % Prest, Dedicación, Meses")
         
         df_admin_data = []
         for nombre, p in st.session_state.personal_administrativo.items():
@@ -947,6 +980,7 @@ def render_tab_administracion():
     # SUB-TAB 3: OTROS CONCEPTOS
     with subtab3:
         st.markdown("### Otros Conceptos Administrativos")
+        st.caption("📝 Campo editable: Valor")
         
         df_otros_data = []
         for nombre, valor in st.session_state.otros_admin.items():
