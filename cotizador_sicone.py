@@ -1627,7 +1627,7 @@ def main():
     st.markdown("---")
     st.markdown("### 📊 Resumen Global del Proyecto")
     
-    col1, col2, col3, col4 = st.columns(4)
+    col1, col2, col3, col4, col5 = st.columns([2, 2, 2, 2, 1])
     with col1:
         st.metric("💰 Total Proyecto", f"${resumen['total_proyecto']:,.0f}")
     with col2:
@@ -1648,6 +1648,10 @@ def main():
                 st.success("✅ Archivo Excel generado correctamente")
             except Exception as e:
                 st.error(f"❌ Error al generar archivo: {str(e)}")
+    with col5:
+        # Botón para forzar actualización
+        if st.button("🔄", help="Actualizar resumen", use_container_width=True):
+            st.rerun()
     
     st.markdown("---")
     
