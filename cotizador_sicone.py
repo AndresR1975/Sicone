@@ -1,6 +1,6 @@
 """
-SICONE - Sistema de Cotización v2.0
-Versión completa basada en formato Excel real de SICONE
+SICONE - Sistema de Cotización v3.0
+Versión completa con gestión de cotizaciones guardadas
 Autor: AI-MindNovation
 Fecha: Noviembre 2025
 """
@@ -8,11 +8,12 @@ Fecha: Noviembre 2025
 import streamlit as st
 import pandas as pd
 import numpy as np
+import json
 from datetime import datetime
 from io import BytesIO
 import plotly.express as px
 import plotly.graph_objects as go
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, asdict
 from typing import List, Dict, Optional
 
 # ============================================================================
@@ -517,6 +518,282 @@ def calcular_administracion_detallada():
         'total': total
     }
 
+def serializar_cotizacion():
+    """
+    Serializa el estado completo de la cotización a un diccionario JSON-compatible
+    """
+    cotizacion_data = {
+        'version': '3.0',
+        'fecha_guardado': datetime.now().isoformat(),
+        'proyecto': {
+            'nombre': st.session_state.proyecto.nombre,
+            'cliente': st.session_state.proyecto.cliente,
+            'direccion': st.session_state.proyecto.direccion,
+            'telefono': st.session_state.proyecto.telefono,
+            'business_manager': st.session_state.proyecto.business_manager,
+            'medio_contacto': st.session_state.proyecto.medio_contacto,
+            'area_base': st.session_state.proyecto.area_base,
+            'area_cubierta': st.session_state.proyecto.area_cubierta,
+            'area_entrepiso': st.session_state.proyecto.area_entrepiso,
+            'niveles': st.session_state.proyecto.niveles,
+            'muro_tipo': st.session_state.proyecto.muro_tipo
+        },
+        'config_aiu': st.session_state.config_aiu,
+        'disenos': {
+            nombre: {
+                'precio_unitario': item.precio_unitario
+            } for nombre, item in st.session_state.disenos.items()
+        },
+        'estructura': {
+            'cantidad': st.session_state.estructura.cantidad,
+            'precio_materiales': st.session_state.estructura.precio_materiales,
+            'precio_equipos': st.session_state.estructura.precio_equipos,
+            'precio_mano_obra': st.session_state.estructura.precio_mano_obra
+        },
+        'mamposteria': {
+            'cantidad': st.session_state.mamposteria.cantidad,
+            'precio_materiales': st.session_state.mamposteria.precio_materiales,
+            'precio_equipos': st.session_state.mamposteria.precio_equipos,
+            'precio_mano_obra': st.session_state.mamposteria.precio_mano_obra
+        },
+        'mamposteria_techos': {
+            nombre: {
+                'cantidad': item.cantidad,
+                'precio_materiales': item.precio_materiales,
+                'precio_equipos': item.precio_equipos,
+                'precio_mano_obra': item.precio_mano_obra
+            } for nombre, item in st.session_state.mamposteria_techos.items()
+        },
+        'opcion_cimentacion': st.session_state.opcion_cimentacion,
+        'cimentacion_opcion1': {
+            nombre: {
+                'cantidad': item.cantidad,
+                'precio_unitario': item.precio_unitario
+            } for nombre, item in st.session_state.cimentacion_opcion1.items()
+        },
+        'cimentacion_opcion2': {
+            nombre: {
+                'cantidad': item.cantidad,
+                'precio_unitario': item.precio_unitario
+            } for nombre, item in st.session_state.cimentacion_opcion2.items()
+        },
+        'aiu_cimentacion': st.session_state.aiu_cimentacion,
+        'complementarios': {
+            nombre: {
+                'cantidad': item.cantidad,
+                'precio_unitario': item.precio_unitario
+            } for nombre, item in st.session_state.complementarios.items()
+        },
+        'aiu_complementarios': st.session_state.aiu_complementarios,
+        'personal_profesional': {
+            nombre: {
+                'cantidad': p.cantidad,
+                'valor_mes': p.valor_mes,
+                'porcentaje_prestaciones': p.porcentaje_prestaciones,
+                'dedicacion': p.dedicacion,
+                'meses': p.meses
+            } for nombre, p in st.session_state.personal_profesional.items()
+        },
+        'personal_administrativo': {
+            nombre: {
+                'cantidad': p.cantidad,
+                'valor_mes': p.valor_mes,
+                'porcentaje_prestaciones': p.porcentaje_prestaciones,
+                'dedicacion': p.dedicacion,
+                'meses': p.meses
+            } for nombre, p in st.session_state.personal_administrativo.items()
+        },
+        'otros_admin': {
+            concepto_nombre: {
+                'items_detalle': concepto_obj.items_detalle
+            } for concepto_nombre, concepto_obj in st.session_state.otros_admin.items()
+        }
+    }
+    
+    return cotizacion_data
+
+def deserializar_cotizacion(cotizacion_data):
+    """
+    Carga una cotizacion desde un diccionario y actualiza el session_state
+    """
+    # Proyecto
+    for key, value in cotizacion_data['proyecto'].items():
+        setattr(st.session_state.proyecto, key, value)
+    
+    # Configuración AIU
+    st.session_state.config_aiu = cotizacion_data['config_aiu']
+    
+    # Diseños
+    for nombre, data in cotizacion_data['disenos'].items():
+        if nombre in st.session_state.disenos:
+            st.session_state.disenos[nombre].precio_unitario = data['precio_unitario']
+    
+    # Estructura
+    st.session_state.estructura.cantidad = cotizacion_data['estructura']['cantidad']
+    st.session_state.estructura.precio_materiales = cotizacion_data['estructura']['precio_materiales']
+    st.session_state.estructura.precio_equipos = cotizacion_data['estructura']['precio_equipos']
+    st.session_state.estructura.precio_mano_obra = cotizacion_data['estructura']['precio_mano_obra']
+    
+    # Mampostería
+    st.session_state.mamposteria.cantidad = cotizacion_data['mamposteria']['cantidad']
+    st.session_state.mamposteria.precio_materiales = cotizacion_data['mamposteria']['precio_materiales']
+    st.session_state.mamposteria.precio_equipos = cotizacion_data['mamposteria']['precio_equipos']
+    st.session_state.mamposteria.precio_mano_obra = cotizacion_data['mamposteria']['precio_mano_obra']
+    
+    # Mampostería y techos
+    for nombre, data in cotizacion_data['mamposteria_techos'].items():
+        if nombre in st.session_state.mamposteria_techos:
+            st.session_state.mamposteria_techos[nombre].cantidad = data['cantidad']
+            st.session_state.mamposteria_techos[nombre].precio_materiales = data['precio_materiales']
+            st.session_state.mamposteria_techos[nombre].precio_equipos = data['precio_equipos']
+            st.session_state.mamposteria_techos[nombre].precio_mano_obra = data['precio_mano_obra']
+    
+    # Cimentaciones
+    st.session_state.opcion_cimentacion = cotizacion_data['opcion_cimentacion']
+    for nombre, data in cotizacion_data['cimentacion_opcion1'].items():
+        if nombre in st.session_state.cimentacion_opcion1:
+            st.session_state.cimentacion_opcion1[nombre].cantidad = data['cantidad']
+            st.session_state.cimentacion_opcion1[nombre].precio_unitario = data['precio_unitario']
+    
+    for nombre, data in cotizacion_data['cimentacion_opcion2'].items():
+        if nombre in st.session_state.cimentacion_opcion2:
+            st.session_state.cimentacion_opcion2[nombre].cantidad = data['cantidad']
+            st.session_state.cimentacion_opcion2[nombre].precio_unitario = data['precio_unitario']
+    
+    st.session_state.aiu_cimentacion = cotizacion_data['aiu_cimentacion']
+    
+    # Complementarios
+    for nombre, data in cotizacion_data['complementarios'].items():
+        if nombre in st.session_state.complementarios:
+            st.session_state.complementarios[nombre].cantidad = data['cantidad']
+            st.session_state.complementarios[nombre].precio_unitario = data['precio_unitario']
+    
+    st.session_state.aiu_complementarios = cotizacion_data['aiu_complementarios']
+    
+    # Personal profesional
+    for nombre, data in cotizacion_data['personal_profesional'].items():
+        if nombre in st.session_state.personal_profesional:
+            st.session_state.personal_profesional[nombre].cantidad = data['cantidad']
+            st.session_state.personal_profesional[nombre].valor_mes = data['valor_mes']
+            st.session_state.personal_profesional[nombre].porcentaje_prestaciones = data['porcentaje_prestaciones']
+            st.session_state.personal_profesional[nombre].dedicacion = data['dedicacion']
+            st.session_state.personal_profesional[nombre].meses = data['meses']
+    
+    # Personal administrativo
+    for nombre, data in cotizacion_data['personal_administrativo'].items():
+        if nombre in st.session_state.personal_administrativo:
+            st.session_state.personal_administrativo[nombre].cantidad = data['cantidad']
+            st.session_state.personal_administrativo[nombre].valor_mes = data['valor_mes']
+            st.session_state.personal_administrativo[nombre].porcentaje_prestaciones = data['porcentaje_prestaciones']
+            st.session_state.personal_administrativo[nombre].dedicacion = data['dedicacion']
+            st.session_state.personal_administrativo[nombre].meses = data['meses']
+    
+    # Otros conceptos administrativos
+    for concepto_nombre, data in cotizacion_data['otros_admin'].items():
+        if concepto_nombre in st.session_state.otros_admin:
+            st.session_state.otros_admin[concepto_nombre].items_detalle = data['items_detalle']
+
+def guardar_cotizacion_memoria(nombre_cotizacion):
+    """
+    Guarda la cotización actual en memoria Y en archivo JSON persistente
+    """
+    import os
+    
+    if 'cotizaciones_guardadas' not in st.session_state:
+        st.session_state.cotizaciones_guardadas = {}
+    
+    cotizacion_data = serializar_cotizacion()
+    st.session_state.cotizaciones_guardadas[nombre_cotizacion] = cotizacion_data
+    
+    # Guardar en archivo para persistencia entre sesiones
+    try:
+        # Crear directorio si no existe
+        cotizaciones_dir = '/home/claude/cotizaciones_sicone'
+        os.makedirs(cotizaciones_dir, exist_ok=True)
+        
+        # Nombre de archivo seguro
+        nombre_archivo = nombre_cotizacion.replace(' ', '_').replace('/', '_')
+        filepath = os.path.join(cotizaciones_dir, f"{nombre_archivo}.json")
+        
+        # Guardar JSON
+        with open(filepath, 'w', encoding='utf-8') as f:
+            json.dump(cotizacion_data, f, indent=2, ensure_ascii=False)
+        
+        return True, "Cotización guardada correctamente"
+    except Exception as e:
+        return False, f"Error al guardar: {str(e)}"
+
+def cargar_cotizaciones_disponibles():
+    """
+    Carga la lista de cotizaciones disponibles desde archivos
+    """
+    import os
+    
+    cotizaciones_dir = '/home/claude/cotizaciones_sicone'
+    
+    if not os.path.exists(cotizaciones_dir):
+        return {}
+    
+    cotizaciones = {}
+    try:
+        for filename in os.listdir(cotizaciones_dir):
+            if filename.endswith('.json'):
+                filepath = os.path.join(cotizaciones_dir, filename)
+                with open(filepath, 'r', encoding='utf-8') as f:
+                    nombre = filename[:-5].replace('_', ' ')  # Remover .json
+                    cotizaciones[nombre] = json.load(f)
+        return cotizaciones
+    except Exception as e:
+        st.error(f"Error cargando cotizaciones: {str(e)}")
+        return {}
+
+def eliminar_cotizacion_archivo(nombre_cotizacion):
+    """
+    Elimina una cotización del archivo
+    """
+    import os
+    
+    try:
+        cotizaciones_dir = '/home/claude/cotizaciones_sicone'
+        nombre_archivo = nombre_cotizacion.replace(' ', '_').replace('/', '_')
+        filepath = os.path.join(cotizaciones_dir, f"{nombre_archivo}.json")
+        
+        if os.path.exists(filepath):
+            os.remove(filepath)
+            return True, "Cotización eliminada"
+        return False, "Archivo no encontrado"
+    except Exception as e:
+        return False, f"Error al eliminar: {str(e)}"
+
+def cargar_cotizacion_memoria(nombre_cotizacion):
+    """
+    Carga una cotización desde memoria
+    """
+    if nombre_cotizacion in st.session_state.cotizaciones_guardadas:
+        cotizacion_data = st.session_state.cotizaciones_guardadas[nombre_cotizacion]
+        deserializar_cotizacion(cotizacion_data)
+        return True
+    return False
+
+def exportar_cotizacion_json():
+    """
+    Exporta la cotización actual a JSON
+    """
+    cotizacion_data = serializar_cotizacion()
+    json_str = json.dumps(cotizacion_data, indent=2, ensure_ascii=False)
+    return json_str.encode('utf-8')
+
+def importar_cotizacion_json(json_file):
+    """
+    Importa una cotización desde un archivo JSON
+    """
+    try:
+        cotizacion_data = json.loads(json_file.getvalue().decode('utf-8'))
+        deserializar_cotizacion(cotizacion_data)
+        return True, "Cotización cargada exitosamente"
+    except Exception as e:
+        return False, f"Error al cargar cotización: {str(e)}"
+
 def exportar_a_excel():
     """
     Exporta la cotización completa a un archivo Excel con todas las secciones
@@ -544,7 +821,7 @@ def exportar_a_excel():
     # ============================================================================
     # ENCABEZADO PRINCIPAL
     # ============================================================================
-    ws[f'A{row}'] = "SICONE v2.0 - Sistema de Cotización"
+    ws[f'A{row}'] = "SICONE v3.0 - Sistema de Cotización"
     ws[f'A{row}'].font = title_font
     ws.merge_cells(f'A{row}:F{row}')
     row += 2
@@ -1347,6 +1624,112 @@ def render_sidebar():
             # Actualizar inmediatamente en session_state
             if nuevo_valor != st.session_state.config_aiu[concepto]:
                 st.session_state.config_aiu[concepto] = nuevo_valor
+        
+        st.markdown("---")
+        st.markdown("### 💾 Gestión de Cotizaciones")
+        
+        # Cargar cotizaciones disponibles desde archivos al iniciar
+        if 'cotizaciones_guardadas' not in st.session_state:
+            st.session_state.cotizaciones_guardadas = cargar_cotizaciones_disponibles()
+        
+        # Guardar cotización actual
+        col1, col2 = st.columns([3, 1])
+        with col1:
+            nombre_guardar = st.text_input(
+                "Nombre para guardar",
+                value=st.session_state.proyecto.nombre,
+                key="nombre_guardar_cotizacion"
+            )
+        with col2:
+            if st.button("💾", key="btn_guardar", use_container_width=True, help="Guardar cotización"):
+                if nombre_guardar:
+                    success, msg = guardar_cotizacion_memoria(nombre_guardar)
+                    if success:
+                        st.success("✅ Guardado")
+                        # Recargar lista
+                        st.session_state.cotizaciones_guardadas = cargar_cotizaciones_disponibles()
+                    else:
+                        st.error(msg)
+                else:
+                    st.error("❌ Nombre requerido")
+        
+        # Lista de cotizaciones guardadas
+        if st.session_state.cotizaciones_guardadas:
+            st.markdown("**Cotizaciones guardadas:**")
+            st.caption(f"📁 {len(st.session_state.cotizaciones_guardadas)} cotización(es)")
+            
+            for nombre_cot in sorted(st.session_state.cotizaciones_guardadas.keys()):
+                col1, col2, col3 = st.columns([3, 1, 1])
+                with col1:
+                    # Mostrar fecha de guardado si está disponible
+                    fecha = st.session_state.cotizaciones_guardadas[nombre_cot].get('fecha_guardado', '')
+                    if fecha:
+                        try:
+                            fecha_dt = datetime.fromisoformat(fecha)
+                            st.caption(f"📄 {nombre_cot}")
+                            st.caption(f"🕒 {fecha_dt.strftime('%d/%m/%Y %H:%M')}")
+                        except:
+                            st.text(nombre_cot)
+                    else:
+                        st.text(nombre_cot)
+                with col2:
+                    if st.button("📂", key=f"cargar_{nombre_cot}", help="Cargar", use_container_width=True):
+                        cargar_cotizacion_memoria(nombre_cot)
+                        st.success(f"✅ Cargado: {nombre_cot}")
+                        st.rerun()
+                with col3:
+                    if st.button("🗑️", key=f"eliminar_{nombre_cot}", help="Eliminar", use_container_width=True):
+                        success, msg = eliminar_cotizacion_archivo(nombre_cot)
+                        if success:
+                            if nombre_cot in st.session_state.cotizaciones_guardadas:
+                                del st.session_state.cotizaciones_guardadas[nombre_cot]
+                            st.success(msg)
+                        else:
+                            st.error(msg)
+                        st.rerun()
+        else:
+            st.info("💡 No hay cotizaciones guardadas aún")
+        
+        # Exportar/Importar JSON y Nueva cotización
+        st.markdown("---")
+        st.caption("**Acciones adicionales:**")
+        
+        col1, col2 = st.columns(2)
+        with col1:
+            # Exportar a JSON
+            json_data = exportar_cotizacion_json()
+            st.download_button(
+                label="📤 Export",
+                data=json_data,
+                file_name=f"Cot_{st.session_state.proyecto.nombre.replace(' ', '_')}_{pd.Timestamp.now().strftime('%Y%m%d')}.json",
+                mime="application/json",
+                use_container_width=True,
+                help="Exportar a JSON"
+            )
+        with col2:
+            # Nueva cotización
+            if st.button("🆕 Nueva", key="btn_nueva_cotizacion", use_container_width=True, help="Nueva cotización"):
+                # Reiniciar session_state pero mantener cotizaciones guardadas
+                cotizaciones_backup = st.session_state.cotizaciones_guardadas.copy()
+                for key in list(st.session_state.keys()):
+                    del st.session_state[key]
+                st.session_state.cotizaciones_guardadas = cotizaciones_backup
+                st.rerun()
+        
+        # Importar desde JSON
+        uploaded_file = st.file_uploader(
+            "📥 Importar JSON",
+            type=['json'],
+            key="upload_json",
+            help="Cargar cotización desde archivo JSON"
+        )
+        if uploaded_file is not None:
+            success, message = importar_cotizacion_json(uploaded_file)
+            if success:
+                st.success(message)
+                st.rerun()
+            else:
+                st.error(message)
 
 
 # ============================================================================
@@ -2015,22 +2398,43 @@ def render_tab_exportar():
     st.markdown("---")
     
     # GENERAR EXCEL
-    st.markdown("### 📥 Generar y Descargar Excel")
+    st.markdown("### 📥 Generar Excel")
     
     try:
         excel_file = exportar_a_excel()
         st.download_button(
-            label="📥 Generar y Descargar Cotización.xlsx",
+            label="📥 Descargar Cotización Excel",
             data=excel_file,
             file_name=f"Cotizacion_SICONE_{st.session_state.proyecto.nombre.replace(' ', '_')}_{pd.Timestamp.now().strftime('%Y%m%d')}.xlsx",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
             type="primary"
         )
-        st.success("✅ Archivo Excel generado correctamente")
     except Exception as e:
         st.error(f"❌ Error al generar archivo: {str(e)}")
     
-    st.info("📋 Funcionalidad de exportación Excel en desarrollo. Por ahora usa el resumen visual.")
+    st.markdown("---")
+    
+    # INFORMACIÓN SOBRE GUARDADO
+    st.markdown("### 💡 Información sobre Guardado")
+    
+    st.info("""
+    **📁 Sistema de Persistencia Automática:**
+    
+    ✅ **Las cotizaciones guardadas persisten automáticamente** 
+    - Al usar el botón "💾 Guardar" en el sidebar, la cotización se guarda en el servidor
+    - Puedes cerrar el navegador y las cotizaciones seguirán disponibles
+    - La próxima vez que abras SICONE, podrás cargarlas desde el sidebar
+    
+    📤 **Exportar a JSON (adicional):**
+    - Útil para hacer backup en tu PC
+    - Útil para compartir cotizaciones con otros usuarios
+    - Útil para transferir entre diferentes instalaciones de SICONE
+    
+    📥 **Importar desde JSON:**
+    - Carga cotizaciones exportadas previamente
+    - Útil para recuperar backups
+    - Útil para recibir cotizaciones de otros usuarios
+    """)
 
 # ============================================================================
 # MAIN APP
@@ -2042,7 +2446,7 @@ def main():
     inicializar_session_state()
     
     # TÍTULO
-    st.markdown('<h1 class="main-title">🏗️ SICONE v2.0 - Sistema de Cotización</h1>', unsafe_allow_html=True)
+    st.markdown('<h1 class="main-title">🏗️ SICONE v3.0 - Sistema de Cotización</h1>', unsafe_allow_html=True)
     
     # ============================================================================
     # SIDEBAR (PRIMERO para que los valores se actualicen ANTES de calcular)
