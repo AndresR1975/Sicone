@@ -707,8 +707,9 @@ def guardar_cotizacion_memoria(nombre_cotizacion):
     
     # Guardar en archivo para persistencia entre sesiones
     try:
-        # Crear directorio si no existe
-        cotizaciones_dir = '/home/claude/cotizaciones_sicone'
+        # Usar directorio relativo en lugar de /home/claude
+        # Streamlit Cloud permite escribir en el directorio de trabajo actual
+        cotizaciones_dir = './cotizaciones_sicone'
         os.makedirs(cotizaciones_dir, exist_ok=True)
         
         # Nombre de archivo seguro
@@ -729,7 +730,8 @@ def cargar_cotizaciones_disponibles():
     """
     import os
     
-    cotizaciones_dir = '/home/claude/cotizaciones_sicone'
+    # Usar directorio relativo
+    cotizaciones_dir = './cotizaciones_sicone'
     
     if not os.path.exists(cotizaciones_dir):
         return {}
@@ -754,7 +756,8 @@ def eliminar_cotizacion_archivo(nombre_cotizacion):
     import os
     
     try:
-        cotizaciones_dir = '/home/claude/cotizaciones_sicone'
+        # Usar directorio relativo
+        cotizaciones_dir = './cotizaciones_sicone'
         nombre_archivo = nombre_cotizacion.replace(' ', '_').replace('/', '_')
         filepath = os.path.join(cotizaciones_dir, f"{nombre_archivo}.json")
         
@@ -1628,6 +1631,8 @@ def render_sidebar():
         st.markdown("---")
         st.markdown("### 💾 Gestión de Cotizaciones")
         
+        st.caption("⚠️ **En Streamlit Cloud:** Las cotizaciones guardadas persisten durante la sesión, pero pueden perderse si el servidor se reinicia. Usa **📤 Export** para backup permanente.")
+        
         # Cargar cotizaciones disponibles desde archivos al iniciar
         if 'cotizaciones_guardadas' not in st.session_state:
             st.session_state.cotizaciones_guardadas = cargar_cotizaciones_disponibles()
@@ -1645,11 +1650,14 @@ def render_sidebar():
                 if nombre_guardar:
                     success, msg = guardar_cotizacion_memoria(nombre_guardar)
                     if success:
-                        st.success("✅ Guardado")
+                        st.success("✅ Guardado en sesión")
+                        st.warning("⚠️ Recuerda exportar a JSON para backup permanente")
                         # Recargar lista
                         st.session_state.cotizaciones_guardadas = cargar_cotizaciones_disponibles()
                     else:
-                        st.error(msg)
+                        # Si falla el guardado en archivo, al menos está en memoria
+                        st.warning("⚠️ Guardado solo en memoria (sesión actual)")
+                        st.caption(f"Error archivo: {msg}")
                 else:
                     st.error("❌ Nombre requerido")
         
@@ -2418,22 +2426,31 @@ def render_tab_exportar():
     st.markdown("### 💡 Información sobre Guardado")
     
     st.info("""
-    **📁 Sistema de Persistencia Automática:**
+    **📁 Sistema de Guardado en Streamlit Cloud:**
     
-    ✅ **Las cotizaciones guardadas persisten automáticamente** 
-    - Al usar el botón "💾 Guardar" en el sidebar, la cotización se guarda en el servidor
-    - Puedes cerrar el navegador y las cotizaciones seguirán disponibles
-    - La próxima vez que abras SICONE, podrás cargarlas desde el sidebar
+    ✅ **Las cotizaciones se guardan durante tu sesión activa** 
+    - Al usar el botón "💾" en el sidebar, la cotización se guarda temporalmente
+    - Puedes trabajar con múltiples cotizaciones en la misma sesión
+    - Cambiar entre cotizaciones es instantáneo
     
-    📤 **Exportar a JSON (adicional):**
-    - Útil para hacer backup en tu PC
-    - Útil para compartir cotizaciones con otros usuarios
-    - Útil para transferir entre diferentes instalaciones de SICONE
+    ⚠️ **Importante - Limitación de Streamlit Cloud:**
+    - Las cotizaciones guardadas **pueden perderse** si Streamlit reinicia el servidor
+    - Esto ocurre por inactividad (~7 días) o actualizaciones de la app
     
-    📥 **Importar desde JSON:**
-    - Carga cotizaciones exportadas previamente
-    - Útil para recuperar backups
-    - Útil para recibir cotizaciones de otros usuarios
+    ✅ **Solución Recomendada:**
+    - **Siempre usa "📤 Export" para tus cotizaciones importantes**
+    - El archivo JSON se descarga a tu PC y es permanente
+    - Puedes importarlo cuando lo necesites con "📥 Importar JSON"
+    
+    📤 **Exportar a JSON (RECOMENDADO):**
+    - Backup permanente en tu PC ✅
+    - Compartir cotizaciones con otros usuarios ✅
+    - Transferir entre diferentes instalaciones ✅
+    
+    💡 **Mejor práctica:**
+    1. Trabaja en tu cotización
+    2. 💾 Guarda para tener varias versiones en la sesión
+    3. 📤 Export JSON al finalizar para backup permanente
     """)
 
 # ============================================================================
