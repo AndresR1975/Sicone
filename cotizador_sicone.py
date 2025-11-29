@@ -410,6 +410,37 @@ def inicializar_session_state():
             'pct_aiu': 15.0,
             'logistica': 0.0
         }
+    
+    # INICIALIZAR KEYS DE WIDGETS PARA SINCRONIZACIÓN
+    # Esto asegura que los widgets siempre tengan valores correctos
+    if 'input_nombre_proyecto' not in st.session_state:
+        st.session_state.input_nombre_proyecto = st.session_state.proyecto.nombre
+    if 'input_cliente' not in st.session_state:
+        st.session_state.input_cliente = st.session_state.proyecto.cliente
+    if 'input_direccion' not in st.session_state:
+        st.session_state.input_direccion = st.session_state.proyecto.direccion
+    if 'input_telefono' not in st.session_state:
+        st.session_state.input_telefono = st.session_state.proyecto.telefono
+    if 'input_business_manager' not in st.session_state:
+        st.session_state.input_business_manager = st.session_state.proyecto.business_manager
+    if 'input_medio_contacto' not in st.session_state:
+        st.session_state.input_medio_contacto = st.session_state.proyecto.medio_contacto
+    if 'input_area_base' not in st.session_state:
+        st.session_state.input_area_base = st.session_state.proyecto.area_base
+    if 'input_area_cubierta' not in st.session_state:
+        st.session_state.input_area_cubierta = st.session_state.proyecto.area_cubierta
+    if 'input_area_entrepiso' not in st.session_state:
+        st.session_state.input_area_entrepiso = st.session_state.proyecto.area_entrepiso
+    if 'input_niveles' not in st.session_state:
+        st.session_state.input_niveles = st.session_state.proyecto.niveles
+    if 'input_muro_tipo' not in st.session_state:
+        st.session_state.input_muro_tipo = st.session_state.proyecto.muro_tipo
+    
+    # Inicializar keys de AIU
+    for concepto, valor in st.session_state.config_aiu.items():
+        key_name = f"aiu_input_{concepto.replace(' ', '_').replace('(', '').replace(')', '').replace('%', 'pct')}"
+        if key_name not in st.session_state:
+            st.session_state[key_name] = valor
 
 # ============================================================================
 # FUNCIONES DE CÁLCULO
@@ -1509,7 +1540,6 @@ def render_sidebar():
         
         nuevo_nombre = st.text_input(
             "Nombre del Proyecto", 
-            value=st.session_state.proyecto.nombre,
             key="input_nombre_proyecto"
         )
         if nuevo_nombre != st.session_state.proyecto.nombre:
@@ -1517,7 +1547,6 @@ def render_sidebar():
         
         nuevo_cliente = st.text_input(
             "Cliente", 
-            value=st.session_state.proyecto.cliente,
             key="input_cliente"
         )
         if nuevo_cliente != st.session_state.proyecto.cliente:
@@ -1525,7 +1554,6 @@ def render_sidebar():
         
         nueva_direccion = st.text_input(
             "Dirección", 
-            value=st.session_state.proyecto.direccion,
             key="input_direccion"
         )
         if nueva_direccion != st.session_state.proyecto.direccion:
@@ -1535,7 +1563,6 @@ def render_sidebar():
         with col1:
             nuevo_telefono = st.text_input(
                 "Teléfono", 
-                value=st.session_state.proyecto.telefono,
                 key="input_telefono"
             )
             if nuevo_telefono != st.session_state.proyecto.telefono:
@@ -1543,7 +1570,6 @@ def render_sidebar():
         with col2:
             nuevo_bm = st.text_input(
                 "Business Manager", 
-                value=st.session_state.proyecto.business_manager,
                 key="input_business_manager"
             )
             if nuevo_bm != st.session_state.proyecto.business_manager:
@@ -1551,7 +1577,6 @@ def render_sidebar():
         
         nuevo_medio = st.text_input(
             "Medio de Contacto", 
-            value=st.session_state.proyecto.medio_contacto,
             key="input_medio_contacto"
         )
         if nuevo_medio != st.session_state.proyecto.medio_contacto:
@@ -1563,7 +1588,6 @@ def render_sidebar():
         nueva_area_base = st.number_input(
             "Área de la Base (m²)",
             min_value=0.0,
-            value=float(st.session_state.proyecto.area_base),
             step=0.01,
             format="%.2f",
             help="Área principal que se usa como multiplicador en Diseños",
@@ -1575,7 +1599,6 @@ def render_sidebar():
         nueva_area_cubierta = st.number_input(
             "Área de Cubierta (m²)",
             min_value=0.0,
-            value=float(st.session_state.proyecto.area_cubierta),
             step=0.01,
             format="%.2f",
             key="input_area_cubierta"
@@ -1586,7 +1609,6 @@ def render_sidebar():
         nueva_area_entrepiso = st.number_input(
             "Área de Entrepiso (m²)",
             min_value=0.0,
-            value=float(st.session_state.proyecto.area_entrepiso),
             step=0.01,
             format="%.2f",
             key="input_area_entrepiso"
@@ -1597,7 +1619,6 @@ def render_sidebar():
         nuevos_niveles = st.number_input(
             "Niveles",
             min_value=1,
-            value=int(st.session_state.proyecto.niveles),
             key="input_niveles"
         )
         if nuevos_niveles != st.session_state.proyecto.niveles:
@@ -1606,7 +1627,6 @@ def render_sidebar():
         nuevo_muro_tipo = st.selectbox(
             "Tipo de Muro",
             options=["sencillo", "doble"],
-            index=0 if st.session_state.proyecto.muro_tipo == "sencillo" else 1,
             key="input_muro_tipo"
         )
         if nuevo_muro_tipo != st.session_state.proyecto.muro_tipo:
@@ -1618,12 +1638,11 @@ def render_sidebar():
         
         for concepto in list(st.session_state.config_aiu.keys()):
             # Usar key para vincular directamente con session_state
-            # Esto evita conflictos de sincronización
+            # El widget lee automáticamente de la key, no necesita value=
             nuevo_valor = st.number_input(
                 concepto,
                 min_value=0.0,
                 max_value=100.0,
-                value=float(st.session_state.config_aiu[concepto]),
                 step=0.5,
                 format="%.1f",
                 key=f"aiu_input_{concepto.replace(' ', '_').replace('(', '').replace(')', '').replace('%', 'pct')}"
