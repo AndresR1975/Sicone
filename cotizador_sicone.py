@@ -441,6 +441,10 @@ def inicializar_session_state():
         key_name = f"aiu_input_{concepto.replace(' ', '_').replace('(', '').replace(')', '').replace('%', 'pct')}"
         if key_name not in st.session_state:
             st.session_state[key_name] = valor
+    
+    # Inicializar key del campo "Nombre para guardar"
+    if 'nombre_guardar_cotizacion' not in st.session_state:
+        st.session_state.nombre_guardar_cotizacion = st.session_state.proyecto.nombre
 
 # ============================================================================
 # FUNCIONES DE CÁLCULO
@@ -827,6 +831,9 @@ def importar_cotizacion_json(json_file):
         # Deserializar y marcar que se cargó
         deserializar_cotizacion(cotizacion_data)
         st.session_state.cotizacion_recien_cargada = True
+        
+        # Actualizar el campo "Nombre para guardar" con el nombre del proyecto
+        st.session_state.nombre_guardar_cotizacion = st.session_state.proyecto.nombre
         
         return True, "Cotización cargada exitosamente"
     except Exception as e:
@@ -1544,6 +1551,8 @@ def render_sidebar():
         )
         if nuevo_nombre != st.session_state.proyecto.nombre:
             st.session_state.proyecto.nombre = nuevo_nombre
+            # También actualizar el campo "Nombre para guardar"
+            st.session_state.nombre_guardar_cotizacion = nuevo_nombre
         
         nuevo_cliente = st.text_input(
             "Cliente", 
@@ -1665,7 +1674,6 @@ def render_sidebar():
         with col1:
             nombre_guardar = st.text_input(
                 "Nombre para guardar",
-                value=st.session_state.proyecto.nombre,
                 key="nombre_guardar_cotizacion"
             )
         with col2:
@@ -1708,6 +1716,10 @@ def render_sidebar():
                         # Cargar cotización y marcar que se cargó
                         cargar_cotizacion_memoria(nombre_cot)
                         st.session_state.cotizacion_recien_cargada = True
+                        
+                        # Actualizar el campo "Nombre para guardar" con el nombre de la cotización cargada
+                        st.session_state.nombre_guardar_cotizacion = nombre_cot
+                        
                         st.success(f"✅ Cargado: {nombre_cot}")
                         st.rerun()
                 with col3:
