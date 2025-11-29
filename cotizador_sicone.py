@@ -589,7 +589,7 @@ def serializar_cotizacion():
             nombre: {
                 'cantidad': p.cantidad,
                 'valor_mes': p.valor_mes,
-                'porcentaje_prestaciones': p.porcentaje_prestaciones,
+                'pct_prestaciones': p.pct_prestaciones,
                 'dedicacion': p.dedicacion,
                 'meses': p.meses
             } for nombre, p in st.session_state.personal_profesional.items()
@@ -598,7 +598,7 @@ def serializar_cotizacion():
             nombre: {
                 'cantidad': p.cantidad,
                 'valor_mes': p.valor_mes,
-                'porcentaje_prestaciones': p.porcentaje_prestaciones,
+                'pct_prestaciones': p.pct_prestaciones,
                 'dedicacion': p.dedicacion,
                 'meses': p.meses
             } for nombre, p in st.session_state.personal_administrativo.items()
@@ -675,7 +675,7 @@ def deserializar_cotizacion(cotizacion_data):
         if nombre in st.session_state.personal_profesional:
             st.session_state.personal_profesional[nombre].cantidad = data['cantidad']
             st.session_state.personal_profesional[nombre].valor_mes = data['valor_mes']
-            st.session_state.personal_profesional[nombre].porcentaje_prestaciones = data['porcentaje_prestaciones']
+            st.session_state.personal_profesional[nombre].pct_prestaciones = data['pct_prestaciones']
             st.session_state.personal_profesional[nombre].dedicacion = data['dedicacion']
             st.session_state.personal_profesional[nombre].meses = data['meses']
     
@@ -684,7 +684,7 @@ def deserializar_cotizacion(cotizacion_data):
         if nombre in st.session_state.personal_administrativo:
             st.session_state.personal_administrativo[nombre].cantidad = data['cantidad']
             st.session_state.personal_administrativo[nombre].valor_mes = data['valor_mes']
-            st.session_state.personal_administrativo[nombre].porcentaje_prestaciones = data['porcentaje_prestaciones']
+            st.session_state.personal_administrativo[nombre].pct_prestaciones = data['pct_prestaciones']
             st.session_state.personal_administrativo[nombre].dedicacion = data['dedicacion']
             st.session_state.personal_administrativo[nombre].meses = data['meses']
     
