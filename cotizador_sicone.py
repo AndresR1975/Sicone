@@ -792,6 +792,18 @@ def importar_cotizacion_json(json_file):
     """
     try:
         cotizacion_data = json.loads(json_file.getvalue().decode('utf-8'))
+        
+        # Limpiar keys de widgets para forzar actualización
+        keys_to_delete = [
+            'input_nombre_proyecto', 'input_cliente', 'input_direccion',
+            'input_telefono', 'input_business_manager', 'input_medio_contacto',
+            'input_area_base', 'input_area_cubierta', 'input_area_entrepiso',
+            'input_niveles', 'input_muro_tipo'
+        ]
+        for key in keys_to_delete:
+            if key in st.session_state:
+                del st.session_state[key]
+        
         deserializar_cotizacion(cotizacion_data)
         return True, "Cotización cargada exitosamente"
     except Exception as e:
@@ -1682,6 +1694,18 @@ def render_sidebar():
                         st.text(nombre_cot)
                 with col2:
                     if st.button("📂", key=f"cargar_{nombre_cot}", help="Cargar", use_container_width=True):
+                        # Limpiar keys de widgets para forzar actualización
+                        keys_to_delete = [
+                            'input_nombre_proyecto', 'input_cliente', 'input_direccion',
+                            'input_telefono', 'input_business_manager', 'input_medio_contacto',
+                            'input_area_base', 'input_area_cubierta', 'input_area_entrepiso',
+                            'input_niveles', 'input_muro_tipo'
+                        ]
+                        for key in keys_to_delete:
+                            if key in st.session_state:
+                                del st.session_state[key]
+                        
+                        # Cargar cotización
                         cargar_cotizacion_memoria(nombre_cot)
                         st.success(f"✅ Cargado: {nombre_cot}")
                         st.rerun()
