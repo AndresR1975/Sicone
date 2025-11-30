@@ -411,40 +411,9 @@ def inicializar_session_state():
             'logistica': 0.0
         }
     
-    # INICIALIZAR KEYS DE WIDGETS PARA SINCRONIZACIÓN
-    # Esto asegura que los widgets siempre tengan valores correctos
-    if 'input_nombre_proyecto' not in st.session_state:
-        st.session_state.input_nombre_proyecto = st.session_state.proyecto.nombre
-    if 'input_cliente' not in st.session_state:
-        st.session_state.input_cliente = st.session_state.proyecto.cliente
-    if 'input_direccion' not in st.session_state:
-        st.session_state.input_direccion = st.session_state.proyecto.direccion
-    if 'input_telefono' not in st.session_state:
-        st.session_state.input_telefono = st.session_state.proyecto.telefono
-    if 'input_business_manager' not in st.session_state:
-        st.session_state.input_business_manager = st.session_state.proyecto.business_manager
-    if 'input_medio_contacto' not in st.session_state:
-        st.session_state.input_medio_contacto = st.session_state.proyecto.medio_contacto
-    if 'input_area_base' not in st.session_state:
-        st.session_state.input_area_base = st.session_state.proyecto.area_base
-    if 'input_area_cubierta' not in st.session_state:
-        st.session_state.input_area_cubierta = st.session_state.proyecto.area_cubierta
-    if 'input_area_entrepiso' not in st.session_state:
-        st.session_state.input_area_entrepiso = st.session_state.proyecto.area_entrepiso
-    if 'input_niveles' not in st.session_state:
-        st.session_state.input_niveles = st.session_state.proyecto.niveles
-    if 'input_muro_tipo' not in st.session_state:
-        st.session_state.input_muro_tipo = st.session_state.proyecto.muro_tipo
-    
-    # Inicializar keys de AIU
-    for concepto, valor in st.session_state.config_aiu.items():
-        key_name = f"aiu_input_{concepto.replace(' ', '_').replace('(', '').replace(')', '').replace('%', 'pct')}"
-        if key_name not in st.session_state:
-            st.session_state[key_name] = valor
-    
-    # Inicializar key del campo "Nombre para guardar"
-    if 'nombre_guardar_cotizacion' not in st.session_state:
-        st.session_state.nombre_guardar_cotizacion = st.session_state.proyecto.nombre
+    # Inicializar nombre de cotización actual
+    if 'nombre_cotizacion_actual' not in st.session_state:
+        st.session_state.nombre_cotizacion_actual = ""
 
 # ============================================================================
 # FUNCIONES DE CÁLCULO
@@ -828,11 +797,11 @@ def importar_cotizacion_json(json_file):
     try:
         cotizacion_data = json.loads(json_file.getvalue().decode('utf-8'))
         
-        # Deserializar y marcar que se cargó
+        # Deserializar
         deserializar_cotizacion(cotizacion_data)
-        st.session_state.cotizacion_recien_cargada = True
-        # Guardar el nombre del proyecto para sincronizar después
-        st.session_state.nombre_cotizacion_cargada = st.session_state.proyecto.nombre
+        
+        # Marcar el nombre de la cotización cargada
+        st.session_state.nombre_cotizacion_actual = st.session_state.proyecto.nombre
         
         return True, "Cotización cargada exitosamente"
     except Exception as e:
@@ -1546,21 +1515,21 @@ def render_sidebar():
         
         nuevo_nombre = st.text_input(
             "Nombre del Proyecto", 
-            key="input_nombre_proyecto"
+            value=st.session_state.proyecto.nombre
         )
         if nuevo_nombre != st.session_state.proyecto.nombre:
             st.session_state.proyecto.nombre = nuevo_nombre
         
         nuevo_cliente = st.text_input(
             "Cliente", 
-            key="input_cliente"
+            value=st.session_state.proyecto.cliente
         )
         if nuevo_cliente != st.session_state.proyecto.cliente:
             st.session_state.proyecto.cliente = nuevo_cliente
         
         nueva_direccion = st.text_input(
             "Dirección", 
-            key="input_direccion"
+            value=st.session_state.proyecto.direccion
         )
         if nueva_direccion != st.session_state.proyecto.direccion:
             st.session_state.proyecto.direccion = nueva_direccion
@@ -1569,21 +1538,21 @@ def render_sidebar():
         with col1:
             nuevo_telefono = st.text_input(
                 "Teléfono", 
-                key="input_telefono"
+                value=st.session_state.proyecto.telefono
             )
             if nuevo_telefono != st.session_state.proyecto.telefono:
                 st.session_state.proyecto.telefono = nuevo_telefono
         with col2:
             nuevo_bm = st.text_input(
                 "Business Manager", 
-                key="input_business_manager"
+                value=st.session_state.proyecto.business_manager
             )
             if nuevo_bm != st.session_state.proyecto.business_manager:
                 st.session_state.proyecto.business_manager = nuevo_bm
         
         nuevo_medio = st.text_input(
             "Medio de Contacto", 
-            key="input_medio_contacto"
+            value=st.session_state.proyecto.medio_contacto
         )
         if nuevo_medio != st.session_state.proyecto.medio_contacto:
             st.session_state.proyecto.medio_contacto = nuevo_medio
@@ -1594,10 +1563,10 @@ def render_sidebar():
         nueva_area_base = st.number_input(
             "Área de la Base (m²)",
             min_value=0.0,
+            value=float(st.session_state.proyecto.area_base),
             step=0.01,
             format="%.2f",
-            help="Área principal que se usa como multiplicador en Diseños",
-            key="input_area_base"
+            help="Área principal que se usa como multiplicador en Diseños"
         )
         if nueva_area_base != st.session_state.proyecto.area_base:
             st.session_state.proyecto.area_base = nueva_area_base
@@ -1605,9 +1574,9 @@ def render_sidebar():
         nueva_area_cubierta = st.number_input(
             "Área de Cubierta (m²)",
             min_value=0.0,
+            value=float(st.session_state.proyecto.area_cubierta),
             step=0.01,
-            format="%.2f",
-            key="input_area_cubierta"
+            format="%.2f"
         )
         if nueva_area_cubierta != st.session_state.proyecto.area_cubierta:
             st.session_state.proyecto.area_cubierta = nueva_area_cubierta
@@ -1615,9 +1584,9 @@ def render_sidebar():
         nueva_area_entrepiso = st.number_input(
             "Área de Entrepiso (m²)",
             min_value=0.0,
+            value=float(st.session_state.proyecto.area_entrepiso),
             step=0.01,
-            format="%.2f",
-            key="input_area_entrepiso"
+            format="%.2f"
         )
         if nueva_area_entrepiso != st.session_state.proyecto.area_entrepiso:
             st.session_state.proyecto.area_entrepiso = nueva_area_entrepiso
@@ -1625,7 +1594,7 @@ def render_sidebar():
         nuevos_niveles = st.number_input(
             "Niveles",
             min_value=1,
-            key="input_niveles"
+            value=int(st.session_state.proyecto.niveles)
         )
         if nuevos_niveles != st.session_state.proyecto.niveles:
             st.session_state.proyecto.niveles = nuevos_niveles
@@ -1633,7 +1602,7 @@ def render_sidebar():
         nuevo_muro_tipo = st.selectbox(
             "Tipo de Muro",
             options=["sencillo", "doble"],
-            key="input_muro_tipo"
+            index=0 if st.session_state.proyecto.muro_tipo == "sencillo" else 1
         )
         if nuevo_muro_tipo != st.session_state.proyecto.muro_tipo:
             st.session_state.proyecto.muro_tipo = nuevo_muro_tipo
@@ -1643,17 +1612,14 @@ def render_sidebar():
         st.caption("Aplica a Diseños + Estructura + Mampostería + Techos")
         
         for concepto in list(st.session_state.config_aiu.keys()):
-            # Usar key para vincular directamente con session_state
-            # El widget lee automáticamente de la key, no necesita value=
             nuevo_valor = st.number_input(
                 concepto,
                 min_value=0.0,
                 max_value=100.0,
+                value=float(st.session_state.config_aiu[concepto]),
                 step=0.5,
-                format="%.1f",
-                key=f"aiu_input_{concepto.replace(' ', '_').replace('(', '').replace(')', '').replace('%', 'pct')}"
+                format="%.1f"
             )
-            # Actualizar inmediatamente en session_state
             if nuevo_valor != st.session_state.config_aiu[concepto]:
                 st.session_state.config_aiu[concepto] = nuevo_valor
         
@@ -1666,12 +1632,17 @@ def render_sidebar():
         if 'cotizaciones_guardadas' not in st.session_state:
             st.session_state.cotizaciones_guardadas = cargar_cotizaciones_disponibles()
         
+        # Mostrar nombre de cotización cargada (si existe)
+        if 'nombre_cotizacion_actual' in st.session_state and st.session_state.nombre_cotizacion_actual:
+            st.info(f"💡 **Cotización cargada:** {st.session_state.nombre_cotizacion_actual}")
+            st.caption("Para sobrescribir, usa el mismo nombre abajo")
+        
         # Guardar cotización actual
         col1, col2 = st.columns([3, 1])
         with col1:
             nombre_guardar = st.text_input(
                 "Nombre para guardar",
-                key="nombre_guardar_cotizacion"
+                placeholder="Escribe el nombre aquí..."
             )
         with col2:
             if st.button("💾", key="btn_guardar", use_container_width=True, help="Guardar cotización"):
@@ -1710,10 +1681,10 @@ def render_sidebar():
                         st.text(nombre_cot)
                 with col2:
                     if st.button("📂", key=f"cargar_{nombre_cot}", help="Cargar", use_container_width=True):
-                        # Cargar cotización y marcar que se cargó
+                        # Cargar cotización
                         cargar_cotizacion_memoria(nombre_cot)
-                        st.session_state.cotizacion_recien_cargada = True
-                        st.session_state.nombre_cotizacion_cargada = nombre_cot  # Guardar el nombre para sincronizar después
+                        # Marcar el nombre de la cotización cargada para mostrar
+                        st.session_state.nombre_cotizacion_actual = nombre_cot
                         st.success(f"✅ Cargado: {nombre_cot}")
                         st.rerun()
                 with col3:
@@ -1753,6 +1724,7 @@ def render_sidebar():
                 for key in list(st.session_state.keys()):
                     del st.session_state[key]
                 st.session_state.cotizaciones_guardadas = cotizaciones_backup
+                st.session_state.nombre_cotizacion_actual = ""  # Limpiar nombre de cotización
                 st.rerun()
         
         # Importar desde JSON
@@ -2485,65 +2457,6 @@ def render_tab_exportar():
     """)
 
 # ============================================================================
-# SINCRONIZACIÓN DE WIDGETS
-# ============================================================================
-
-def sincronizar_keys_widgets():
-    """
-    Sincroniza las keys de los widgets con los valores del session_state
-    Esto debe ejecutarse ANTES de render_sidebar()
-    """
-    # Protección contra loops infinitos
-    if 'sincronizacion_contador' not in st.session_state:
-        st.session_state.sincronizacion_contador = 0
-    
-    if st.session_state.get('cotizacion_recien_cargada', False):
-        # Incrementar contador
-        st.session_state.sincronizacion_contador += 1
-        
-        # Si se ha intentado más de 3 veces, hay un problema - abortar
-        if st.session_state.sincronizacion_contador > 3:
-            st.error("⚠️ Error: Loop infinito detectado al cargar cotización. Por favor recarga la página.")
-            st.session_state.cotizacion_recien_cargada = False
-            st.session_state.sincronizacion_contador = 0
-            st.stop()
-        
-        try:
-            # Actualizar las keys de los widgets del proyecto
-            if 'proyecto' in st.session_state:
-                st.session_state.input_nombre_proyecto = st.session_state.proyecto.nombre
-                st.session_state.input_cliente = st.session_state.proyecto.cliente
-                st.session_state.input_direccion = st.session_state.proyecto.direccion
-                st.session_state.input_telefono = st.session_state.proyecto.telefono
-                st.session_state.input_business_manager = st.session_state.proyecto.business_manager
-                st.session_state.input_medio_contacto = st.session_state.proyecto.medio_contacto
-                st.session_state.input_area_base = st.session_state.proyecto.area_base
-                st.session_state.input_area_cubierta = st.session_state.proyecto.area_cubierta
-                st.session_state.input_area_entrepiso = st.session_state.proyecto.area_entrepiso
-                st.session_state.input_niveles = st.session_state.proyecto.niveles
-                st.session_state.input_muro_tipo = st.session_state.proyecto.muro_tipo
-            
-            # Actualizar las keys de los widgets AIU
-            if 'config_aiu' in st.session_state:
-                for concepto, valor in st.session_state.config_aiu.items():
-                    key_name = f"aiu_input_{concepto.replace(' ', '_').replace('(', '').replace(')', '').replace('%', 'pct')}"
-                    st.session_state[key_name] = valor
-            
-            # Actualizar el campo "Nombre para guardar" con el nombre de la cotización cargada
-            if 'nombre_cotizacion_cargada' in st.session_state:
-                st.session_state.nombre_guardar_cotizacion = st.session_state.nombre_cotizacion_cargada
-            
-            # Resetear el flag y contador
-            st.session_state.cotizacion_recien_cargada = False
-            st.session_state.sincronizacion_contador = 0
-            
-        except Exception as e:
-            st.error(f"⚠️ Error durante sincronización: {str(e)}")
-            st.session_state.cotizacion_recien_cargada = False
-            st.session_state.sincronizacion_contador = 0
-            st.stop()
-
-# ============================================================================
 # MAIN APP
 # ============================================================================
 
@@ -2551,10 +2464,6 @@ def main():
     """Aplicación principal"""
     
     inicializar_session_state()
-    
-    # Sincronizar keys de widgets si se cargó una cotización
-    # Esto DEBE ejecutarse ANTES de render_sidebar()
-    sincronizar_keys_widgets()
     
     # TÍTULO
     st.markdown('<h1 class="main-title">🏗️ SICONE v3.0 - Sistema de Cotización</h1>', unsafe_allow_html=True)
