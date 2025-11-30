@@ -2493,33 +2493,55 @@ def sincronizar_keys_widgets():
     Sincroniza las keys de los widgets con los valores del session_state
     Esto debe ejecutarse ANTES de render_sidebar()
     """
+    # Protección contra loops infinitos
+    if 'sincronizacion_contador' not in st.session_state:
+        st.session_state.sincronizacion_contador = 0
+    
     if st.session_state.get('cotizacion_recien_cargada', False):
-        # Actualizar las keys de los widgets del proyecto
-        if 'proyecto' in st.session_state:
-            st.session_state.input_nombre_proyecto = st.session_state.proyecto.nombre
-            st.session_state.input_cliente = st.session_state.proyecto.cliente
-            st.session_state.input_direccion = st.session_state.proyecto.direccion
-            st.session_state.input_telefono = st.session_state.proyecto.telefono
-            st.session_state.input_business_manager = st.session_state.proyecto.business_manager
-            st.session_state.input_medio_contacto = st.session_state.proyecto.medio_contacto
-            st.session_state.input_area_base = st.session_state.proyecto.area_base
-            st.session_state.input_area_cubierta = st.session_state.proyecto.area_cubierta
-            st.session_state.input_area_entrepiso = st.session_state.proyecto.area_entrepiso
-            st.session_state.input_niveles = st.session_state.proyecto.niveles
-            st.session_state.input_muro_tipo = st.session_state.proyecto.muro_tipo
+        # Incrementar contador
+        st.session_state.sincronizacion_contador += 1
         
-        # Actualizar las keys de los widgets AIU
-        if 'config_aiu' in st.session_state:
-            for concepto, valor in st.session_state.config_aiu.items():
-                key_name = f"aiu_input_{concepto.replace(' ', '_').replace('(', '').replace(')', '').replace('%', 'pct')}"
-                st.session_state[key_name] = valor
+        # Si se ha intentado más de 3 veces, hay un problema - abortar
+        if st.session_state.sincronizacion_contador > 3:
+            st.error("⚠️ Error: Loop infinito detectado al cargar cotización. Por favor recarga la página.")
+            st.session_state.cotizacion_recien_cargada = False
+            st.session_state.sincronizacion_contador = 0
+            st.stop()
         
-        # Actualizar el campo "Nombre para guardar" con el nombre de la cotización cargada
-        if 'nombre_cotizacion_cargada' in st.session_state:
-            st.session_state.nombre_guardar_cotizacion = st.session_state.nombre_cotizacion_cargada
-        
-        # Resetear el flag
-        st.session_state.cotizacion_recien_cargada = False
+        try:
+            # Actualizar las keys de los widgets del proyecto
+            if 'proyecto' in st.session_state:
+                st.session_state.input_nombre_proyecto = st.session_state.proyecto.nombre
+                st.session_state.input_cliente = st.session_state.proyecto.cliente
+                st.session_state.input_direccion = st.session_state.proyecto.direccion
+                st.session_state.input_telefono = st.session_state.proyecto.telefono
+                st.session_state.input_business_manager = st.session_state.proyecto.business_manager
+                st.session_state.input_medio_contacto = st.session_state.proyecto.medio_contacto
+                st.session_state.input_area_base = st.session_state.proyecto.area_base
+                st.session_state.input_area_cubierta = st.session_state.proyecto.area_cubierta
+                st.session_state.input_area_entrepiso = st.session_state.proyecto.area_entrepiso
+                st.session_state.input_niveles = st.session_state.proyecto.niveles
+                st.session_state.input_muro_tipo = st.session_state.proyecto.muro_tipo
+            
+            # Actualizar las keys de los widgets AIU
+            if 'config_aiu' in st.session_state:
+                for concepto, valor in st.session_state.config_aiu.items():
+                    key_name = f"aiu_input_{concepto.replace(' ', '_').replace('(', '').replace(')', '').replace('%', 'pct')}"
+                    st.session_state[key_name] = valor
+            
+            # Actualizar el campo "Nombre para guardar" con el nombre de la cotización cargada
+            if 'nombre_cotizacion_cargada' in st.session_state:
+                st.session_state.nombre_guardar_cotizacion = st.session_state.nombre_cotizacion_cargada
+            
+            # Resetear el flag y contador
+            st.session_state.cotizacion_recien_cargada = False
+            st.session_state.sincronizacion_contador = 0
+            
+        except Exception as e:
+            st.error(f"⚠️ Error durante sincronización: {str(e)}")
+            st.session_state.cotizacion_recien_cargada = False
+            st.session_state.sincronizacion_contador = 0
+            st.stop()
 
 # ============================================================================
 # MAIN APP
