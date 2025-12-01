@@ -1831,38 +1831,29 @@ def render_tab_disenos_estructura():
     # DISEÑOS Y PLANIFICACIÓN
     with st.expander("📐 Diseños y Planificación", expanded=True):
         st.caption(f"Los valores se multiplican por el Área de la Base: {st.session_state.proyecto.area_base:.2f} m²")
-        st.info("💡 **Instrucción:** Después de editar, presiona Enter Y luego haz click fuera de la celda para guardar los cambios")
         
-        df_disenos_data = []
         for nombre, item in st.session_state.disenos.items():
-            df_disenos_data.append({
-                'Ítem': nombre,
-                'Precio Unitario ($/m²)': item.precio_unitario,
-                'Subtotal': item.calcular_subtotal(st.session_state.proyecto.area_base)
-            })
-        
-        df_disenos = pd.DataFrame(df_disenos_data)
-        
-        edited_disenos = st.data_editor(
-            df_disenos,
-            column_config={
-                'Precio Unitario ($/m²)': st.column_config.NumberColumn(
-                    format="%.0f",
-                    min_value=0
-                ),
-                'Subtotal': st.column_config.NumberColumn(
-                    format="%.0f",
-                    disabled=True
-                )
-            },
-            hide_index=True,
-            use_container_width=True
-        )
-        
-        # Actualizar session state
-        for idx, row in edited_disenos.iterrows():
-            nombre = row['Ítem']
-            st.session_state.disenos[nombre].precio_unitario = row['Precio Unitario ($/m²)']
+            with st.container():
+                st.markdown(f"**{nombre}**")
+                col1, col2 = st.columns([5, 5])
+                
+                with col1:
+                    nuevo_precio = st.number_input(
+                        "Precio Unitario ($/m²)", 
+                        value=float(item.precio_unitario), 
+                        min_value=0.0, 
+                        step=1000.0,
+                        format="%.0f",
+                        key=f"diseno_{nombre}"
+                    )
+                    if nuevo_precio != item.precio_unitario:
+                        item.precio_unitario = nuevo_precio
+                
+                with col2:
+                    subtotal = item.calcular_subtotal(st.session_state.proyecto.area_base)
+                    st.metric("Subtotal", f"${subtotal:,.0f}")
+                
+                st.markdown("---")
         
         total_disenos = calcular_disenos()
         st.metric("**Total Diseños y Planificación**", f"${total_disenos:,.0f}")
@@ -1921,44 +1912,65 @@ def render_tab_disenos_estructura():
     with st.expander("🏠 Techos y otros", expanded=True):
         
         st.caption("📝 Editables: Cantidad, Materiales, Equipos, Mano de Obra")
-        st.info("💡 **Instrucción:** Después de editar, presiona Enter Y luego haz click fuera de la celda para guardar los cambios")
         
-        df_mt_data = []
         for nombre, item in st.session_state.mamposteria_techos.items():
-            df_mt_data.append({
-                'Ítem': nombre,
-                'Unidad': item.unidad,
-                'Cantidad': item.cantidad,
-                'Materiales': item.precio_materiales,
-                'Equipos': item.precio_equipos,
-                'Mano de Obra': item.precio_mano_obra,
-                'Subtotal': item.calcular_subtotal()
-            })
-        
-        df_mt = pd.DataFrame(df_mt_data)
-        
-        edited_mt = st.data_editor(
-            df_mt,
-            column_config={
-                'Ítem': st.column_config.TextColumn(disabled=True),
-                'Unidad': st.column_config.TextColumn(disabled=True),
-                'Cantidad': st.column_config.NumberColumn(min_value=0, format="%.2f"),
-                'Materiales': st.column_config.NumberColumn(min_value=0, format="%.0f"),
-                'Equipos': st.column_config.NumberColumn(min_value=0, format="%.0f"),
-                'Mano de Obra': st.column_config.NumberColumn(min_value=0, format="%.0f"),
-                'Subtotal': st.column_config.NumberColumn(format="%.0f", disabled=True)
-            },
-            hide_index=True,
-            use_container_width=True
-        )
-        
-        # Actualizar session state
-        for idx, row in edited_mt.iterrows():
-            nombre = row['Ítem']
-            st.session_state.mamposteria_techos[nombre].cantidad = row['Cantidad']
-            st.session_state.mamposteria_techos[nombre].precio_materiales = row['Materiales']
-            st.session_state.mamposteria_techos[nombre].precio_equipos = row['Equipos']
-            st.session_state.mamposteria_techos[nombre].precio_mano_obra = row['Mano de Obra']
+            with st.container():
+                st.markdown(f"**{nombre}** ({item.unidad})")
+                col1, col2, col3, col4, col5 = st.columns([2, 2, 2, 2, 2])
+                
+                with col1:
+                    nueva_cant = st.number_input(
+                        "Cantidad", 
+                        value=float(item.cantidad), 
+                        min_value=0.0, 
+                        step=1.0,
+                        format="%.2f",
+                        key=f"techo_cant_{nombre}"
+                    )
+                    if nueva_cant != item.cantidad:
+                        item.cantidad = nueva_cant
+                
+                with col2:
+                    nuevo_mat = st.number_input(
+                        "Materiales ($)", 
+                        value=float(item.precio_materiales), 
+                        min_value=0.0, 
+                        step=1000.0,
+                        format="%.0f",
+                        key=f"techo_mat_{nombre}"
+                    )
+                    if nuevo_mat != item.precio_materiales:
+                        item.precio_materiales = nuevo_mat
+                
+                with col3:
+                    nuevo_eq = st.number_input(
+                        "Equipos ($)", 
+                        value=float(item.precio_equipos), 
+                        min_value=0.0, 
+                        step=1000.0,
+                        format="%.0f",
+                        key=f"techo_eq_{nombre}"
+                    )
+                    if nuevo_eq != item.precio_equipos:
+                        item.precio_equipos = nuevo_eq
+                
+                with col4:
+                    nuevo_mo = st.number_input(
+                        "Mano de Obra ($)", 
+                        value=float(item.precio_mano_obra), 
+                        min_value=0.0, 
+                        step=1000.0,
+                        format="%.0f",
+                        key=f"techo_mo_{nombre}"
+                    )
+                    if nuevo_mo != item.precio_mano_obra:
+                        item.precio_mano_obra = nuevo_mo
+                
+                with col5:
+                    subtotal = item.calcular_subtotal()
+                    st.metric("Subtotal", f"${subtotal:,.0f}")
+                
+                st.markdown("---")
         
         total_mt = calcular_mamposteria_techos()
         st.metric("**Total Techos y otros**", f"${total_mt:,.0f}")
@@ -1989,38 +2001,41 @@ def render_tab_cimentaciones():
         items = st.session_state.cimentacion_opcion2
     
     st.caption("📝 Editables: Cantidad, Precio Unitario")
-    st.info("💡 **Instrucción:** Después de editar, presiona Enter Y luego haz click fuera de la celda para guardar los cambios")
     
-    df_cim_data = []
     for nombre, item in items.items():
-        df_cim_data.append({
-            'Ítem': nombre,
-            'Unidad': item.unidad,
-            'Cantidad': item.cantidad,
-            'Precio Unitario': item.precio_unitario,
-            'Subtotal': item.calcular_subtotal()
-        })
-    
-    df_cim = pd.DataFrame(df_cim_data)
-    
-    edited_cim = st.data_editor(
-        df_cim,
-        column_config={
-            'Ítem': st.column_config.TextColumn(disabled=True),
-            'Unidad': st.column_config.TextColumn(disabled=True),
-            'Cantidad': st.column_config.NumberColumn(min_value=0, format="%.2f"),
-            'Precio Unitario': st.column_config.NumberColumn(min_value=0, format="%.0f"),
-            'Subtotal': st.column_config.NumberColumn(format="%.0f", disabled=True)
-        },
-        hide_index=True,
-        use_container_width=True
-    )
-    
-    # Actualizar session state
-    for idx, row in edited_cim.iterrows():
-        nombre = row['Ítem']
-        items[nombre].cantidad = row['Cantidad']
-        items[nombre].precio_unitario = row['Precio Unitario']
+        with st.container():
+            st.markdown(f"**{nombre}** ({item.unidad})")
+            col1, col2, col3 = st.columns([3, 3, 4])
+            
+            with col1:
+                nueva_cant = st.number_input(
+                    "Cantidad", 
+                    value=float(item.cantidad), 
+                    min_value=0.0, 
+                    step=1.0,
+                    format="%.2f",
+                    key=f"cim_cant_{nombre}_{st.session_state.opcion_cimentacion}"
+                )
+                if nueva_cant != item.cantidad:
+                    item.cantidad = nueva_cant
+            
+            with col2:
+                nuevo_precio = st.number_input(
+                    "Precio Unitario ($)", 
+                    value=float(item.precio_unitario), 
+                    min_value=0.0, 
+                    step=10000.0,
+                    format="%.0f",
+                    key=f"cim_precio_{nombre}_{st.session_state.opcion_cimentacion}"
+                )
+                if nuevo_precio != item.precio_unitario:
+                    item.precio_unitario = nuevo_precio
+            
+            with col3:
+                subtotal = item.calcular_subtotal()
+                st.metric("Subtotal", f"${subtotal:,.0f}")
+            
+            st.markdown("---")
     
     st.markdown("---")
     st.markdown("### Configuración AIU Cimentaciones")
@@ -2081,38 +2096,41 @@ def render_tab_complementarios():
     st.markdown('<h2 class="section-title">🔧 Complementarios</h2>', unsafe_allow_html=True)
     
     st.caption("📝 Editables: Cantidad, Precio Unitario")
-    st.info("💡 **Instrucción:** Después de editar, presiona Enter Y luego haz click fuera de la celda para guardar los cambios")
     
-    df_comp_data = []
     for nombre, item in st.session_state.complementarios.items():
-        df_comp_data.append({
-            'Ítem': nombre,
-            'Unidad': item.unidad,
-            'Cantidad': item.cantidad,
-            'Precio Unitario': item.precio_unitario,
-            'Subtotal': item.calcular_subtotal()
-        })
-    
-    df_comp = pd.DataFrame(df_comp_data)
-    
-    edited_comp = st.data_editor(
-        df_comp,
-        column_config={
-            'Ítem': st.column_config.TextColumn(disabled=True),
-            'Unidad': st.column_config.TextColumn(disabled=True),
-            'Cantidad': st.column_config.NumberColumn(min_value=0, format="%.2f"),
-            'Precio Unitario': st.column_config.NumberColumn(min_value=0, format="%.0f"),
-            'Subtotal': st.column_config.NumberColumn(format="%.0f", disabled=True)
-        },
-        hide_index=True,
-        use_container_width=True
-    )
-    
-    # Actualizar session state
-    for idx, row in edited_comp.iterrows():
-        nombre = row['Ítem']
-        st.session_state.complementarios[nombre].cantidad = row['Cantidad']
-        st.session_state.complementarios[nombre].precio_unitario = row['Precio Unitario']
+        with st.container():
+            st.markdown(f"**{nombre}** ({item.unidad})")
+            col1, col2, col3 = st.columns([3, 3, 4])
+            
+            with col1:
+                nueva_cant = st.number_input(
+                    "Cantidad", 
+                    value=float(item.cantidad), 
+                    min_value=0.0, 
+                    step=1.0,
+                    format="%.2f",
+                    key=f"comp_cant_{nombre}"
+                )
+                if nueva_cant != item.cantidad:
+                    item.cantidad = nueva_cant
+            
+            with col2:
+                nuevo_precio = st.number_input(
+                    "Precio Unitario ($)", 
+                    value=float(item.precio_unitario), 
+                    min_value=0.0, 
+                    step=10000.0,
+                    format="%.0f",
+                    key=f"comp_precio_{nombre}"
+                )
+                if nuevo_precio != item.precio_unitario:
+                    item.precio_unitario = nuevo_precio
+            
+            with col3:
+                subtotal = item.calcular_subtotal()
+                st.metric("Subtotal", f"${subtotal:,.0f}")
+            
+            st.markdown("---")
     
     st.markdown("---")
     st.markdown("### Configuración AIU Complementarios")
@@ -2184,44 +2202,76 @@ def render_tab_administracion():
         st.markdown("### Personal Profesional y Técnico")
         st.caption("📝 Editables: Cant, Valor/Mes, % Prest, Dedicación, Meses")
         
-        df_prof_data = []
         for nombre, p in st.session_state.personal_profesional.items():
-            df_prof_data.append({
-                'Nombre': nombre,
-                'Cant': p.cantidad,
-                'Valor/Mes': p.valor_mes,
-                '% Prest': p.pct_prestaciones,
-                'Dedicación': p.dedicacion,
-                'Meses': p.meses,
-                'Total': p.calcular_total()
-            })
-        
-        df_prof = pd.DataFrame(df_prof_data)
-        
-        edited_prof = st.data_editor(
-            df_prof,
-            column_config={
-                'Nombre': st.column_config.TextColumn(disabled=True),
-                'Cant': st.column_config.NumberColumn(min_value=0, format="%d"),
-                'Valor/Mes': st.column_config.NumberColumn(min_value=0, format="%.0f"),
-                '% Prest': st.column_config.NumberColumn(min_value=0, max_value=100, format="%.1f"),
-                'Dedicación': st.column_config.NumberColumn(min_value=0.0, max_value=1.0, format="%.2f"),
-                'Meses': st.column_config.NumberColumn(min_value=0, format="%d"),
-                'Total': st.column_config.NumberColumn(format="%.0f", disabled=True)
-            },
-            hide_index=True,
-            use_container_width=True
-        )
-        
-        # Actualizar session state
-        for idx, row in edited_prof.iterrows():
-            nombre = row['Nombre']
-            p = st.session_state.personal_profesional[nombre]
-            p.cantidad = int(row['Cant'])
-            p.valor_mes = row['Valor/Mes']
-            p.pct_prestaciones = row['% Prest']
-            p.dedicacion = row['Dedicación']
-            p.meses = int(row['Meses'])
+            with st.container():
+                st.markdown(f"**{nombre}**")
+                col1, col2, col3, col4, col5, col6 = st.columns([2, 3, 2, 2, 2, 3])
+                
+                with col1:
+                    nueva_cant = st.number_input(
+                        "Cant", 
+                        value=int(p.cantidad), 
+                        min_value=0, 
+                        step=1,
+                        key=f"prof_cant_{nombre}"
+                    )
+                    if nueva_cant != p.cantidad:
+                        p.cantidad = nueva_cant
+                
+                with col2:
+                    nuevo_valor = st.number_input(
+                        "Valor/Mes ($)", 
+                        value=float(p.valor_mes), 
+                        min_value=0.0, 
+                        step=100000.0,
+                        format="%.0f",
+                        key=f"prof_val_{nombre}"
+                    )
+                    if nuevo_valor != p.valor_mes:
+                        p.valor_mes = nuevo_valor
+                
+                with col3:
+                    nuevo_prest = st.number_input(
+                        "% Prest", 
+                        value=float(p.pct_prestaciones), 
+                        min_value=0.0, 
+                        max_value=100.0,
+                        step=1.0,
+                        format="%.1f",
+                        key=f"prof_prest_{nombre}"
+                    )
+                    if nuevo_prest != p.pct_prestaciones:
+                        p.pct_prestaciones = nuevo_prest
+                
+                with col4:
+                    nueva_dedic = st.number_input(
+                        "Dedicación", 
+                        value=float(p.dedicacion), 
+                        min_value=0.0, 
+                        max_value=1.0,
+                        step=0.1,
+                        format="%.2f",
+                        key=f"prof_dedic_{nombre}"
+                    )
+                    if nueva_dedic != p.dedicacion:
+                        p.dedicacion = nueva_dedic
+                
+                with col5:
+                    nuevos_meses = st.number_input(
+                        "Meses", 
+                        value=int(p.meses), 
+                        min_value=0, 
+                        step=1,
+                        key=f"prof_meses_{nombre}"
+                    )
+                    if nuevos_meses != p.meses:
+                        p.meses = nuevos_meses
+                
+                with col6:
+                    total = p.calcular_total()
+                    st.metric("Total", f"${total:,.0f}")
+                
+                st.markdown("---")
         
         # Subtotal Personal Profesional
         total_prof = sum([p.calcular_total() for p in st.session_state.personal_profesional.values()])
@@ -2232,44 +2282,76 @@ def render_tab_administracion():
         st.markdown("### Personal Administrativo")
         st.caption("📝 Editables: Cant, Valor/Mes, % Prest, Dedicación, Meses")
         
-        df_admin_data = []
         for nombre, p in st.session_state.personal_administrativo.items():
-            df_admin_data.append({
-                'Nombre': nombre,
-                'Cant': p.cantidad,
-                'Valor/Mes': p.valor_mes,
-                '% Prest': p.pct_prestaciones,
-                'Dedicación': p.dedicacion,
-                'Meses': p.meses,
-                'Total': p.calcular_total()
-            })
-        
-        df_admin = pd.DataFrame(df_admin_data)
-        
-        edited_admin = st.data_editor(
-            df_admin,
-            column_config={
-                'Nombre': st.column_config.TextColumn(disabled=True),
-                'Cant': st.column_config.NumberColumn(min_value=0, format="%d"),
-                'Valor/Mes': st.column_config.NumberColumn(min_value=0, format="%.0f"),
-                '% Prest': st.column_config.NumberColumn(min_value=0, max_value=100, format="%.1f"),
-                'Dedicación': st.column_config.NumberColumn(min_value=0.0, max_value=1.0, format="%.2f"),
-                'Meses': st.column_config.NumberColumn(min_value=0, format="%d"),
-                'Total': st.column_config.NumberColumn(format="%.0f", disabled=True)
-            },
-            hide_index=True,
-            use_container_width=True
-        )
-        
-        # Actualizar session state
-        for idx, row in edited_admin.iterrows():
-            nombre = row['Nombre']
-            p = st.session_state.personal_administrativo[nombre]
-            p.cantidad = int(row['Cant'])
-            p.valor_mes = row['Valor/Mes']
-            p.pct_prestaciones = row['% Prest']
-            p.dedicacion = row['Dedicación']
-            p.meses = int(row['Meses'])
+            with st.container():
+                st.markdown(f"**{nombre}**")
+                col1, col2, col3, col4, col5, col6 = st.columns([2, 3, 2, 2, 2, 3])
+                
+                with col1:
+                    nueva_cant = st.number_input(
+                        "Cant", 
+                        value=int(p.cantidad), 
+                        min_value=0, 
+                        step=1,
+                        key=f"admin_cant_{nombre}"
+                    )
+                    if nueva_cant != p.cantidad:
+                        p.cantidad = nueva_cant
+                
+                with col2:
+                    nuevo_valor = st.number_input(
+                        "Valor/Mes ($)", 
+                        value=float(p.valor_mes), 
+                        min_value=0.0, 
+                        step=100000.0,
+                        format="%.0f",
+                        key=f"admin_val_{nombre}"
+                    )
+                    if nuevo_valor != p.valor_mes:
+                        p.valor_mes = nuevo_valor
+                
+                with col3:
+                    nuevo_prest = st.number_input(
+                        "% Prest", 
+                        value=float(p.pct_prestaciones), 
+                        min_value=0.0, 
+                        max_value=100.0,
+                        step=1.0,
+                        format="%.1f",
+                        key=f"admin_prest_{nombre}"
+                    )
+                    if nuevo_prest != p.pct_prestaciones:
+                        p.pct_prestaciones = nuevo_prest
+                
+                with col4:
+                    nueva_dedic = st.number_input(
+                        "Dedicación", 
+                        value=float(p.dedicacion), 
+                        min_value=0.0, 
+                        max_value=1.0,
+                        step=0.1,
+                        format="%.2f",
+                        key=f"admin_dedic_{nombre}"
+                    )
+                    if nueva_dedic != p.dedicacion:
+                        p.dedicacion = nueva_dedic
+                
+                with col5:
+                    nuevos_meses = st.number_input(
+                        "Meses", 
+                        value=int(p.meses), 
+                        min_value=0, 
+                        step=1,
+                        key=f"admin_meses_{nombre}"
+                    )
+                    if nuevos_meses != p.meses:
+                        p.meses = nuevos_meses
+                
+                with col6:
+                    total = p.calcular_total()
+                    st.metric("Total", f"${total:,.0f}")
+                
+                st.markdown("---")
         
         # Subtotal Personal Administrativo
         total_admin = sum([p.calcular_total() for p in st.session_state.personal_administrativo.values()])
@@ -2304,33 +2386,31 @@ def render_tab_administracion():
                     # Editor de ítems detallados
                     # Los impuestos son solo lectura (calculados automáticamente)
                     if concepto_nombre == 'Impuestos':
-                        st.dataframe(
-                            df_detalle,
-                            column_config={
-                                'Ítem': st.column_config.TextColumn(),
-                                'Valor': st.column_config.NumberColumn(format="%.0f")
-                            },
-                            hide_index=True,
-                            use_container_width=True
-                        )
+                        for item_nombre, item_valor in concepto_obj.items_detalle.items():
+                            col1, col2 = st.columns([7, 3])
+                            with col1:
+                                st.text(item_nombre)
+                            with col2:
+                                st.metric("Valor", f"${item_valor:,.0f}")
                         st.info("ℹ️ Los impuestos se calculan automáticamente basándose en los totales de la cotización")
                     else:
-                        edited_detalle = st.data_editor(
-                            df_detalle,
-                            column_config={
-                                'Ítem': st.column_config.TextColumn(disabled=True),
-                                'Valor': st.column_config.NumberColumn(min_value=0, format="%.0f")
-                            },
-                            hide_index=True,
-                            use_container_width=True,
-                            key=f"detalle_{concepto_nombre.replace(' ', '_')}"
-                        )
-                        
-                        # Actualizar los valores en session_state
-                        for idx, row in edited_detalle.iterrows():
-                            item_nombre = row['Ítem']
-                            nuevo_valor = row['Valor']
-                            concepto_obj.items_detalle[item_nombre] = nuevo_valor
+                        for item_nombre in list(concepto_obj.items_detalle.keys()):
+                            item_valor = concepto_obj.items_detalle[item_nombre]
+                            col1, col2 = st.columns([7, 3])
+                            with col1:
+                                st.markdown(f"**{item_nombre}**")
+                            with col2:
+                                nuevo_valor = st.number_input(
+                                    "Valor ($)",
+                                    value=float(item_valor),
+                                    min_value=0.0,
+                                    step=10000.0,
+                                    format="%.0f",
+                                    key=f"otros_{concepto_nombre}_{item_nombre}",
+                                    label_visibility="collapsed"
+                                )
+                                if nuevo_valor != item_valor:
+                                    concepto_obj.items_detalle[item_nombre] = nuevo_valor
                     
                     # Mostrar subtotal del concepto
                     st.metric(f"Subtotal {concepto_nombre}", f"${concepto_obj.calcular_subtotal():,.0f}")
