@@ -205,7 +205,7 @@ def render_home():
                 estado_badge = "⚪ Próximamente"
                 estado_color = "#6b7280"
             
-            # Tarjeta del módulo
+            # Tarjeta del módulo (sin botón interno)
             st.markdown(f"""
             <div class="module-card">
                 <h2 style="margin: 0;">{modulo['icono']} {modulo['nombre']}</h2>
@@ -221,9 +221,9 @@ def render_home():
             </div>
             """, unsafe_allow_html=True)
             
-            # Botón de acceso
+            # Botón de acceso (Streamlit)
             if modulo['estado'] == 'activo':
-                if st.button(f"Abrir {modulo['nombre']}", key=f"btn_{key}", use_container_width=True):
+                if st.button(f"▶ Abrir {modulo['nombre']}", key=f"btn_{key}", use_container_width=True, type="primary"):
                     st.session_state.modulo_actual = key
                     st.rerun()
             else:
@@ -289,10 +289,24 @@ def render_modulo_cotizaciones():
         st.markdown(f"👤 **Usuario:** {st.session_state.usuario_actual['nombre_completo']}")
         st.caption(f"Rol: {st.session_state.usuario_actual['rol']}")
     
-    # Aquí iría el import del módulo de cotizaciones
-    # Por ahora, mensaje temporal
-    st.info("🚧 Importar módulo: `from cotizador_sicone_v3 import main`")
-    st.markdown("**Nota:** Coloque `cotizador_sicone_v3.py` en el mismo directorio que `main.py`")
+    # Importar y ejecutar el módulo de cotizaciones
+    try:
+        # Importar el módulo (sin versión en el nombre)
+        import cotizador_sicone
+        
+        # Ejecutar la función main del cotizador
+        # Nota: El cotizador debe tener su función main() sin st.set_page_config()
+        cotizador_sicone.main()
+        
+    except ImportError as e:
+        st.error(f"❌ Error al importar el módulo de cotizaciones: {e}")
+        st.info("**Solución:** Asegúrese de que `cotizador_sicone.py` esté en el mismo directorio que `main.py`")
+    except AttributeError:
+        st.error("❌ Error: El módulo `cotizador_sicone.py` no tiene una función `main()`")
+        st.info("**Solución:** Verifique que el archivo tiene la estructura correcta")
+    except Exception as e:
+        st.error(f"❌ Error inesperado: {e}")
+        st.exception(e)
 
 def render_modulo_flujo_caja():
     """Renderiza el módulo de flujo de caja"""

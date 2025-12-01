@@ -19,12 +19,13 @@ from typing import List, Dict, Optional
 # ============================================================================
 # CONFIGURACIÓN DE PÁGINA
 # ============================================================================
-st.set_page_config(
-    page_title="SICONE v2.0 - Cotizador",
-    page_icon="🏗️",
-    layout="wide",
-    initial_sidebar_state="expanded"
-)
+# NOTA: Configuración movida a main.py para arquitectura modular
+# st.set_page_config(
+#     page_title="SICONE v2.0 - Cotizador",
+#     page_icon="🏗️",
+#     layout="wide",
+#     initial_sidebar_state="expanded"
+# )
 
 # ============================================================================
 # ESTILOS CSS
