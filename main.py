@@ -157,7 +157,9 @@ MODULOS_DISPONIBLES = {
         'nombre': 'Flujo de Caja',
         'icono': '📊',
         'descripcion': 'Proyección y seguimiento de flujo de caja',
-        'estado': 'desarrollo',
+        'estado': 'activo',
+        'version': 'v1.0'
+    },
         'version': 'v1.0 (en desarrollo)'
     },
     'reportes': {
@@ -309,13 +311,29 @@ def render_modulo_cotizaciones():
         st.exception(e)
 
 def render_modulo_flujo_caja():
-    """Renderiza el módulo de flujo de caja"""
+    """Renderiza el módulo de Flujo de Caja - Proyección FCL"""
+    # Botón de regreso
     with st.sidebar:
         if st.button("◄ Volver al Inicio", use_container_width=True):
             st.session_state.modulo_actual = None
             st.rerun()
+        st.markdown("---")
+        st.markdown(f"👤 **Usuario:** {st.session_state.usuario_actual['nombre_completo']}")
+        st.caption(f"Rol: {st.session_state.usuario_actual['rol']}")
     
-    st.info("🚧 **Módulo en Desarrollo** - Próximamente disponible")
+    # Importar y ejecutar el módulo de proyección FCL
+    try:
+        import proyeccion_fcl
+        proyeccion_fcl.main()
+        
+    except ImportError as e:
+        st.error(f"❌ Error al importar el módulo de proyección FCL: {e}")
+        st.info("**Solución:** Asegúrese de que `proyeccion_fcl.py` esté en el mismo directorio que `main.py`")
+    except AttributeError:
+        st.error("❌ Error: El módulo `proyeccion_fcl.py` no tiene una función `main()`")
+    except Exception as e:
+        st.error(f"❌ Error inesperado: {e}")
+        st.exception(e)
     
     st.markdown("""
     ### 📊 Módulo de Flujo de Caja
