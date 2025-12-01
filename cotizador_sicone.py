@@ -1833,28 +1833,25 @@ def render_tab_disenos_estructura():
         st.caption(f"Los valores se multiplican por el Área de la Base: {st.session_state.proyecto.area_base:.2f} m²")
         
         for nombre, item in st.session_state.disenos.items():
-            with st.container():
+            col1, col2 = st.columns([8, 2])
+            
+            with col1:
                 st.markdown(f"**{nombre}**")
-                col1, col2 = st.columns([5, 5])
-                
-                with col1:
-                    nuevo_precio = st.number_input(
-                        "Precio Unitario ($/m²)", 
-                        value=float(item.precio_unitario), 
-                        min_value=0.0, 
-                        step=1000.0,
-                        format="%.0f",
-                        key=f"diseno_{nombre}"
-                    )
-                    if nuevo_precio != item.precio_unitario:
-                        item.precio_unitario = nuevo_precio
-                
-                with col2:
-                    subtotal = item.calcular_subtotal(st.session_state.proyecto.area_base)
-                    st.metric("Subtotal", f"${subtotal:,.0f}")
-                
-                st.markdown("---")
+            
+            with col2:
+                nuevo_precio = st.number_input(
+                    "Precio Unitario ($/m²)", 
+                    value=float(item.precio_unitario), 
+                    min_value=0.0, 
+                    step=1000.0,
+                    format="%.0f",
+                    key=f"diseno_{nombre}",
+                    label_visibility="collapsed"
+                )
+                if nuevo_precio != item.precio_unitario:
+                    item.precio_unitario = nuevo_precio
         
+        st.markdown("---")
         total_disenos = calcular_disenos()
         st.metric("**Total Diseños y Planificación**", f"${total_disenos:,.0f}")
     
