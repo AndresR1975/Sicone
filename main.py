@@ -160,8 +160,6 @@ MODULOS_DISPONIBLES = {
         'estado': 'activo',
         'version': 'v1.0'
     },
-        'version': 'v1.0 (en desarrollo)'
-    },
     'reportes': {
         'nombre': 'Reportes',
         'icono': '📈',
