@@ -1735,9 +1735,8 @@ def render_sidebar():
                         cotizacion_data = st.session_state.cotizaciones_guardadas[nombre_cot]
                         st.session_state.cotizacion_en_memoria = cotizacion_data.copy()
                         st.session_state.nombre_cotizacion_en_memoria = nombre_cot
-                        st.success(f"✅ Cargado en memoria: {nombre_cot}")
-                        st.info("👇 Click en 'Cargar datos en cotizador' para aplicar")
-                        st.rerun()
+                        st.session_state.mostrar_boton_aplicar = True  # Flag para mostrar botón
+                        st.rerun()  # Rerun para mostrar el botón inmediatamente
                 with col3:
                     if st.button("🗑️", key=f"eliminar_{nombre_cot}", help="Eliminar", use_container_width=True):
                         success, msg = eliminar_cotizacion_archivo(nombre_cot)
@@ -1748,43 +1747,45 @@ def render_sidebar():
                         else:
                             st.error(msg)
                         st.rerun()
+            
+            # BOTÓN DE APLICAR (aparece después de hacer click en 📂)
+            if st.session_state.get('mostrar_boton_aplicar', False):
+                st.markdown("---")
+                st.markdown("### 📥 Cotización Lista para Cargar")
+                
+                nombre_en_memoria = st.session_state.get('nombre_cotizacion_en_memoria', 'Sin nombre')
+                st.success(f"✅ Cargado en memoria: {nombre_en_memoria}")
+                st.info(f"**📋 Cotización en memoria:** {nombre_en_memoria}")
+                st.caption("👇 Click abajo para aplicar todos los datos al cotizador")
+                
+                col_aplicar1, col_aplicar2 = st.columns([3, 1])
+                with col_aplicar1:
+                    if st.button("📥 CARGAR DATOS EN COTIZADOR", 
+                                key="btn_aplicar_cotizacion_guardada",
+                                use_container_width=True,
+                                type="primary"):
+                        # Aplicar la cotización
+                        deserializar_cotizacion(st.session_state.cotizacion_en_memoria)
+                        st.session_state.nombre_cotizacion_actual = nombre_en_memoria
+                        
+                        # Limpiar memoria temporal
+                        del st.session_state.cotizacion_en_memoria
+                        del st.session_state.nombre_cotizacion_en_memoria
+                        st.session_state.mostrar_boton_aplicar = False
+                        
+                        st.success(f"✅ Datos aplicados: {nombre_en_memoria}")
+                        st.rerun()
+                with col_aplicar2:
+                    # Botón para cancelar
+                    if st.button("❌", key="btn_cancelar_carga_guardada", help="Cancelar", use_container_width=True):
+                        # Limpiar memoria temporal
+                        del st.session_state.cotizacion_en_memoria
+                        del st.session_state.nombre_cotizacion_en_memoria
+                        st.session_state.mostrar_boton_aplicar = False
+                        st.info("Carga cancelada")
+                        st.rerun()
         else:
             st.info("💡 No hay cotizaciones guardadas aún")
-        
-        # BOTÓN DE APLICAR DATOS (solo visible si hay cotización en memoria)
-        if 'cotizacion_en_memoria' in st.session_state and st.session_state.cotizacion_en_memoria:
-            st.markdown("---")
-            st.markdown("### 📥 Cotización Lista para Cargar")
-            
-            # Mostrar nombre de la cotización en memoria
-            nombre_en_memoria = st.session_state.get('nombre_cotizacion_en_memoria', 'Sin nombre')
-            st.info(f"**📋 Cotización en memoria:** {nombre_en_memoria}")
-            st.caption("👇 Click abajo para aplicar todos los datos al cotizador")
-            
-            col_aplicar1, col_aplicar2 = st.columns([3, 1])
-            with col_aplicar1:
-                if st.button("📥 CARGAR DATOS EN COTIZADOR", 
-                            key="btn_aplicar_cotizacion",
-                            use_container_width=True,
-                            type="primary"):
-                    # Aplicar la cotización que está en memoria
-                    deserializar_cotizacion(st.session_state.cotizacion_en_memoria)
-                    st.session_state.nombre_cotizacion_actual = nombre_en_memoria
-                    
-                    # Limpiar memoria temporal
-                    del st.session_state.cotizacion_en_memoria
-                    del st.session_state.nombre_cotizacion_en_memoria
-                    
-                    st.success(f"✅ Datos aplicados: {nombre_en_memoria}")
-                    st.rerun()
-            with col_aplicar2:
-                # Botón para cancelar
-                if st.button("❌", key="btn_cancelar_carga", help="Cancelar", use_container_width=True):
-                    # Limpiar memoria temporal
-                    del st.session_state.cotizacion_en_memoria
-                    del st.session_state.nombre_cotizacion_en_memoria
-                    st.info("Carga cancelada")
-                    st.rerun()
         
         # Exportar/Importar JSON y Nueva cotización
         st.markdown("---")
@@ -1831,7 +1832,37 @@ def render_sidebar():
                 st.session_state.nombre_cotizacion_en_memoria = nombre_proyecto
                 
                 st.success(f"✅ JSON cargado en memoria: {nombre_proyecto}")
-                st.info("👆 Click en 'Cargar datos en cotizador' arriba para aplicar")
+                
+                # Mostrar botón de aplicar AQUÍ MISMO (justo debajo del mensaje)
+                st.markdown("---")
+                st.markdown("### 📥 Cotización Lista para Cargar")
+                st.info(f"**📋 Cotización en memoria:** {nombre_proyecto}")
+                st.caption("👇 Click abajo para aplicar todos los datos al cotizador")
+                
+                col_aplicar1, col_aplicar2 = st.columns([3, 1])
+                with col_aplicar1:
+                    if st.button("📥 CARGAR DATOS EN COTIZADOR", 
+                                key="btn_aplicar_cotizacion_json",
+                                use_container_width=True,
+                                type="primary"):
+                        # Aplicar la cotización
+                        deserializar_cotizacion(st.session_state.cotizacion_en_memoria)
+                        st.session_state.nombre_cotizacion_actual = nombre_proyecto
+                        
+                        # Limpiar memoria temporal
+                        del st.session_state.cotizacion_en_memoria
+                        del st.session_state.nombre_cotizacion_en_memoria
+                        
+                        st.success(f"✅ Datos aplicados: {nombre_proyecto}")
+                        st.rerun()
+                with col_aplicar2:
+                    # Botón para cancelar
+                    if st.button("❌", key="btn_cancelar_carga_json", help="Cancelar", use_container_width=True):
+                        # Limpiar memoria temporal
+                        del st.session_state.cotizacion_en_memoria
+                        del st.session_state.nombre_cotizacion_en_memoria
+                        st.info("Carga cancelada")
+                        st.rerun()
                 
             except Exception as e:
                 st.error(f"❌ Error al leer JSON: {str(e)}")
@@ -1890,13 +1921,21 @@ def render_tab_disenos_estructura():
         
         col1, col2, col3, col4 = st.columns(4)
         with col1:
-            item.cantidad = st.number_input("Cantidad", value=item.cantidad, min_value=0.0, step=0.01, key='est_cant', format="%.2f")
+            nueva_cantidad = st.number_input("Cantidad", value=float(item.cantidad), min_value=0.0, step=0.01, format="%.2f")
+            if nueva_cantidad != item.cantidad:
+                item.cantidad = nueva_cantidad
         with col2:
-            item.precio_materiales = st.number_input("Materiales ($)", value=item.precio_materiales, min_value=0.0, step=1000.0, key='est_mat', format="%.0f")
+            nuevo_mat = st.number_input("Materiales ($)", value=float(item.precio_materiales), min_value=0.0, step=1000.0, format="%.0f")
+            if nuevo_mat != item.precio_materiales:
+                item.precio_materiales = nuevo_mat
         with col3:
-            item.precio_equipos = st.number_input("Equipos ($)", value=item.precio_equipos, min_value=0.0, step=1000.0, key='est_eq', format="%.0f")
+            nuevo_eq = st.number_input("Equipos ($)", value=float(item.precio_equipos), min_value=0.0, step=1000.0, format="%.0f")
+            if nuevo_eq != item.precio_equipos:
+                item.precio_equipos = nuevo_eq
         with col4:
-            item.precio_mano_obra = st.number_input("Mano de Obra ($)", value=item.precio_mano_obra, min_value=0.0, step=1000.0, key='est_mo', format="%.0f")
+            nuevo_mo = st.number_input("Mano de Obra ($)", value=float(item.precio_mano_obra), min_value=0.0, step=1000.0, format="%.0f")
+            if nuevo_mo != item.precio_mano_obra:
+                item.precio_mano_obra = nuevo_mo
         
         total_estructura = calcular_estructura()
         st.metric("**Total Estructura**", f"${total_estructura:,.0f}")
@@ -1907,13 +1946,21 @@ def render_tab_disenos_estructura():
         
         col1, col2, col3, col4 = st.columns(4)
         with col1:
-            item.cantidad = st.number_input("Cantidad (m²)", value=item.cantidad, min_value=0.0, step=0.01, key='mam_cant', format="%.2f")
+            nueva_cantidad = st.number_input("Cantidad (m²)", value=float(item.cantidad), min_value=0.0, step=0.01, format="%.2f")
+            if nueva_cantidad != item.cantidad:
+                item.cantidad = nueva_cantidad
         with col2:
-            item.precio_materiales = st.number_input("Materiales ($)", value=item.precio_materiales, min_value=0.0, step=1000.0, key='mam_mat', format="%.0f")
+            nuevo_mat = st.number_input("Materiales ($)", value=float(item.precio_materiales), min_value=0.0, step=1000.0, format="%.0f")
+            if nuevo_mat != item.precio_materiales:
+                item.precio_materiales = nuevo_mat
         with col3:
-            item.precio_equipos = st.number_input("Equipos ($)", value=item.precio_equipos, min_value=0.0, step=1000.0, key='mam_eq', format="%.0f")
+            nuevo_eq = st.number_input("Equipos ($)", value=float(item.precio_equipos), min_value=0.0, step=1000.0, format="%.0f")
+            if nuevo_eq != item.precio_equipos:
+                item.precio_equipos = nuevo_eq
         with col4:
-            item.precio_mano_obra = st.number_input("Mano de Obra ($)", value=item.precio_mano_obra, min_value=0.0, step=1000.0, key='mam_mo', format="%.0f")
+            nuevo_mo = st.number_input("Mano de Obra ($)", value=float(item.precio_mano_obra), min_value=0.0, step=1000.0, format="%.0f")
+            if nuevo_mo != item.precio_mano_obra:
+                item.precio_mano_obra = nuevo_mo
         
         total_mamposteria = calcular_mamposteria()
         st.metric("**Total Mampostería**", f"${total_mamposteria:,.0f}")
@@ -1972,13 +2019,14 @@ def render_tab_cimentaciones():
     
     st.markdown('<h2 class="section-title">⚙️ Cimentaciones</h2>', unsafe_allow_html=True)
     
-    st.session_state.opcion_cimentacion = st.radio(
+    nueva_opcion = st.radio(
         "Seleccione la opción de cimentación:",
         options=['Opción 1', 'Opción 2'],
         index=0 if st.session_state.opcion_cimentacion == 'Opción 1' else 1,
-        horizontal=True,
-        key='radio_cimentacion'
+        horizontal=True
     )
+    if nueva_opcion != st.session_state.opcion_cimentacion:
+        st.session_state.opcion_cimentacion = nueva_opcion
     
     if st.session_state.opcion_cimentacion == 'Opción 1':
         st.markdown("### Opción 1: Zapatas y Vigas de Concreto")
@@ -2031,8 +2079,7 @@ def render_tab_cimentaciones():
             min_value=0.0,
             max_value=100.0,
             step=0.5,
-            format="%.1f",
-            key='cim_com'
+            format="%.1f"
         )
         if nueva_comision_cim != st.session_state.aiu_cimentacion['pct_comision']:
             st.session_state.aiu_cimentacion['pct_comision'] = nueva_comision_cim
@@ -2043,8 +2090,7 @@ def render_tab_cimentaciones():
             min_value=0.0,
             max_value=100.0,
             step=0.5,
-            format="%.1f",
-            key='cim_aiu'
+            format="%.1f"
         )
         if nuevo_aiu_cim != st.session_state.aiu_cimentacion['pct_aiu']:
             st.session_state.aiu_cimentacion['pct_aiu'] = nuevo_aiu_cim
@@ -2054,8 +2100,7 @@ def render_tab_cimentaciones():
             value=float(st.session_state.aiu_cimentacion['logistica']),
             min_value=0.0,
             step=1000.0,
-            format="%.0f",
-            key='cim_log'
+            format="%.0f"
         )
         if nueva_logistica_cim != st.session_state.aiu_cimentacion['logistica']:
             st.session_state.aiu_cimentacion['logistica'] = nueva_logistica_cim
@@ -2122,8 +2167,7 @@ def render_tab_complementarios():
             min_value=0.0,
             max_value=100.0,
             step=0.5,
-            format="%.1f",
-            key='comp_com'
+            format="%.1f"
         )
         if nueva_comision_comp != st.session_state.aiu_complementarios['pct_comision']:
             st.session_state.aiu_complementarios['pct_comision'] = nueva_comision_comp
@@ -2134,8 +2178,7 @@ def render_tab_complementarios():
             min_value=0.0,
             max_value=100.0,
             step=0.5,
-            format="%.1f",
-            key='comp_aiu'
+            format="%.1f"
         )
         if nuevo_aiu_comp != st.session_state.aiu_complementarios['pct_aiu']:
             st.session_state.aiu_complementarios['pct_aiu'] = nuevo_aiu_comp
@@ -2145,8 +2188,7 @@ def render_tab_complementarios():
             value=float(st.session_state.aiu_complementarios['logistica']),
             min_value=0.0,
             step=1000.0,
-            format="%.0f",
-            key='comp_log'
+            format="%.0f"
         )
         if nueva_logistica_comp != st.session_state.aiu_complementarios['logistica']:
             st.session_state.aiu_complementarios['logistica'] = nueva_logistica_comp
