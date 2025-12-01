@@ -1730,12 +1730,13 @@ def render_sidebar():
                     else:
                         st.text(nombre_cot)
                 with col2:
-                    if st.button("📂", key=f"cargar_{nombre_cot}", help="Cargar", use_container_width=True):
-                        # Cargar cotización
-                        cargar_cotizacion_memoria(nombre_cot)
-                        # Marcar el nombre de la cotización cargada para mostrar
-                        st.session_state.nombre_cotizacion_actual = nombre_cot
-                        st.success(f"✅ Cargado: {nombre_cot}")
+                    if st.button("📂", key=f"cargar_{nombre_cot}", help="Cargar en memoria", use_container_width=True):
+                        # Solo cargar en memoria temporal, NO aplicar aún
+                        cotizacion_data = st.session_state.cotizaciones_guardadas[nombre_cot]
+                        st.session_state.cotizacion_en_memoria = cotizacion_data.copy()
+                        st.session_state.nombre_cotizacion_en_memoria = nombre_cot
+                        st.success(f"✅ Cargado en memoria: {nombre_cot}")
+                        st.info("👇 Click en 'Cargar datos en cotizador' para aplicar")
                         st.rerun()
                 with col3:
                     if st.button("🗑️", key=f"eliminar_{nombre_cot}", help="Eliminar", use_container_width=True):
@@ -1749,6 +1750,41 @@ def render_sidebar():
                         st.rerun()
         else:
             st.info("💡 No hay cotizaciones guardadas aún")
+        
+        # BOTÓN DE APLICAR DATOS (solo visible si hay cotización en memoria)
+        if 'cotizacion_en_memoria' in st.session_state and st.session_state.cotizacion_en_memoria:
+            st.markdown("---")
+            st.markdown("### 📥 Cotización Lista para Cargar")
+            
+            # Mostrar nombre de la cotización en memoria
+            nombre_en_memoria = st.session_state.get('nombre_cotizacion_en_memoria', 'Sin nombre')
+            st.info(f"**📋 Cotización en memoria:** {nombre_en_memoria}")
+            st.caption("👇 Click abajo para aplicar todos los datos al cotizador")
+            
+            col_aplicar1, col_aplicar2 = st.columns([3, 1])
+            with col_aplicar1:
+                if st.button("📥 CARGAR DATOS EN COTIZADOR", 
+                            key="btn_aplicar_cotizacion",
+                            use_container_width=True,
+                            type="primary"):
+                    # Aplicar la cotización que está en memoria
+                    deserializar_cotizacion(st.session_state.cotizacion_en_memoria)
+                    st.session_state.nombre_cotizacion_actual = nombre_en_memoria
+                    
+                    # Limpiar memoria temporal
+                    del st.session_state.cotizacion_en_memoria
+                    del st.session_state.nombre_cotizacion_en_memoria
+                    
+                    st.success(f"✅ Datos aplicados: {nombre_en_memoria}")
+                    st.rerun()
+            with col_aplicar2:
+                # Botón para cancelar
+                if st.button("❌", key="btn_cancelar_carga", help="Cancelar", use_container_width=True):
+                    # Limpiar memoria temporal
+                    del st.session_state.cotizacion_en_memoria
+                    del st.session_state.nombre_cotizacion_en_memoria
+                    st.info("Carga cancelada")
+                    st.rerun()
         
         # Exportar/Importar JSON y Nueva cotización
         st.markdown("---")
@@ -1785,12 +1821,20 @@ def render_sidebar():
             help="Cargar cotización desde archivo JSON"
         )
         if uploaded_file is not None:
-            success, message = importar_cotizacion_json(uploaded_file)
-            if success:
-                st.success(message)
-                st.rerun()
-            else:
-                st.error(message)
+            try:
+                # Cargar JSON en memoria temporal
+                cotizacion_data = json.loads(uploaded_file.getvalue().decode('utf-8'))
+                st.session_state.cotizacion_en_memoria = cotizacion_data
+                
+                # Extraer nombre del proyecto del JSON
+                nombre_proyecto = cotizacion_data.get('proyecto', {}).get('nombre', 'Sin nombre')
+                st.session_state.nombre_cotizacion_en_memoria = nombre_proyecto
+                
+                st.success(f"✅ JSON cargado en memoria: {nombre_proyecto}")
+                st.info("👆 Click en 'Cargar datos en cotizador' arriba para aplicar")
+                
+            except Exception as e:
+                st.error(f"❌ Error al leer JSON: {str(e)}")
 
 
 # ============================================================================
