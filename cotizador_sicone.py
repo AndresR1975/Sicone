@@ -855,7 +855,7 @@ def exportar_a_excel():
     row += 2
     
     # RESUMEN GLOBAL
-    resumen = get_resumen_cacheado()
+    resumen = calcular_resumen_global()
     
     ws[f'A{row}'] = "RESUMEN GLOBAL DEL PROYECTO"
     ws[f'A{row}'].font = section_font
@@ -1504,55 +1504,6 @@ def calcular_resumen_global():
         'precio_m2': precio_m2
     }
 
-def get_resumen_cacheado():
-    """
-    Versión cacheada de calcular_resumen_global().
-    Se cachea basado en un hash del estado actual para evitar recálculos innecesarios.
-    
-    OPTIMIZACIÓN CRÍTICA:
-    - calcular_resumen_global() se llamaba 5+ veces por render
-    - Con cache, solo se calcula 1 vez cuando cambian los datos
-    - Reduce tiempo de render de ~5-10s a <1s
-    """
-    import hashlib
-    import json
-    
-    # Crear hash del estado relevante (solo datos que afectan el cálculo)
-    try:
-        estado_relevante = {
-            'proyecto_areas': [
-                st.session_state.proyecto.area_base,
-                st.session_state.proyecto.area_cubierta,
-                st.session_state.proyecto.area_entrepiso,
-                st.session_state.proyecto.niveles,
-                st.session_state.proyecto.muro_tipo
-            ],
-            'aiu': list(st.session_state.config_aiu.values()),
-            'opcion_cim': st.session_state.opcion_cimentacion
-        }
-        
-        estado_json = json.dumps(estado_relevante, sort_keys=True)
-        estado_hash = hashlib.md5(estado_json.encode()).hexdigest()
-        
-        # Verificar cache
-        if 'resumen_cache' not in st.session_state:
-            st.session_state.resumen_cache = {}
-            st.session_state.resumen_cache_hash = None
-        
-        # Si el hash es el mismo, retornar cache
-        if st.session_state.resumen_cache_hash == estado_hash:
-            return st.session_state.resumen_cache
-        
-        # Calcular y cachear
-        resumen = calcular_resumen_global()
-        st.session_state.resumen_cache = resumen
-        st.session_state.resumen_cache_hash = estado_hash
-        
-        return resumen
-        
-    except Exception as e:
-        # Si falla el cache, calcular directo
-        return calcular_resumen_global()
 
 # ============================================================================
 # INTERFAZ - SIDEBAR
@@ -1880,6 +1831,7 @@ def render_tab_disenos_estructura():
     # DISEÑOS Y PLANIFICACIÓN
     with st.expander("📐 Diseños y Planificación", expanded=True):
         st.caption(f"Los valores se multiplican por el Área de la Base: {st.session_state.proyecto.area_base:.2f} m²")
+        st.info("💡 **Instrucción:** Después de editar, presiona Enter Y luego haz click fuera de la celda para guardar los cambios")
         
         df_disenos_data = []
         for nombre, item in st.session_state.disenos.items():
@@ -1969,6 +1921,7 @@ def render_tab_disenos_estructura():
     with st.expander("🏠 Techos y otros", expanded=True):
         
         st.caption("📝 Editables: Cantidad, Materiales, Equipos, Mano de Obra")
+        st.info("💡 **Instrucción:** Después de editar, presiona Enter Y luego haz click fuera de la celda para guardar los cambios")
         
         df_mt_data = []
         for nombre, item in st.session_state.mamposteria_techos.items():
@@ -2036,6 +1989,7 @@ def render_tab_cimentaciones():
         items = st.session_state.cimentacion_opcion2
     
     st.caption("📝 Editables: Cantidad, Precio Unitario")
+    st.info("💡 **Instrucción:** Después de editar, presiona Enter Y luego haz click fuera de la celda para guardar los cambios")
     
     df_cim_data = []
     for nombre, item in items.items():
@@ -2127,6 +2081,7 @@ def render_tab_complementarios():
     st.markdown('<h2 class="section-title">🔧 Complementarios</h2>', unsafe_allow_html=True)
     
     st.caption("📝 Editables: Cantidad, Precio Unitario")
+    st.info("💡 **Instrucción:** Después de editar, presiona Enter Y luego haz click fuera de la celda para guardar los cambios")
     
     df_comp_data = []
     for nombre, item in st.session_state.complementarios.items():
@@ -2392,7 +2347,7 @@ def render_tab_administracion():
         st.markdown("### Resumen Administración")
         
         admin_det = calcular_administracion_detallada()
-        resumen = get_resumen_cacheado()
+        resumen = calcular_resumen_global()
         
         col1, col2, col3, col4 = st.columns(4)
         col1.metric("Personal Profesional", f"${admin_det['personal_profesional']:,.0f}")
@@ -2418,7 +2373,7 @@ def render_tab_resumen():
     
     st.markdown('<h2 class="section-title">📊 Resumen Global del Proyecto</h2>', unsafe_allow_html=True)
     
-    resumen = get_resumen_cacheado()
+    resumen = calcular_resumen_global()
     
     # MÉTRICAS PRINCIPALES
     col1, col2, col3 = st.columns(3)
@@ -2530,7 +2485,7 @@ def render_tab_exportar():
     
     st.markdown('<h2 class="section-title">📥 Exportar Cotización</h2>', unsafe_allow_html=True)
     
-    resumen = get_resumen_cacheado()
+    resumen = calcular_resumen_global()
     
     st.markdown("### 📄 Vista Previa")
     
@@ -2618,7 +2573,7 @@ def main():
     # ============================================================================
     # RESUMEN GLOBAL (siempre visible) - AHORA con valores actualizados
     # ============================================================================
-    resumen = get_resumen_cacheado()
+    resumen = calcular_resumen_global()
     
     st.markdown("---")
     st.markdown("### 📊 Resumen Global del Proyecto")
