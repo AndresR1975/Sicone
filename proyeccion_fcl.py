@@ -83,17 +83,22 @@ def extraer_conceptos_dinamico(cotizacion: dict) -> Dict:
     """
     conceptos = {}
     
-    # 1. DISEÑOS Y PLANIFICACIÓN
+    # 1. DISEÑOS Y PLANIFICACIÓN (solo diseños base × área)
     if 'disenos' in cotizacion:
-        total_disenos = sum([
+        disenos_base = sum([
             v.get('precio_unitario', 0) 
             for v in cotizacion['disenos'].values()
         ])
+        
+        # Multiplicar por área del proyecto
+        area_base = cotizacion.get('proyecto', {}).get('area_base', 1)
+        total_disenos = disenos_base * area_base
+        
         conceptos['Diseños y Planificación'] = {
             'total': total_disenos,
             'materiales': 0,
             'equipos': 0,
-            'mano_obra': total_disenos,
+            'mano_obra': total_disenos,  # Diseños es mano de obra profesional
             'fuente': 'disenos'
         }
     
@@ -141,6 +146,7 @@ def extraer_conceptos_dinamico(cotizacion: dict) -> Dict:
         techos_complementarios = {}
         
         # Clasificación de items
+        # CUBIERTA: Todo lo relacionado con techo exterior
         items_cubierta = [
             'Cubierta, Superboard y Manto',
             'Ruana',
@@ -150,6 +156,7 @@ def extraer_conceptos_dinamico(cotizacion: dict) -> Dict:
             'Tapacanal y Lagrimal'
         ]
         
+        # COMPLEMENTARIOS: Elementos estructurales internos (solo Entrepiso)
         items_complementarios = [
             'Contramarcos - Ventana',
             'Contramarcos - Puerta',
@@ -320,57 +327,96 @@ def extraer_conceptos_dinamico(cotizacion: dict) -> Dict:
 # FUNCIONES DE ASIGNACIÓN A CONTRATOS
 # ============================================================================
 
-def asignar_contratos(conceptos: Dict) -> Tuple[Dict, Dict]:
+def asignar_contratos(conceptos: Dict, cotizacion: dict) -> Tuple[Dict, Dict]:
     """
     Asigna conceptos a contratos según estructura SICONE
     
-    CONTRATO 1 (Cimentación): 
-        - Diseños + Estructura + Mampostería + Complementarios (Techos)
+    CONTRATO 1 (Obra Gris): 
+        - Diseños y Planificación (incluye todo admin)
+        - Estructura
+        - Mampostería  
+        - Complementarios (Techos) - Solo Entrepiso
+        - Techos (Cubierta) - Superboard, Shingle, Pérgolas
+        + AIU sobre base constructiva
     
-    CONTRATO 2 (Obra Gris): 
-        - Cimentaciones + Complementarios + Techos (Cubierta)
+    CONTRATO 2 (Cimentación y Obras Complementarias): 
+        - Cimentaciones (con AIU incluido)
+        - Complementarios (con AIU incluido)
     """
     
     contrato_1 = {
-        'nombre': 'Contrato 1 - Cimentación',
+        'nombre': 'Contrato 1 - Obra Gris',
         'conceptos': [
             'Diseños y Planificación',
             'Estructura',
             'Mampostería',
-            'Complementarios (Techos)'
-        ],
-        'monto': 0,
-        'materiales': 0,
-        'equipos': 0,
-        'mano_obra': 0,
-        'desglose': {}
-    }
-    
-    contrato_2 = {
-        'nombre': 'Contrato 2 - Obra Gris',
-        'conceptos': [
-            'Cimentaciones',
-            'Complementarios',
+            'Complementarios (Techos)',
             'Techos (Cubierta)'
         ],
         'monto': 0,
         'materiales': 0,
         'equipos': 0,
         'mano_obra': 0,
+        'admin': 0,
+        'aiu': 0,
         'desglose': {}
     }
+    
+    contrato_2 = {
+        'nombre': 'Contrato 2 - Cimentación y Obras Complementarias',
+        'conceptos': [
+            'Cimentaciones',
+            'Complementarios'
+        ],
+        'monto': 0,
+        'materiales': 0,
+        'equipos': 0,
+        'mano_obra': 0,
+        'admin': 0,
+        'aiu': 0,
+        'desglose': {}
+    }
+    
+    # Calcular base constructiva C1 (sin Diseños que ya incluye admin)
+    base_constructiva_c1 = 0
     
     # Calcular montos de Contrato 1
     for concepto in contrato_1['conceptos']:
         if concepto in conceptos:
             datos = conceptos[concepto]
-            contrato_1['monto'] += datos['total']
+            
+            # Sumar al desglose
+            contrato_1['desglose'][concepto] = datos['total']
+            
+            # Acumular por categorías
             contrato_1['materiales'] += datos.get('materiales', 0)
             contrato_1['equipos'] += datos.get('equipos', 0)
             contrato_1['mano_obra'] += datos.get('mano_obra', 0)
-            contrato_1['desglose'][concepto] = datos['total']
+            contrato_1['admin'] += datos.get('admin', 0)
+            
+            # Base constructiva (excluye Diseños)
+            if concepto != 'Diseños y Planificación':
+                base_constructiva_c1 += datos['total']
     
-    # Calcular montos de Contrato 2
+    # Calcular AIU del Contrato 1
+    if 'config_aiu' in cotizacion:
+        config_aiu = cotizacion['config_aiu']
+        
+        comision_pct = config_aiu.get('Comisión de Ventas (%)', 0) / 100
+        imprevistos_pct = config_aiu.get('Imprevistos (%)', 0) / 100
+        admin_pct = config_aiu.get('Administración (%)', 0) / 100
+        logistica_pct = config_aiu.get('Logística (%)', 0) / 100
+        
+        # AIU se calcula sobre base constructiva
+        aiu_c1 = base_constructiva_c1 * (comision_pct + imprevistos_pct + admin_pct + logistica_pct)
+        
+        contrato_1['aiu'] = aiu_c1
+        contrato_1['desglose']['AIU Contrato 1'] = aiu_c1
+    
+    # Monto total C1
+    contrato_1['monto'] = sum(contrato_1['desglose'].values())
+    
+    # Calcular montos de Contrato 2 (ya incluyen AIU)
     for concepto in contrato_2['conceptos']:
         if concepto in conceptos:
             datos = conceptos[concepto]
@@ -378,7 +424,25 @@ def asignar_contratos(conceptos: Dict) -> Tuple[Dict, Dict]:
             contrato_2['materiales'] += datos.get('materiales', 0)
             contrato_2['equipos'] += datos.get('equipos', 0)
             contrato_2['mano_obra'] += datos.get('mano_obra', 0)
+            contrato_2['admin'] += datos.get('admin', 0)
             contrato_2['desglose'][concepto] = datos['total']
+            
+            # El AIU ya está incluido en Cimentaciones y Complementarios
+            # pero lo separamos para visualización
+            if concepto == 'Cimentaciones' and 'aiu_cimentacion' in cotizacion:
+                # Estimar AIU incluido
+                aiu_cim = cotizacion['aiu_cimentacion']
+                factor_aiu = (aiu_cim.get('pct_comision', 0) + aiu_cim.get('pct_aiu', 0)) / 100
+                base_cim = datos['total'] / (1 + factor_aiu)
+                aiu_incluido = datos['total'] - base_cim
+                contrato_2['aiu'] += aiu_incluido
+            
+            elif concepto == 'Complementarios' and 'aiu_complementarios' in cotizacion:
+                aiu_comp = cotizacion['aiu_complementarios']
+                factor_aiu = (aiu_comp.get('pct_comision', 0) + aiu_comp.get('pct_aiu', 0)) / 100
+                base_comp = datos['total'] / (1 + factor_aiu)
+                aiu_incluido = datos['total'] - base_comp
+                contrato_2['aiu'] += aiu_incluido
     
     return contrato_1, contrato_2
 
@@ -388,7 +452,9 @@ def asignar_contratos(conceptos: Dict) -> Tuple[Dict, Dict]:
 
 def obtener_totales_admin_imprevistos_logistica(cotizacion: dict, conceptos: Dict) -> Dict:
     """
-    Extrae totales de Admin, Imprevistos y Logística del AIU
+    Extrae totales de Admin, Imprevistos y Logística para distribución por fases
+    
+    Admin incluye: Personal Profesional + Personal Administrativo + Otros Admin
     Estos se distribuirán proporcionalmente por duración de fases
     """
     totales = {
@@ -397,7 +463,10 @@ def obtener_totales_admin_imprevistos_logistica(cotizacion: dict, conceptos: Dic
         'logistica': 0
     }
     
-    # Obtener totales de conceptos administrativos ya calculados
+    # Obtener totales de conceptos administrativos
+    if 'Personal Profesional' in conceptos:
+        totales['admin'] += conceptos['Personal Profesional']['total']
+    
     if 'Personal Administrativo' in conceptos:
         totales['admin'] += conceptos['Personal Administrativo']['total']
     
@@ -408,10 +477,10 @@ def obtener_totales_admin_imprevistos_logistica(cotizacion: dict, conceptos: Dic
     if 'config_aiu' in cotizacion:
         config = cotizacion['config_aiu']
         
-        # Calcular base imponible (suma de conceptos directos)
+        # Calcular base imponible (suma de conceptos constructivos, excluyendo admin)
         base_imponible = sum([
-            c['total'] for c in conceptos.values()
-            if c.get('fuente') not in ['personal_administrativo', 'otros_admin']
+            c['total'] for nombre, c in conceptos.items()
+            if nombre not in ['Personal Profesional', 'Personal Administrativo', 'Otros Conceptos Admin']
         ])
         
         # Calcular Imprevistos y Logística
@@ -423,17 +492,19 @@ def obtener_totales_admin_imprevistos_logistica(cotizacion: dict, conceptos: Dic
 def generar_configuracion_fases_default(conceptos: Dict) -> List[Dict]:
     """
     Genera configuración por defecto de fases según mapeo acordado
+    
+    Admin (Personal + Otros) se distribuye por duración de fases
     """
     fases = [
         {
             'nombre': 'Procesos Administrativos',
             'conceptos': ['Diseños y Planificación'],
             'duracion_semanas': None,  # Usuario ingresa
-            'pct_admin': 20,  # % de admin total en esta fase
+            'pct_admin': 20,  # 20% del admin total
             'pct_imprevistos': 0,
             'pct_logistica': 20,
             'porcentajes_usuario': {
-                'materiales': 0,  # No aplica, diseños es 100% MO
+                'materiales': 0,  # Diseños es 100% MO
                 'mano_obra': 100
             }
         },
@@ -480,7 +551,7 @@ def generar_configuracion_fases_default(conceptos: Dict) -> List[Dict]:
         },
         {
             'nombre': 'Entrega',
-            'conceptos': [],  # Solo ajustes y admin final
+            'conceptos': [],  # Solo ajustes finales
             'duracion_semanas': None,
             'pct_admin': 5,
             'pct_imprevistos': 5,
@@ -806,7 +877,7 @@ def render_paso_2_configurar_proyecto():
     
     # Asignar contratos
     if 'contratos_fcl' not in st.session_state:
-        c1, c2 = asignar_contratos(conceptos)
+        c1, c2 = asignar_contratos(conceptos, cotizacion)
         st.session_state.contratos_fcl = {'contrato_1': c1, 'contrato_2': c2}
     
     contratos = st.session_state.contratos_fcl
@@ -817,20 +888,25 @@ def render_paso_2_configurar_proyecto():
     col1, col2 = st.columns(2)
     
     with col1:
-        st.markdown("#### 📄 Contrato 1 - Cimentación")
+        st.markdown(f"#### 📄 {contratos['contrato_1']['nombre']}")
         st.metric("Monto Total", f"${contratos['contrato_1']['monto']:,.0f}")
         
         with st.expander("Ver desglose"):
             for concepto, monto in contratos['contrato_1']['desglose'].items():
-                st.write(f"• **{concepto}:** ${monto:,.0f}")
+                if concepto == 'AIU Contrato 1':
+                    st.write(f"• **{concepto}:** ${monto:,.0f} ⚙️")
+                else:
+                    st.write(f"• **{concepto}:** ${monto:,.0f}")
     
     with col2:
-        st.markdown("#### 📄 Contrato 2 - Obra Gris")
+        st.markdown(f"#### 📄 {contratos['contrato_2']['nombre']}")
         st.metric("Monto Total", f"${contratos['contrato_2']['monto']:,.0f}")
         
         with st.expander("Ver desglose"):
             for concepto, monto in contratos['contrato_2']['desglose'].items():
                 st.write(f"• **{concepto}:** ${monto:,.0f}")
+            if contratos['contrato_2']['aiu'] > 0:
+                st.caption(f"   (incluye AIU: ${contratos['contrato_2']['aiu']:,.0f})")
     
     st.markdown("---")
     
