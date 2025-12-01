@@ -2079,7 +2079,8 @@ def render_tab_cimentaciones():
             min_value=0.0,
             max_value=100.0,
             step=0.5,
-            format="%.1f"
+            format="%.1f",
+            key="widget_comision_cimentacion"
         )
         if nueva_comision_cim != st.session_state.aiu_cimentacion['pct_comision']:
             st.session_state.aiu_cimentacion['pct_comision'] = nueva_comision_cim
@@ -2090,7 +2091,8 @@ def render_tab_cimentaciones():
             min_value=0.0,
             max_value=100.0,
             step=0.5,
-            format="%.1f"
+            format="%.1f",
+            key="widget_aiu_cimentacion"
         )
         if nuevo_aiu_cim != st.session_state.aiu_cimentacion['pct_aiu']:
             st.session_state.aiu_cimentacion['pct_aiu'] = nuevo_aiu_cim
@@ -2100,7 +2102,8 @@ def render_tab_cimentaciones():
             value=float(st.session_state.aiu_cimentacion['logistica']),
             min_value=0.0,
             step=1000.0,
-            format="%.0f"
+            format="%.0f",
+            key="widget_logistica_cimentacion"
         )
         if nueva_logistica_cim != st.session_state.aiu_cimentacion['logistica']:
             st.session_state.aiu_cimentacion['logistica'] = nueva_logistica_cim
@@ -2167,7 +2170,8 @@ def render_tab_complementarios():
             min_value=0.0,
             max_value=100.0,
             step=0.5,
-            format="%.1f"
+            format="%.1f",
+            key="widget_comision_complementarios"
         )
         if nueva_comision_comp != st.session_state.aiu_complementarios['pct_comision']:
             st.session_state.aiu_complementarios['pct_comision'] = nueva_comision_comp
@@ -2178,7 +2182,8 @@ def render_tab_complementarios():
             min_value=0.0,
             max_value=100.0,
             step=0.5,
-            format="%.1f"
+            format="%.1f",
+            key="widget_aiu_complementarios"
         )
         if nuevo_aiu_comp != st.session_state.aiu_complementarios['pct_aiu']:
             st.session_state.aiu_complementarios['pct_aiu'] = nuevo_aiu_comp
@@ -2188,7 +2193,8 @@ def render_tab_complementarios():
             value=float(st.session_state.aiu_complementarios['logistica']),
             min_value=0.0,
             step=1000.0,
-            format="%.0f"
+            format="%.0f",
+            key="widget_logistica_complementarios"
         )
         if nueva_logistica_comp != st.session_state.aiu_complementarios['logistica']:
             st.session_state.aiu_complementarios['logistica'] = nueva_logistica_comp
