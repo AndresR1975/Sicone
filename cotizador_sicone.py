@@ -212,27 +212,27 @@ def inicializar_session_state():
     # ESTRUCTURA
     if 'estructura' not in st.session_state:
         st.session_state.estructura = ItemEstandar(
-            'Estructura General', 'gl', 1.03, 127386450.0, 0.0, 0.0
+            'Estructura General', 'gl', 0.0, 127386450.0, 0.0, 0.0
         )
     
     # MAMPOSTERÍA
     if 'mamposteria' not in st.session_state:
         st.session_state.mamposteria = ItemEstandar(
-            'Mampostería', 'm²', 845.0, 67000.0, 7500.0, 45000.0
+            'Mampostería', 'm²', 0.0, 67000.0, 7500.0, 45000.0
         )
     
     # TECHOS Y OTROS
     if 'mamposteria_techos' not in st.session_state:
         st.session_state.mamposteria_techos = {
-            'Cubierta, Superboard y Manto': ItemEstandar('Cubierta, Superboard y Manto', 'm²', 120.0, 175000.0, 5000.0, 40000.0),
+            'Cubierta, Superboard y Manto': ItemEstandar('Cubierta, Superboard y Manto', 'm²', 0.0, 175000.0, 5000.0, 40000.0),
             'Ruana': ItemEstandar('Ruana', 'ml', 0.0, 40000.0, 0.0, 20000.0),
             'Contramarcos - Ventana': ItemEstandar('Contramarcos - Ventana', 'ml', 0.0, 15000.0, 1500.0, 8500.0),
             'Contramarcos - Puerta': ItemEstandar('Contramarcos - Puerta', 'ml', 0.0, 15000.0, 1500.0, 8500.0),
             'Embudos y Boquillas': ItemEstandar('Embudos y Boquillas', 'und', 0.0, 60000.0, 0.0, 10000.0),
-            'Cubierta, Superboard y Shingle': ItemEstandar('Cubierta, Superboard y Shingle', 'm²', 137.5, 210000.0, 5000.0, 50000.0),
-            'Entrepiso Placa Fácil': ItemEstandar('Entrepiso Placa Fácil', 'm²', 159.02, 175000.0, 5000.0, 35000.0),
+            'Cubierta, Superboard y Shingle': ItemEstandar('Cubierta, Superboard y Shingle', 'm²', 0.0, 210000.0, 5000.0, 50000.0),
+            'Entrepiso Placa Fácil': ItemEstandar('Entrepiso Placa Fácil', 'm²', 0.0, 175000.0, 5000.0, 35000.0),
             'Canoas': ItemEstandar('Canoas', 'ml', 0.0, 85000.0, 10000.0, 35000.0),
-            'Pérgolas y Estructura sin Techo': ItemEstandar('Pérgolas y Estructura sin Techo', 'm²', 108.16, 175000.0, 15000.0, 45000.0),
+            'Pérgolas y Estructura sin Techo': ItemEstandar('Pérgolas y Estructura sin Techo', 'm²', 0.0, 175000.0, 15000.0, 45000.0),
             'Tapacanal y Lagrimal': ItemEstandar('Tapacanal y Lagrimal', 'ml', 0.0, 80000.0, 5000.0, 35000.0)
         }
     
@@ -242,55 +242,55 @@ def inicializar_session_state():
     
     if 'cimentacion_opcion1' not in st.session_state:
         st.session_state.cimentacion_opcion1 = {
-            'Pilas a 3m y 5m': ItemCimentacion('Pilas a 3m y 5m', 'und', 73.0, 1340000.0),
-            'Cimentación Vigas y Losa': ItemCimentacion('Cimentación Vigas y Losa', 'm²', 385.06, 280000.0)
+            'Pilas a 3m y 5m': ItemCimentacion('Pilas a 3m y 5m', 'und', 0.0, 1340000.0),
+            'Cimentación Vigas y Losa': ItemCimentacion('Cimentación Vigas y Losa', 'm²', 0.0, 280000.0)
         }
     
     if 'cimentacion_opcion2' not in st.session_state:
         st.session_state.cimentacion_opcion2 = {
-            'Pilotes de Apoyo': ItemCimentacion('Pilotes de Apoyo', 'und', 210.0, 320000.0),
-            'Cimentación Vigas y Losa': ItemCimentacion('Cimentación Vigas y Losa', 'm²', 385.06, 280000.0)
+            'Pilotes de Apoyo': ItemCimentacion('Pilotes de Apoyo', 'und', 0.0, 320000.0),
+            'Cimentación Vigas y Losa': ItemCimentacion('Cimentación Vigas y Losa', 'm²', 0.0, 280000.0)
         }
     
     # COMPLEMENTARIOS
     if 'complementarios' not in st.session_state:
         st.session_state.complementarios = {
-            'Red Aguas Lluvias': ItemCimentacion('Red Aguas Lluvias', 'gl', 1.0, 6150000.0),
-            'Red Hidrosanitaria': ItemCimentacion('Red Hidrosanitaria', 'gl', 1.0, 13520000.0),
-            'Estructura Escalas Metálicas': ItemCimentacion('Estructura Escalas Metálicas', 'und', 2.0, 8600000.0),
-            'Campamento y baño': ItemCimentacion('Campamento y baño', 'gl', 1.0, 3000000.0),
-            'Cerramiento en tela': ItemCimentacion('Cerramiento en tela', 'ml', 200.0, 14500.0),
-            'Canoa Metálica Calibre 24': ItemCimentacion('Canoa Metálica Calibre 24', 'ml', 51.0, 145000.0),
-            'Ruana Metálica Calibre 24': ItemCimentacion('Ruana Metálica Calibre 24', 'ml', 62.0, 58000.0),
-            'Revoque': ItemCimentacion('Revoque', 'm²', 1690.0, 32500.0),
-            'Fajas, Ranuras y Filetes': ItemCimentacion('Fajas, Ranuras y Filetes', 'ml', 1859.0, 7000.0),
+            'Red Aguas Lluvias': ItemCimentacion('Red Aguas Lluvias', 'gl', 0.0, 6150000.0),
+            'Red Hidrosanitaria': ItemCimentacion('Red Hidrosanitaria', 'gl', 0.0, 13520000.0),
+            'Estructura Escalas Metálicas': ItemCimentacion('Estructura Escalas Metálicas', 'und', 0.0, 8600000.0),
+            'Campamento y baño': ItemCimentacion('Campamento y baño', 'gl', 0.0, 3000000.0),
+            'Cerramiento en tela': ItemCimentacion('Cerramiento en tela', 'ml', 0.0, 14500.0),
+            'Canoa Metálica Calibre 24': ItemCimentacion('Canoa Metálica Calibre 24', 'ml', 0.0, 145000.0),
+            'Ruana Metálica Calibre 24': ItemCimentacion('Ruana Metálica Calibre 24', 'ml', 0.0, 58000.0),
+            'Revoque': ItemCimentacion('Revoque', 'm²', 0.0, 32500.0),
+            'Fajas, Ranuras y Filetes': ItemCimentacion('Fajas, Ranuras y Filetes', 'ml', 0.0, 7000.0),
             'Otros conceptos': ItemCimentacion('Otros conceptos', 'gl', 0.0, 0.0)
         }
     
     # PERSONAL PROFESIONAL
     if 'personal_profesional' not in st.session_state:
         st.session_state.personal_profesional = {
-            'Director de Obra': PersonalAdmin('Director de Obra', 1, 4407865.0, 54.0, 0.5, 6),
-            'Supervisor Técnico': PersonalAdmin('Supervisor Técnico', 1, 1889085.0, 54.0, 0.3, 6),
-            'Profesional Presupuesto': PersonalAdmin('Profesional Presupuesto', 1, 2896597.0, 54.0, 0.3, 6),
-            'Arquitecto Diseñador': PersonalAdmin('Arquitecto Diseñador', 1, 1259390.0, 54.0, 0.3, 3),
-            'Oficial Obra': PersonalAdmin('Oficial Obra', 1, 2266902.0, 54.0, 0.3, 3),
-            'Ayudante de Obra': PersonalAdmin('Ayudante de Obra', 1, 811488.0, 54.0, 0.2, 2)
+            'Director de Obra': PersonalAdmin('Director de Obra', 0, 4407865.0, 54.0, 0.5, 6),
+            'Supervisor Técnico': PersonalAdmin('Supervisor Técnico', 0, 1889085.0, 54.0, 0.3, 6),
+            'Profesional Presupuesto': PersonalAdmin('Profesional Presupuesto', 0, 2896597.0, 54.0, 0.3, 6),
+            'Arquitecto Diseñador': PersonalAdmin('Arquitecto Diseñador', 0, 1259390.0, 54.0, 0.3, 3),
+            'Oficial Obra': PersonalAdmin('Oficial Obra', 0, 2266902.0, 54.0, 0.3, 3),
+            'Ayudante de Obra': PersonalAdmin('Ayudante de Obra', 0, 811488.0, 54.0, 0.2, 2)
         }
     
     # PERSONAL ADMINISTRATIVO
     if 'personal_administrativo' not in st.session_state:
         st.session_state.personal_administrativo = {
-            'Profesional de Procesos': PersonalAdmin('Profesional de Procesos', 1, 4407865.0, 54.0, 0.3, 6),
-            'Gerente General': PersonalAdmin('Gerente General', 1, 5667255.0, 54.0, 0.3, 6),
-            'Compras': PersonalAdmin('Compras', 1, 3148475.0, 54.0, 0.3, 6),
-            'Contabilidad': PersonalAdmin('Contabilidad', 1, 3148475.0, 54.0, 0.2, 6),
-            'Atención al Cliente': PersonalAdmin('Atención al Cliente', 1, 1259390.0, 54.0, 0.2, 3),
-            'Mantenimiento y Servicios Generales': PersonalAdmin('Mantenimiento y Servicios Generales', 1, 811489.0, 54.0, 0.2, 3),
-            'Desarrollo y Gestión Humana': PersonalAdmin('Desarrollo y Gestión Humana', 1, 2140963.0, 54.0, 0.2, 3),
-            'Personal Administrativo Planta': PersonalAdmin('Personal Administrativo Planta', 1, 3434700.0, 54.0, 0.3, 0),
-            'Personal Operativo Planta': PersonalAdmin('Personal Operativo Planta', 1, 737717.0, 54.0, 0.3, 0),
-            'Personal Gestión Ambiental': PersonalAdmin('Personal Gestión Ambiental', 1, 3000000.0, 54.0, 0.3, 0)
+            'Profesional de Procesos': PersonalAdmin('Profesional de Procesos', 0, 4407865.0, 54.0, 0.3, 6),
+            'Gerente General': PersonalAdmin('Gerente General', 0, 5667255.0, 54.0, 0.3, 6),
+            'Compras': PersonalAdmin('Compras', 0, 3148475.0, 54.0, 0.3, 6),
+            'Contabilidad': PersonalAdmin('Contabilidad', 0, 3148475.0, 54.0, 0.2, 6),
+            'Atención al Cliente': PersonalAdmin('Atención al Cliente', 0, 1259390.0, 54.0, 0.2, 3),
+            'Mantenimiento y Servicios Generales': PersonalAdmin('Mantenimiento y Servicios Generales', 0, 811489.0, 54.0, 0.2, 3),
+            'Desarrollo y Gestión Humana': PersonalAdmin('Desarrollo y Gestión Humana', 0, 2140963.0, 54.0, 0.2, 3),
+            'Personal Administrativo Planta': PersonalAdmin('Personal Administrativo Planta', 0, 3434700.0, 54.0, 0.3, 0),
+            'Personal Operativo Planta': PersonalAdmin('Personal Operativo Planta', 0, 737717.0, 54.0, 0.3, 0),
+            'Personal Gestión Ambiental': PersonalAdmin('Personal Gestión Ambiental', 0, 3000000.0, 54.0, 0.3, 0)
         }
     
     # OTROS CONCEPTOS ADMINISTRACIÓN (con detalle expandible)
