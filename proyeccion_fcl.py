@@ -1059,7 +1059,13 @@ def render_paso_2_configurar_proyecto():
                 st.rerun()
     
     # Input principal (siempre visible)
-    fecha_default = st.session_state.get('fecha_inicio_calculada', datetime.now().date())
+    # Preservar fecha: widget > calculada > actual
+    if 'fecha_inicio_fcl' in st.session_state:
+        fecha_default = st.session_state.fecha_inicio_fcl
+    elif 'fecha_inicio_calculada' in st.session_state:
+        fecha_default = st.session_state.fecha_inicio_calculada
+    else:
+        fecha_default = datetime.now().date()
     
     fecha_inicio = st.date_input(
         "Fecha de inicio del proyecto:",
@@ -1971,5 +1977,5 @@ def main():
 # EJECUCIÓN
 # ============================================================================
 
-if __name__ == "__main__":
-    main()
+# main() disponible para importación
+
