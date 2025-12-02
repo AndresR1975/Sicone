@@ -927,8 +927,8 @@ def render_paso_1_cargar_cotizacion():
     Los datos de la cotización se usarán para calcular los egresos proyectados.
     """)
     
-    # Tabs para las dos opciones
-    tab1, tab2 = st.tabs(["📁 Proyectos Guardados", "📤 Cargar JSON"])
+    # Tabs para las tres opciones
+    tab1, tab2, tab3 = st.tabs(["📁 Proyectos Guardados", "📤 Cargar Cotización (JSON)", "🔄 Continuar Proyección"])
     
     with tab1:
         proyectos = obtener_proyectos_con_cotizaciones()
@@ -1009,6 +1009,83 @@ def render_paso_1_cargar_cotizacion():
                     st.error("❌ El archivo JSON no tiene la estructura correcta")
             except json.JSONDecodeError:
                 st.error("❌ Error al leer el archivo JSON")
+    
+    with tab3:
+        st.markdown("""
+        ### 🔄 Continuar con Proyección Existente
+        
+        Cargue un archivo JSON de proyección SICONE previamente exportado para:
+        - Revisar y ajustar la proyección
+        - Continuar con módulos de Cartera o Ejecución Real
+        - Comparar con versiones anteriores
+        """)
+        
+        uploaded_proyeccion = st.file_uploader(
+            "Seleccione archivo de proyección SICONE",
+            type=['json'],
+            key="upload_proyeccion_fcl",
+            help="Archivo JSON exportado desde el módulo de Proyección FCL"
+        )
+        
+        if uploaded_proyeccion:
+            try:
+                proyeccion_data = json.load(uploaded_proyeccion)
+                
+                # Validar que es una proyección SICONE v2.0
+                if proyeccion_data.get('tipo') == 'proyeccion_fcl' and proyeccion_data.get('version') == '2.0':
+                    st.success("✅ Archivo de proyección válido")
+                    
+                    # Mostrar resumen de la proyección
+                    col1, col2, col3, col4 = st.columns(4)
+                    
+                    proyecto_info = proyeccion_data['proyecto']
+                    totales = proyeccion_data['totales']
+                    
+                    with col1:
+                        st.metric("Proyecto", proyecto_info['nombre'])
+                    with col2:
+                        st.metric("Total Proyecto", f"${totales['total_proyecto']:,.0f}")
+                    with col3:
+                        st.metric("Semanas", totales['semanas_total'])
+                    with col4:
+                        fecha_exp = proyeccion_data['fecha_exportacion'][:10]
+                        st.metric("Exportado", fecha_exp)
+                    
+                    st.markdown("---")
+                    
+                    col_a, col_b = st.columns(2)
+                    
+                    with col_a:
+                        if st.button("✅ Cargar y Revisar Proyección", type="primary", use_container_width=True):
+                            # Reconstruir cotización desde proyección
+                            cotizacion_reconstruida = {
+                                'proyecto': proyecto_info,
+                                'version': '3.0'
+                                # La cotización completa no está en proyección, 
+                                # pero tenemos suficiente info para continuar
+                            }
+                            
+                            st.session_state.cotizacion_fcl = cotizacion_reconstruida
+                            st.session_state.proyeccion_cargada = proyeccion_data
+                            st.session_state.modo_edicion_proyeccion = True
+                            st.session_state.paso_fcl = 3  # Ir directo al paso 3
+                            st.success("✅ Proyección cargada - Puede revisar o continuar")
+                            st.rerun()
+                    
+                    with col_b:
+                        st.info("""
+                        **💡 Nota:** Al cargar una proyección existente, 
+                        irá directamente a la vista de resultados.
+                        """)
+                
+                else:
+                    st.error("❌ Este archivo no es una proyección SICONE válida (requiere versión 2.0)")
+                    st.caption("Si tiene una cotización, use la pestaña 'Cargar Cotización (JSON)'")
+            
+            except json.JSONDecodeError:
+                st.error("❌ Error al leer el archivo JSON")
+            except KeyError as e:
+                st.error(f"❌ Estructura de archivo incompleta: falta {e}")
 
 # ============================================================================
 # INTERFACE DE USUARIO - PASO 2: CONFIGURAR CONTRATOS Y FASES
@@ -1556,60 +1633,95 @@ def render_paso_3_proyeccion():
     
     st.header("📊 Paso 3: Proyección de Flujo de Caja")
     
-    # Botón volver
-    if st.button("◀️ Volver a configuración"):
-        st.session_state.paso_fcl = 2
-        st.rerun()
+    # Verificar si se cargó una proyección existente
+    if 'proyeccion_cargada' in st.session_state and st.session_state.get('modo_edicion_proyeccion', False):
+        st.info("🔄 **Proyección cargada desde archivo** - Mostrando datos previamente generados")
+        
+        # Reconstruir DataFrame desde JSON cargado
+        proyeccion_data = st.session_state.proyeccion_cargada
+        df = pd.DataFrame(proyeccion_data['proyeccion_semanal'])
+        
+        # Restaurar variables necesarias
+        cotizacion = st.session_state.cotizacion_fcl
+        contratos = proyeccion_data['contratos']
+        fecha_inicio = datetime.fromisoformat(proyeccion_data['proyecto']['fecha_inicio']).date()
+        
+        col_btn1, col_btn2 = st.columns(2)
+        with col_btn1:
+            if st.button("🔄 Nueva Proyección", use_container_width=True):
+                # Limpiar y volver al paso 1
+                for key in ['proyeccion_cargada', 'modo_edicion_proyeccion', 'proyeccion_df']:
+                    if key in st.session_state:
+                        del st.session_state[key]
+                st.session_state.paso_fcl = 1
+                st.rerun()
+        
+        with col_btn2:
+            if st.button("➡️ Continuar a Cartera/Ejecución", use_container_width=True, type="primary"):
+                st.info("🚧 Módulos de Cartera y Ejecución Real próximamente disponibles")
+        
+        st.markdown("---")
     
-    # Obtener datos de session_state
-    cotizacion = st.session_state.cotizacion_fcl
-    conceptos = st.session_state.conceptos_fcl
-    fases = st.session_state.fases_config_fcl
-    hitos = st.session_state.hitos_fcl
-    contratos = st.session_state.contratos_fcl
-    fecha_inicio = st.session_state.fecha_inicio_fcl
-    
-    # Calcular totales de AIU
-    if 'totales_aiu_fcl' not in st.session_state:
-        totales_aiu = obtener_totales_admin_imprevistos_logistica(cotizacion, conceptos)
-        st.session_state.totales_aiu_fcl = totales_aiu
     else:
-        totales_aiu = st.session_state.totales_aiu_fcl
+        # Flujo normal: generar proyección nueva
+        # Botón volver
+        if st.button("◀️ Volver a configuración"):
+            st.session_state.paso_fcl = 2
+            st.rerun()
+        
+        # Obtener datos de session_state
+        cotizacion = st.session_state.cotizacion_fcl
+        conceptos = st.session_state.conceptos_fcl
+        fases = st.session_state.fases_config_fcl
+        hitos = st.session_state.hitos_fcl
+        contratos = st.session_state.contratos_fcl
+        fecha_inicio = st.session_state.fecha_inicio_fcl
+        
+        # Calcular totales de AIU
+        if 'totales_aiu_fcl' not in st.session_state:
+            totales_aiu = obtener_totales_admin_imprevistos_logistica(cotizacion, conceptos)
+            st.session_state.totales_aiu_fcl = totales_aiu
+        else:
+            totales_aiu = st.session_state.totales_aiu_fcl
+        
+        # Generar proyección
+        if 'proyeccion_df' not in st.session_state:
+            with st.spinner("Generando proyección..."):
+                # Obtener configuración de distribución
+                config_dist = st.session_state.get('distribucion_temporal', {
+                    'materiales': 'lineal',
+                    'equipos': 'lineal',
+                    'peso_inicial_materiales': 60,
+                    'peso_inicial_equipos': 60
+                })
+                
+                proyeccion_df = generar_proyeccion_completa(
+                    conceptos=conceptos,
+                    fases_config=fases,
+                    hitos=hitos,
+                    contrato_1=contratos['contrato_1'],
+                    contrato_2=contratos['contrato_2'],
+                    totales_aiu=totales_aiu,
+                    fecha_inicio=datetime.combine(fecha_inicio, datetime.min.time()),
+                    config_distribucion=config_dist
+                )
+                st.session_state.proyeccion_df = proyeccion_df
+        else:
+            proyeccion_df = st.session_state.proyeccion_df
+        
+        df = proyeccion_df
     
-    # Generar proyección
-    if 'proyeccion_df' not in st.session_state:
-        with st.spinner("Generando proyección..."):
-            # Obtener configuración de distribución
-            config_dist = st.session_state.get('distribucion_temporal', {
-                'materiales': 'lineal',
-                'equipos': 'lineal',
-                'peso_inicial_materiales': 60,
-                'peso_inicial_equipos': 60
-            })
-            
-            proyeccion_df = generar_proyeccion_completa(
-                conceptos=conceptos,
-                fases_config=fases,
-                hitos=hitos,
-                contrato_1=contratos['contrato_1'],
-                contrato_2=contratos['contrato_2'],
-                totales_aiu=totales_aiu,
-                fecha_inicio=datetime.combine(fecha_inicio, datetime.min.time()),
-                config_distribucion=config_dist
-            )
-            st.session_state.proyeccion_df = proyeccion_df
-    else:
-        proyeccion_df = st.session_state.proyeccion_df
+    # A partir de aquí, código común para ambos casos
     
     # KPIs principales
     st.subheader("📈 Indicadores Principales")
     
     col1, col2, col3, col4 = st.columns(4)
     
-    total_ingresos = proyeccion_df['Ingresos_Proyectados'].sum()
-    total_egresos = proyeccion_df['Total_Egresos'].sum()
-    saldo_final = proyeccion_df['Saldo_Acumulado'].iloc[-1]
-    semanas_total = len(proyeccion_df)
+    total_ingresos = df['Ingresos_Proyectados'].sum()
+    total_egresos = df['Total_Egresos'].sum()
+    saldo_final = df['Saldo_Acumulado'].iloc[-1]
+    semanas_total = len(df)
     
     with col1:
         st.metric("💰 Total Ingresos", f"${total_ingresos:,.0f}")
@@ -1631,10 +1743,10 @@ def render_paso_3_proyeccion():
     # ALERTAS DE SALDOS NEGATIVOS
     # ========================================================================
     
-    saldo_minimo = proyeccion_df['Saldo_Acumulado'].min()
+    saldo_minimo = df['Saldo_Acumulado'].min()
     
     if saldo_minimo < 0:
-        semanas_negativas = proyeccion_df[proyeccion_df['Saldo_Acumulado'] < 0]
+        semanas_negativas = df[df['Saldo_Acumulado'] < 0]
         primera_semana_deficit = semanas_negativas['Semana'].iloc[0]
         ultima_semana_deficit = semanas_negativas['Semana'].iloc[-1]
         
@@ -1665,8 +1777,8 @@ def render_paso_3_proyeccion():
             
             # Saldo acumulado con relleno
             fig_deficit.add_trace(go.Scatter(
-                x=proyeccion_df['Semana'],
-                y=proyeccion_df['Saldo_Acumulado'],
+                x=df['Semana'],
+                y=df['Saldo_Acumulado'],
                 fill='tozeroy',
                 fillcolor='rgba(239, 68, 68, 0.3)',
                 line=dict(color='rgb(239, 68, 68)', width=3),
@@ -1706,7 +1818,7 @@ def render_paso_3_proyeccion():
             
             # Tabla de semanas críticas
             st.markdown("**Semanas con Saldo Negativo:**")
-            semanas_criticas = proyeccion_df[proyeccion_df['Saldo_Acumulado'] < 0][
+            semanas_criticas = df[df['Saldo_Acumulado'] < 0][
                 ['Semana', 'Fecha', 'Fase', 'Ingresos_Proyectados', 'Total_Egresos', 
                  'Flujo_Neto', 'Saldo_Acumulado']
             ].copy()
@@ -1739,7 +1851,7 @@ def render_paso_3_proyeccion():
     ])
     
     with tab1:
-        render_graficas_proyeccion(proyeccion_df)
+        render_graficas_proyeccion(df)
     
     with tab2:
         render_tabla_detallada(proyeccion_df)
@@ -1981,114 +2093,97 @@ def render_analisis_fases(df: pd.DataFrame, fases: List[Dict]):
 def render_opciones_guardar(df: pd.DataFrame, cotizacion: dict):
     """Renderiza opciones para guardar la proyección"""
     
-    st.subheader("💾 Guardar Proyección")
+    # ========================================================================
+    # GUARDAR Y EXPORTAR PROYECCIÓN
+    # ========================================================================
+    
+    st.subheader("💾 Exportar Proyección")
     
     st.info("""
-    💡 **Próximos pasos:** 
-    - La proyección se guardará en la base de datos para uso en módulos de ejecución y análisis
-    - Podrá comparar esta proyección con la ejecución real del proyecto
-    - Los datos se vincularán al proyecto seleccionado
+    💡 **Flujo de trabajo:** 
+    - Descargue el JSON completo de la proyección
+    - Este archivo incluye todos los datos necesarios para los siguientes módulos:
+      - ✅ Informe de Cartera
+      - ✅ Reporte de Ejecución Real
+      - ✅ Análisis de Desviaciones
+    - Podrá cargar este JSON más adelante para continuar el análisis
     """)
     
+    # Preparar JSON completo con metadatos
+    nombre_proyecto = cotizacion.get('proyecto', {}).get('nombre', 'proyecto')
+    nombre_limpio = nombre_proyecto.replace(' ', '_').replace('/', '_')
+    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+    
+    # Construir JSON enriquecido
+    proyeccion_completa = {
+        'version': '2.0',
+        'tipo': 'proyeccion_fcl',
+        'fecha_exportacion': datetime.now().isoformat(),
+        'proyecto': {
+            'nombre': cotizacion['proyecto']['nombre'],
+            'cliente': cotizacion['proyecto'].get('cliente', ''),
+            'area_base': cotizacion['proyecto'].get('area_base', 0),
+            'fecha_inicio': fecha_inicio.strftime('%Y-%m-%d')
+        },
+        'contratos': {
+            'contrato_1': {
+                'nombre': contratos['contrato_1']['nombre'],
+                'monto': contratos['contrato_1']['monto'],
+                'desglose': contratos['contrato_1']['desglose']
+            },
+            'contrato_2': {
+                'nombre': contratos['contrato_2']['nombre'],
+                'monto': contratos['contrato_2']['monto'],
+                'desglose': contratos['contrato_2']['desglose']
+            }
+        },
+        'totales': {
+            'total_proyecto': contratos['contrato_1']['monto'] + contratos['contrato_2']['monto'],
+            'total_ingresos': float(df['Ingresos_Proyectados'].sum()),
+            'total_egresos': float(df['Total_Egresos'].sum()),
+            'saldo_final': float(df['Saldo_Acumulado'].iloc[-1]),
+            'semanas_total': len(df)
+        },
+        'configuracion': {
+            'fases': fases,
+            'hitos': hitos,
+            'distribucion_temporal': st.session_state.get('distribucion_temporal', {})
+        },
+        'proyeccion_semanal': json.loads(df.to_json(orient='records', date_format='iso')),
+        # Espacio para datos futuros de otros módulos
+        'cartera': None,  # Se llenará en módulo de Informe de Cartera
+        'ejecucion_real': None,  # Se llenará en módulo de Ejecución Real
+        'analisis': None  # Se llenará en módulo de Análisis
+    }
+    
+    json_str = json.dumps(proyeccion_completa, indent=2, ensure_ascii=False)
+    
     col1, col2 = st.columns(2)
     
     with col1:
-        nombre_proyeccion = st.text_input(
-            "Nombre de la proyección:",
-            value=f"Proyección {cotizacion['proyecto']['nombre']} - {datetime.now().strftime('%Y-%m-%d')}",
-            key="nombre_proyeccion"
+        # Descargar JSON completo
+        st.download_button(
+            label="📥 Descargar Proyección Completa (JSON)",
+            data=json_str,
+            file_name=f"SICONE_{nombre_limpio}_Proyeccion_{timestamp}.json",
+            mime="application/json",
+            use_container_width=True,
+            type="primary"
         )
+        st.caption("✅ Incluye toda la configuración y datos de proyección")
     
     with col2:
-        notas = st.text_area(
-            "Notas (opcional):",
-            placeholder="Ej: Proyección inicial, versión 1.0, etc.",
-            key="notas_proyeccion"
-        )
-    
-    if st.button("💾 Guardar Proyección en Base de Datos", type="primary", use_container_width=True):
-        try:
-            # Guardar en BD
-            conn = sqlite3.connect('sicone.db')
-            cursor = conn.cursor()
-            
-            # Verificar si tabla existe, si no, crearla
-            cursor.execute("""
-                CREATE TABLE IF NOT EXISTS proyecciones_fcl (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    proyecto_id INTEGER,
-                    nombre TEXT NOT NULL,
-                    datos_json TEXT NOT NULL,
-                    fecha_creacion TEXT NOT NULL,
-                    notas TEXT,
-                    semanas_total INTEGER,
-                    total_ingresos REAL,
-                    total_egresos REAL,
-                    FOREIGN KEY (proyecto_id) REFERENCES proyectos(id)
-                )
-            """)
-            
-            # Preparar datos para guardar
-            proyeccion_json = df.to_json(orient='records', date_format='iso')
-            
-            # Insertar en tabla
-            cursor.execute("""
-                INSERT INTO proyecciones_fcl 
-                (proyecto_id, nombre, datos_json, fecha_creacion, notas, semanas_total, total_ingresos, total_egresos)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-            """, (
-                st.session_state.get('proyecto_fcl_id'),
-                nombre_proyeccion,
-                proyeccion_json,
-                datetime.now().isoformat(),
-                notas,
-                len(df),
-                float(df['Ingresos_Proyectados'].sum()),
-                float(df['Total_Egresos'].sum())
-            ))
-            
-            conn.commit()
-            conn.close()
-            
-            st.success("✅ Proyección guardada correctamente en la base de datos")
-            st.balloons()
-            
-        except sqlite3.Error as e:
-            st.error(f"❌ Error al guardar: {e}")
-    
-    st.markdown("---")
-    
-    # Opciones de exportación
-    st.markdown("### 📤 Exportar Datos")
-    
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        # Exportar CSV
-        # Obtener nombre del proyecto y limpiarlo
-        nombre_proyecto = cotizacion.get('proyecto', {}).get('nombre', 'proyecto')
-        nombre_limpio = nombre_proyecto.replace(' ', '_').replace('/', '_')
-        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-        
+        # Descargar CSV (solo tabla semanal)
         csv = df.to_csv(index=False).encode('utf-8')
         st.download_button(
-            label="📥 Descargar CSV",
+            label="📥 Descargar Tabla Semanal (CSV)",
             data=csv,
             file_name=f"{nombre_limpio}_proyeccion_{timestamp}.csv",
             mime="text/csv",
             use_container_width=True
         )
-    
-    with col2:
-        # Exportar JSON
-        json_str = df.to_json(orient='records', date_format='iso', indent=2)
-        st.download_button(
-            label="📥 Descargar JSON",
-            data=json_str,
-            file_name=f"{nombre_limpio}_proyeccion_{timestamp}.json",
-            mime="application/json",
-            use_container_width=True
-        )
+        st.caption("📊 Solo datos semanales para análisis en Excel")
+
 
 # ============================================================================
 # FUNCIÓN PRINCIPAL DEL MÓDULO
