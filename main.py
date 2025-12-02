@@ -321,14 +321,26 @@ def render_modulo_flujo_caja():
     
     # Importar y ejecutar el módulo de proyección FCL
     try:
-        import proyeccion_fcl
-        proyeccion_fcl.main()
+        import importlib
+        import sys
+        
+        # Si el módulo ya fue importado, recargarlo para usar versión más reciente
+        if 'proyeccion_fcl' in sys.modules:
+            import proyeccion_fcl
+            importlib.reload(proyeccion_fcl)
+        else:
+            import proyeccion_fcl
+        
+        # Verificar que main() existe antes de llamarla
+        if not hasattr(proyeccion_fcl, 'main'):
+            st.error("❌ Error: El módulo `proyeccion_fcl.py` no tiene una función `main()`")
+            st.info("Por favor, verifique que el archivo proyeccion_fcl.py esté actualizado")
+        else:
+            proyeccion_fcl.main()
         
     except ImportError as e:
         st.error(f"❌ Error al importar el módulo de proyección FCL: {e}")
         st.info("**Solución:** Asegúrese de que `proyeccion_fcl.py` esté en el mismo directorio que `main.py`")
-    except AttributeError:
-        st.error("❌ Error: El módulo `proyeccion_fcl.py` no tiene una función `main()`")
     except Exception as e:
         st.error(f"❌ Error inesperado: {e}")
         st.exception(e)

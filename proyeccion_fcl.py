@@ -1053,29 +1053,36 @@ def render_paso_1_cargar_cotizacion():
                     
                     st.markdown("---")
                     
-                    col_a, col_b = st.columns(2)
+                    col_a, col_b, col_c = st.columns(3)
                     
                     with col_a:
-                        if st.button("✅ Cargar y Revisar Proyección", type="primary", use_container_width=True):
+                        if st.button("📊 Ver Resultados", use_container_width=True):
                             # Reconstruir cotización desde proyección
                             cotizacion_reconstruida = {
                                 'proyecto': proyecto_info,
                                 'version': '3.0'
-                                # La cotización completa no está en proyección, 
-                                # pero tenemos suficiente info para continuar
                             }
                             
                             st.session_state.cotizacion_fcl = cotizacion_reconstruida
                             st.session_state.proyeccion_cargada = proyeccion_data
-                            st.session_state.modo_edicion_proyeccion = True
-                            st.session_state.paso_fcl = 3  # Ir directo al paso 3
-                            st.success("✅ Proyección cargada - Puede revisar o continuar")
+                            st.session_state.modo_visualizacion = True
+                            st.session_state.paso_fcl = 3  # Ver resultados
+                            st.success("✅ Mostrando resultados")
                             st.rerun()
                     
                     with col_b:
-                        st.info("""
-                        **💡 Nota:** Al cargar una proyección existente, 
-                        irá directamente a la vista de resultados.
+                        if st.button("⚙️ Editar Configuración", type="primary", use_container_width=True):
+                            # Cargar configuración para editar
+                            st.session_state.proyeccion_para_editar = proyeccion_data
+                            st.session_state.modo_edicion = True
+                            st.session_state.paso_fcl = 2  # Ir a configuración
+                            st.success("✅ Puede editar y regenerar")
+                            st.rerun()
+                    
+                    with col_c:
+                        st.caption("""
+                        **Ver Resultados:** Revisa la proyección  
+                        **Editar:** Modifica y simula escenarios
                         """)
                 
                 else:
@@ -1098,14 +1105,71 @@ def render_paso_2_configurar_proyecto():
     
     st.header("⚙️ Paso 2: Configuración del Proyecto")
     
-    # Botón volver
-    if st.button("◀️ Volver a selección de cotización"):
+    # ========================================================================
+    # DETECTAR SI VIENE DE EDICIÓN DE PROYECCIÓN CARGADA
+    # ========================================================================
+    
+    if 'proyeccion_para_editar' in st.session_state and st.session_state.get('modo_edicion', False):
+        st.info("✏️ **Modo Edición:** Puede modificar la configuración y regenerar la proyección para simular escenarios")
+        
+        # Cargar configuración guardada
+        proy_data = st.session_state.proyeccion_para_editar
+        config_guardada = proy_data.get('configuracion', {})
+        
+        # Precargar contratos desde proyección
+        if 'contratos_fcl' not in st.session_state:
+            st.session_state.contratos_fcl = proy_data['contratos']
+        
+        # Precargar fases desde proyección
+        if 'fases_config_fcl' not in st.session_state:
+            st.session_state.fases_config_fcl = config_guardada.get('fases', [])
+        
+        # Precargar hitos desde proyección
+        if 'hitos_fcl' not in st.session_state:
+            st.session_state.hitos_fcl = config_guardada.get('hitos', [])
+        
+        # Precargar distribución temporal
+        if 'distribucion_temporal' not in st.session_state:
+            st.session_state.distribucion_temporal = config_guardada.get('distribucion_temporal', {
+                'materiales': 'lineal',
+                'equipos': 'lineal',
+                'peso_inicial_materiales': 60,
+                'peso_inicial_equipos': 60
+            })
+        
+        # Precargar fecha
+        if 'fecha_inicio_fcl' not in st.session_state:
+            fecha_str = proy_data['proyecto']['fecha_inicio']
+            st.session_state.fecha_inicio_fcl = datetime.fromisoformat(fecha_str).date()
+        
+        # Reconstruir conceptos desde contratos (simplificado)
+        if 'conceptos_fcl' not in st.session_state:
+            # Como no tenemos la cotización completa, creamos conceptos vacíos
+            # pero con la estructura mínima necesaria
+            st.session_state.conceptos_fcl = {}
+        
+        col_edit1, col_edit2 = st.columns(2)
+        with col_edit1:
+            if st.button("🔄 Volver a Resultados", use_container_width=True):
+                st.session_state.modo_edicion = False
+                st.session_state.modo_visualizacion = True
+                st.session_state.proyeccion_cargada = proy_data
+                st.session_state.paso_fcl = 3
+                st.rerun()
+        
+        with col_edit2:
+            st.caption("💡 Los cambios se aplicarán al generar nueva proyección")
+        
+        st.markdown("---")
+    
+    # Botón volver (solo si NO está en modo edición)
+    elif st.button("◀️ Volver a selección de cotización"):
         st.session_state.paso_fcl = 1
         st.rerun()
     
     st.markdown("---")
     
-    # Extraer conceptos
+    # Extraer conceptos (solo si no viene de edición)
     if 'conceptos_fcl' not in st.session_state:
         with st.spinner("Extrayendo conceptos de la cotización..."):
             conceptos = extraer_conceptos_dinamico(cotizacion)
@@ -1113,7 +1177,7 @@ def render_paso_2_configurar_proyecto():
     else:
         conceptos = st.session_state.conceptos_fcl
     
-    # Asignar contratos
+    # Asignar contratos (solo si no viene de edición)
     if 'contratos_fcl' not in st.session_state:
         c1, c2 = asignar_contratos(conceptos, cotizacion)
         st.session_state.contratos_fcl = {'contrato_1': c1, 'contrato_2': c2}
@@ -1641,8 +1705,8 @@ def render_paso_3_proyeccion():
     hitos = []
     df = None
     
-    # Verificar si se cargó una proyección existente
-    if 'proyeccion_cargada' in st.session_state and st.session_state.get('modo_edicion_proyeccion', False):
+    # Verificar si se cargó una proyección existente (MODO VISUALIZACIÓN)
+    if 'proyeccion_cargada' in st.session_state and st.session_state.get('modo_visualizacion', False):
         st.info("🔄 **Proyección cargada desde archivo** - Mostrando datos previamente generados")
         
         # Reconstruir desde JSON cargado
@@ -1656,28 +1720,47 @@ def render_paso_3_proyeccion():
         fases = proyeccion_data.get('configuracion', {}).get('fases', [])
         hitos = proyeccion_data.get('configuracion', {}).get('hitos', [])
         
-        col_btn1, col_btn2 = st.columns(2)
+        col_btn1, col_btn2, col_btn3 = st.columns(3)
+        
         with col_btn1:
+            if st.button("⚙️ Editar Configuración", use_container_width=True, type="primary"):
+                # Ir a paso 2 en modo edición
+                st.session_state.proyeccion_para_editar = proyeccion_data
+                st.session_state.modo_edicion = True
+                st.session_state.modo_visualizacion = False
+                st.session_state.paso_fcl = 2
+                st.rerun()
+        
+        with col_btn2:
             if st.button("🔄 Nueva Proyección", use_container_width=True):
-                # Limpiar y volver al paso 1
-                for key in ['proyeccion_cargada', 'modo_edicion_proyeccion', 'proyeccion_df']:
+                # Limpiar todo y volver al paso 1
+                for key in ['proyeccion_cargada', 'modo_visualizacion', 'modo_edicion', 
+                           'proyeccion_para_editar', 'proyeccion_df', 'conceptos_fcl',
+                           'contratos_fcl', 'fases_config_fcl', 'hitos_fcl']:
                     if key in st.session_state:
                         del st.session_state[key]
                 st.session_state.paso_fcl = 1
                 st.rerun()
         
-        with col_btn2:
-            if st.button("➡️ Continuar a Cartera/Ejecución", use_container_width=True, type="primary"):
+        with col_btn3:
+            if st.button("➡️ Continuar a Cartera/Ejecución", use_container_width=True):
                 st.info("🚧 Módulos de Cartera y Ejecución Real próximamente disponibles")
         
         st.markdown("---")
     
     else:
-        # Flujo normal: generar proyección nueva
+        # Flujo normal: generar proyección nueva o regenerar desde edición
+        
         # Botón volver
-        if st.button("◀️ Volver a configuración"):
-            st.session_state.paso_fcl = 2
-            st.rerun()
+        col_v1, col_v2 = st.columns([1, 4])
+        with col_v1:
+            if st.button("◀️ Volver"):
+                st.session_state.paso_fcl = 2
+                st.rerun()
+        
+        with col_v2:
+            if st.session_state.get('modo_edicion', False):
+                st.caption("✏️ **Modo Edición:** Regenerando proyección con nuevos parámetros")
         
         # Obtener datos de session_state
         cotizacion = st.session_state.cotizacion_fcl
@@ -1694,8 +1777,10 @@ def render_paso_3_proyeccion():
         else:
             totales_aiu = st.session_state.totales_aiu_fcl
         
-        # Generar proyección
-        if 'proyeccion_df' not in st.session_state:
+        # Generar proyección (forzar si viene de modo edición)
+        regenerar = st.session_state.get('modo_edicion', False)
+        
+        if 'proyeccion_df' not in st.session_state or regenerar:
             with st.spinner("Generando proyección..."):
                 # Obtener configuración de distribución
                 config_dist = st.session_state.get('distribucion_temporal', {
@@ -1716,6 +1801,14 @@ def render_paso_3_proyeccion():
                     config_distribucion=config_dist
                 )
                 st.session_state.proyeccion_df = proyeccion_df
+                
+                # Si era regeneración, limpiar flags de edición
+                if regenerar:
+                    st.success("✅ Proyección regenerada con nuevos parámetros")
+                    # Limpiar flags de edición para que no se regenere en cada refresh
+                    for key in ['modo_edicion', 'proyeccion_para_editar']:
+                        if key in st.session_state:
+                            del st.session_state[key]
         else:
             proyeccion_df = st.session_state.proyeccion_df
         
