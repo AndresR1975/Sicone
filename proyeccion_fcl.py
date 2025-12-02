@@ -1633,18 +1633,28 @@ def render_paso_3_proyeccion():
     
     st.header("📊 Paso 3: Proyección de Flujo de Caja")
     
+    # Inicializar variables comunes
+    cotizacion = None
+    contratos = None
+    fecha_inicio = None
+    fases = []
+    hitos = []
+    df = None
+    
     # Verificar si se cargó una proyección existente
     if 'proyeccion_cargada' in st.session_state and st.session_state.get('modo_edicion_proyeccion', False):
         st.info("🔄 **Proyección cargada desde archivo** - Mostrando datos previamente generados")
         
-        # Reconstruir DataFrame desde JSON cargado
+        # Reconstruir desde JSON cargado
         proyeccion_data = st.session_state.proyeccion_cargada
         df = pd.DataFrame(proyeccion_data['proyeccion_semanal'])
         
-        # Restaurar variables necesarias
+        # Restaurar TODAS las variables necesarias
         cotizacion = st.session_state.cotizacion_fcl
         contratos = proyeccion_data['contratos']
         fecha_inicio = datetime.fromisoformat(proyeccion_data['proyecto']['fecha_inicio']).date()
+        fases = proyeccion_data.get('configuracion', {}).get('fases', [])
+        hitos = proyeccion_data.get('configuracion', {}).get('hitos', [])
         
         col_btn1, col_btn2 = st.columns(2)
         with col_btn1:
