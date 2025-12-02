@@ -2121,5 +2121,9 @@ def main():
 # EJECUCIÓN
 # ============================================================================
 
-# main() disponible para importación
+# Verificar que el módulo se cargó correctamente
+__module_loaded__ = True
+
+# main() está disponible para importación desde otros módulos
+# Para usar: import proyeccion_fcl; proyeccion_fcl.main()
 
