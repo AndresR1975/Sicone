@@ -1176,6 +1176,20 @@ def render_paso_2_configurar_proyecto():
             # pero con la estructura mínima necesaria
             st.session_state.conceptos_fcl = {}
         
+        # Restaurar totales AIU desde proyección
+        if 'totales_aiu_fcl' not in st.session_state:
+            # Si el JSON tiene totales_aiu, usarlos
+            if 'totales_aiu' in proy_data:
+                st.session_state.totales_aiu_fcl = proy_data['totales_aiu']
+            else:
+                # Calcular desde proyeccion_semanal
+                df_temp = pd.DataFrame(proy_data['proyeccion_semanal'])
+                st.session_state.totales_aiu_fcl = {
+                    'admin': float(df_temp['Admin'].sum()),
+                    'imprevistos': float(df_temp['Imprevistos'].sum()),
+                    'logistica': float(df_temp['Logistica'].sum())
+                }
+        
         col_edit1, col_edit2 = st.columns(2)
         with col_edit1:
             if st.button("🔄 Volver a Resultados", use_container_width=True):
@@ -1385,9 +1399,15 @@ def render_paso_2_configurar_proyecto():
     
     with col1:
         st.markdown("##### 🧱 Materiales")
+        # Preseleccionar según valor guardado
+        opciones_mat = ['lineal', 'peso_inicial']
+        valor_actual_mat = st.session_state.distribucion_temporal.get('materiales', 'lineal')
+        index_mat = opciones_mat.index(valor_actual_mat) if valor_actual_mat in opciones_mat else 0
+        
         modo_materiales = st.radio(
             "Distribución de Materiales:",
-            options=['lineal', 'peso_inicial'],
+            options=opciones_mat,
+            index=index_mat,
             format_func=lambda x: '📊 Lineal (uniforme)' if x == 'lineal' else '📈 Mayor peso al inicio',
             key='modo_dist_materiales',
             horizontal=True
@@ -1409,9 +1429,15 @@ def render_paso_2_configurar_proyecto():
     
     with col2:
         st.markdown("##### ⚙️ Equipos")
+        # Preseleccionar según valor guardado
+        opciones_eq = ['lineal', 'peso_inicial']
+        valor_actual_eq = st.session_state.distribucion_temporal.get('equipos', 'lineal')
+        index_eq = opciones_eq.index(valor_actual_eq) if valor_actual_eq in opciones_eq else 0
+        
         modo_equipos = st.radio(
             "Distribución de Equipos:",
-            options=['lineal', 'peso_inicial'],
+            options=opciones_eq,
+            index=index_eq,
             format_func=lambda x: '📊 Lineal (uniforme)' if x == 'lineal' else '📈 Mayor peso al inicio',
             key='modo_dist_equipos',
             horizontal=True
@@ -2316,6 +2342,11 @@ def render_opciones_guardar(
             'total_egresos': float(df['Total_Egresos'].sum()),
             'saldo_final': float(df['Saldo_Acumulado'].iloc[-1]),
             'semanas_total': len(df)
+        },
+        'totales_aiu': {
+            'admin': float(df['Admin'].sum()),
+            'imprevistos': float(df['Imprevistos'].sum()),
+            'logistica': float(df['Logistica'].sum())
         },
         'configuracion': {
             'fases': fases,
