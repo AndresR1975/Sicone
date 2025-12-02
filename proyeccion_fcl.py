@@ -760,12 +760,31 @@ def generar_proyeccion_completa(
     contrato_1: Dict,
     contrato_2: Dict,
     totales_aiu: Dict,
-    fecha_inicio: datetime
+    fecha_inicio: datetime,
+    config_distribucion: Dict = None
 ) -> pd.DataFrame:
     """
     Genera la proyección completa semana a semana
     Incluye: ingresos proyectados, egresos por categoría, flujo neto, saldo
+    
+    Args:
+        config_distribucion: Dict con configuración de distribución temporal
+            {
+                'materiales': 'lineal' o 'peso_inicial',
+                'equipos': 'lineal' o 'peso_inicial',
+                'peso_inicial_materiales': int (40-80),
+                'peso_inicial_equipos': int (40-80)
+            }
     """
+    
+    # Default: distribución lineal
+    if config_distribucion is None:
+        config_distribucion = {
+            'materiales': 'lineal',
+            'equipos': 'lineal',
+            'peso_inicial_materiales': 60,
+            'peso_inicial_equipos': 60
+        }
     
     # 1. Calcular duración total
     duracion_total = sum([f['duracion_semanas'] for f in fases_config if f['duracion_semanas']])
@@ -808,13 +827,50 @@ def generar_proyeccion_completa(
         egresos_fase['imprevistos'] += totales_aiu['imprevistos'] * (fase['pct_imprevistos'] / 100)
         egresos_fase['logistica'] += totales_aiu['logistica'] * (fase['pct_logistica'] / 100)
         
-        # Distribuir semanalmente de forma LINEAL (como Excel)
-        egresos_semanales = {
-            k: v / duracion for k, v in egresos_fase.items()
-        }
+        # ========================================================================
+        # Distribuir semanalmente según configuración
+        # ========================================================================
+        
+        # Preparar distribuciones por categoría
+        distribucion_materiales = []
+        distribucion_equipos = []
+        
+        # MATERIALES
+        if config_distribucion['materiales'] == 'peso_inicial' and duracion > 1:
+            peso_inicial = config_distribucion['peso_inicial_materiales'] / 100
+            primera_semana = egresos_fase['materiales'] * peso_inicial
+            resto = egresos_fase['materiales'] - primera_semana
+            resto_semanal = resto / (duracion - 1)
+            
+            distribucion_materiales = [primera_semana] + [resto_semanal] * (duracion - 1)
+        else:
+            # Lineal
+            mat_semanal = egresos_fase['materiales'] / duracion
+            distribucion_materiales = [mat_semanal] * duracion
+        
+        # EQUIPOS
+        if config_distribucion['equipos'] == 'peso_inicial' and duracion > 1:
+            peso_inicial = config_distribucion['peso_inicial_equipos'] / 100
+            primera_semana = egresos_fase['equipos'] * peso_inicial
+            resto = egresos_fase['equipos'] - primera_semana
+            resto_semanal = resto / (duracion - 1)
+            
+            distribucion_equipos = [primera_semana] + [resto_semanal] * (duracion - 1)
+        else:
+            # Lineal
+            eq_semanal = egresos_fase['equipos'] / duracion
+            distribucion_equipos = [eq_semanal] * duracion
+        
+        # Resto de categorías siempre lineales
+        mo_semanal = egresos_fase['mano_obra'] / duracion
+        admin_semanal = egresos_fase['admin'] / duracion
+        imprevistos_semanal = egresos_fase['imprevistos'] / duracion
+        logistica_semanal = egresos_fase['logistica'] / duracion
         
         # Generar registros semanales
         for semana_fase in range(1, duracion + 1):
+            idx_semana = semana_fase - 1
+            
             # Calcular ingresos de esta semana
             ingresos_semana = 0
             
@@ -825,8 +881,11 @@ def generar_proyeccion_completa(
                        (hito['momento'] == 'fin' and semana_fase == duracion):
                         ingresos_semana += hito['monto']
             
-            # Calcular totales
-            total_egresos = sum(egresos_semanales.values())
+            # Egresos de esta semana según distribución
+            mat_semana = distribucion_materiales[idx_semana]
+            eq_semana = distribucion_equipos[idx_semana]
+            
+            total_egresos = mat_semana + eq_semana + mo_semanal + admin_semanal + imprevistos_semanal + logistica_semanal
             flujo_neto = ingresos_semana - total_egresos
             saldo_acumulado += flujo_neto
             
@@ -839,12 +898,12 @@ def generar_proyeccion_completa(
                 'Fase': fase['nombre'],
                 'Semana_Fase': semana_fase,
                 'Ingresos_Proyectados': ingresos_semana,
-                'Materiales': egresos_semanales['materiales'],
-                'Equipos': egresos_semanales['equipos'],
-                'Mano_Obra': egresos_semanales['mano_obra'],
-                'Admin': egresos_semanales['admin'],
-                'Imprevistos': egresos_semanales['imprevistos'],
-                'Logistica': egresos_semanales['logistica'],
+                'Materiales': mat_semana,
+                'Equipos': eq_semana,
+                'Mano_Obra': mo_semanal,
+                'Admin': admin_semanal,
+                'Imprevistos': imprevistos_semanal,
+                'Logistica': logistica_semanal,
                 'Total_Egresos': total_egresos,
                 'Flujo_Neto': flujo_neto,
                 'Saldo_Acumulado': saldo_acumulado
@@ -1058,9 +1117,17 @@ def render_paso_2_configurar_proyecto():
                 st.success("Fecha aplicada ✓")
                 st.rerun()
     
+    # Guardar fecha cuando usuario la cambia
+    def on_fecha_change():
+        if 'fecha_inicio_fcl' in st.session_state:
+            # Guardar en variable más permanente
+            st.session_state.fecha_inicio_usuario = st.session_state.fecha_inicio_fcl
+    
     # Input principal (siempre visible)
-    # Preservar fecha: widget > calculada > actual
-    if 'fecha_inicio_fcl' in st.session_state:
+    # Preservar fecha: usuario > widget > calculada > actual
+    if 'fecha_inicio_usuario' in st.session_state:
+        fecha_default = st.session_state.fecha_inicio_usuario
+    elif 'fecha_inicio_fcl' in st.session_state:
         fecha_default = st.session_state.fecha_inicio_fcl
     elif 'fecha_inicio_calculada' in st.session_state:
         fecha_default = st.session_state.fecha_inicio_calculada
@@ -1073,6 +1140,7 @@ def render_paso_2_configurar_proyecto():
         min_value=datetime(2020, 1, 1).date(),
         max_value=datetime(2030, 12, 31).date(),
         key="fecha_inicio_fcl",
+        on_change=on_fecha_change,
         help="Fecha en la que inicia la ejecución del proyecto (Fase 1: Procesos Administrativos)"
     )
     
@@ -1111,6 +1179,79 @@ def render_paso_2_configurar_proyecto():
             st.metric("🏁 Fin estimado", fecha_fin.strftime('%d/%m/%Y'))
         else:
             st.caption("ℹ️ Configure las fases abajo para ver fecha de fin")
+    
+    st.markdown("---")
+    
+    # ========================================================================
+    # CONFIGURACIÓN DE DISTRIBUCIÓN TEMPORAL DE COSTOS
+    # ========================================================================
+    
+    st.subheader("📊 Distribución Temporal de Costos")
+    
+    st.markdown("""
+    Configure cómo se distribuyen los costos de **Materiales** y **Equipos** a lo largo de cada fase.
+    """)
+    
+    # Inicializar configuración si no existe
+    if 'distribucion_temporal' not in st.session_state:
+        st.session_state.distribucion_temporal = {
+            'materiales': 'lineal',
+            'equipos': 'lineal',
+            'peso_inicial_materiales': 60,
+            'peso_inicial_equipos': 60
+        }
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        st.markdown("##### 🧱 Materiales")
+        modo_materiales = st.radio(
+            "Distribución de Materiales:",
+            options=['lineal', 'peso_inicial'],
+            format_func=lambda x: '📊 Lineal (uniforme)' if x == 'lineal' else '📈 Mayor peso al inicio',
+            key='modo_dist_materiales',
+            horizontal=True
+        )
+        
+        if modo_materiales == 'peso_inicial':
+            peso_inicial_mat = st.slider(
+                "% de materiales en primera semana:",
+                min_value=40,
+                max_value=80,
+                value=st.session_state.distribucion_temporal.get('peso_inicial_materiales', 60),
+                step=5,
+                key='peso_ini_mat',
+                help="El resto se distribuye linealmente en las semanas restantes"
+            )
+            st.session_state.distribucion_temporal['peso_inicial_materiales'] = peso_inicial_mat
+        
+        st.session_state.distribucion_temporal['materiales'] = modo_materiales
+    
+    with col2:
+        st.markdown("##### ⚙️ Equipos")
+        modo_equipos = st.radio(
+            "Distribución de Equipos:",
+            options=['lineal', 'peso_inicial'],
+            format_func=lambda x: '📊 Lineal (uniforme)' if x == 'lineal' else '📈 Mayor peso al inicio',
+            key='modo_dist_equipos',
+            horizontal=True
+        )
+        
+        if modo_equipos == 'peso_inicial':
+            peso_inicial_eq = st.slider(
+                "% de equipos en primera semana:",
+                min_value=40,
+                max_value=80,
+                value=st.session_state.distribucion_temporal.get('peso_inicial_equipos', 60),
+                step=5,
+                key='peso_ini_eq',
+                help="El resto se distribuye linealmente en las semanas restantes"
+            )
+            st.session_state.distribucion_temporal['peso_inicial_equipos'] = peso_inicial_eq
+        
+        st.session_state.distribucion_temporal['equipos'] = modo_equipos
+    
+    st.caption("💡 **Tip:** Use 'Mayor peso al inicio' si los materiales y equipos se adquieren principalmente al comienzo de cada fase.")
     
     st.markdown("---")
     
@@ -1438,6 +1579,14 @@ def render_paso_3_proyeccion():
     # Generar proyección
     if 'proyeccion_df' not in st.session_state:
         with st.spinner("Generando proyección..."):
+            # Obtener configuración de distribución
+            config_dist = st.session_state.get('distribucion_temporal', {
+                'materiales': 'lineal',
+                'equipos': 'lineal',
+                'peso_inicial_materiales': 60,
+                'peso_inicial_equipos': 60
+            })
+            
             proyeccion_df = generar_proyeccion_completa(
                 conceptos=conceptos,
                 fases_config=fases,
@@ -1445,7 +1594,8 @@ def render_paso_3_proyeccion():
                 contrato_1=contratos['contrato_1'],
                 contrato_2=contratos['contrato_2'],
                 totales_aiu=totales_aiu,
-                fecha_inicio=datetime.combine(fecha_inicio, datetime.min.time())
+                fecha_inicio=datetime.combine(fecha_inicio, datetime.min.time()),
+                config_distribucion=config_dist
             )
             st.session_state.proyeccion_df = proyeccion_df
     else:
@@ -1631,7 +1781,6 @@ def render_graficas_proyeccion(df: pd.DataFrame):
         mode='lines+markers',
         line=dict(color='rgb(59, 130, 246)', width=3),
         marker=dict(size=6),
-        yaxis='y2',
         hovertemplate='Semana %{x}<br>Saldo: $%{y:,.0f}<extra></extra>'
     ))
     
@@ -1639,11 +1788,6 @@ def render_graficas_proyeccion(df: pd.DataFrame):
         title='Ingresos, Egresos y Saldo Acumulado',
         xaxis_title='Semana',
         yaxis_title='Monto ($)',
-        yaxis2=dict(
-            title='Saldo Acumulado ($)',
-            overlaying='y',
-            side='right'
-        ),
         hovermode='x unified',
         height=500,
         barmode='relative'
