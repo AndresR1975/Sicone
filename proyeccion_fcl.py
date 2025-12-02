@@ -2,14 +2,26 @@
 SICONE - Módulo de Proyección de Flujo de Caja
 Fase 1: Configuración y Proyección de Ingresos/Egresos
 
-Versión: 1.1
+Versión: 1.2.1
 Fecha: Diciembre 2025
 Autor: AI-MindNovation
 
+CHANGELOG v1.2.1 (CRÍTICO):
+- FIX: Ruana clasificada correctamente en fase Cubierta (no en Complementarios)
+- FIX: Vuelto a modelo de distribución LINEAL (como Excel de referencia)
+- REASON: Excel NO usa desembolsos escalonados y NO genera saldos negativos
+- VALIDATION: Verificado contra Formato_Proyeccion_de_Obra_y_Flujo_de_Caja
+
+CHANGELOG v1.2:
+- FEATURE: Interfaz para editar porcentajes Mat/MO por concepto sin discriminar
+- FEATURE: Alertas visuales de saldos negativos con análisis detallado
+- FIX: Reclasificación de conceptos de techos según mapa mental SICONE
+- FIX: Nombre de archivo descargable incluye nombre del proyecto
+- IMPROVEMENT: Dashboard de déficit con gráfica y tabla de semanas críticas
+
 CHANGELOG v1.1:
-- FIX: Hito 'Fin de Obra' ahora se ejecuta al FINAL de la fase Entrega (no al inicio)
-- FIX: Eliminada asignación redundante de fecha_inicio_fcl que causaba StreamlitAPIException
-- Mejoras en la estabilidad del manejo de session_state
+- FIX: Hito 'Fin de Obra' ahora se ejecuta al FINAL de la fase Entrega
+- FIX: Eliminada asignación redundante de fecha_inicio_fcl
 """
 
 import streamlit as st
@@ -150,23 +162,23 @@ def extraer_conceptos_dinamico(cotizacion: dict) -> Dict:
         techos_cubierta = {}
         techos_complementarios = {}
         
-        # Clasificación de items
-        # CUBIERTA: Todo lo relacionado con techo exterior
+        # Clasificación según mapa mental SICONE
+        # CUBIERTA: Cubiertas exteriores principales + RUANA
         items_cubierta = [
+            'Ruana',  # ← VA EN CUBIERTA
             'Cubierta, Superboard y Manto',
-            'Ruana',
             'Cubierta, Superboard y Shingle',
             'Canoas',
-            'Pérgolas y Estructura sin Techo',
             'Tapacanal y Lagrimal'
         ]
         
-        # COMPLEMENTARIOS: Elementos estructurales internos (solo Entrepiso)
+        # COMPLEMENTARIOS: Elementos que van con Estructura/Mampostería
         items_complementarios = [
             'Contramarcos - Ventana',
             'Contramarcos - Puerta',
             'Embudos y Boquillas',
-            'Entrepiso Placa Fácil'
+            'Entrepiso Placa Fácil',
+            'Pérgolas y Estructura sin Techo'
         ]
         
         for item, datos in cotizacion['mamposteria_techos'].items():
@@ -191,7 +203,7 @@ def extraer_conceptos_dinamico(cotizacion: dict) -> Dict:
                 elif item in items_complementarios:
                     techos_complementarios[item] = detalle
         
-        # Agrupar Techos/Cubierta
+        # Agrupar Techos/Cubierta (solo cubiertas principales)
         if techos_cubierta:
             conceptos['Techos (Cubierta)'] = {
                 'total': sum([v['total'] for v in techos_cubierta.values()]),
@@ -202,7 +214,7 @@ def extraer_conceptos_dinamico(cotizacion: dict) -> Dict:
                 'fuente': 'mamposteria_techos'
             }
         
-        # Agrupar Complementarios de Techos
+        # Agrupar Complementarios de Techos (van con Estructura/Mampostería)
         if techos_complementarios:
             conceptos['Complementarios (Techos)'] = {
                 'total': sum([v['total'] for v in techos_complementarios.values()]),
@@ -233,12 +245,12 @@ def extraer_conceptos_dinamico(cotizacion: dict) -> Dict:
                 ) / 100
                 total_cimentacion *= factor_aiu_cim
             
-            # Estimación de distribución (70% mat, 10% equip, 20% M.O.)
+            # NO APLICAR discriminación hardcoded - dejar que usuario configure
             conceptos['Cimentaciones'] = {
                 'total': total_cimentacion,
-                'materiales': total_cimentacion * 0.70,
-                'equipos': total_cimentacion * 0.10,
-                'mano_obra': total_cimentacion * 0.20,
+                'materiales': 0,  # Usuario configura
+                'equipos': 0,     # Usuario configura
+                'mano_obra': 0,   # Usuario configura
                 'fuente': cim_key,
                 'items': cotizacion[cim_key]
             }
@@ -259,12 +271,12 @@ def extraer_conceptos_dinamico(cotizacion: dict) -> Dict:
             ) / 100
             total_complementarios *= factor_aiu_comp
         
-        # Estimación de distribución (65% mat, 10% equip, 25% M.O.)
+        # NO APLICAR discriminación hardcoded - dejar que usuario configure
         conceptos['Complementarios'] = {
             'total': total_complementarios,
-            'materiales': total_complementarios * 0.65,
-            'equipos': total_complementarios * 0.10,
-            'mano_obra': total_complementarios * 0.25,
+            'materiales': 0,  # Usuario configura
+            'equipos': 0,     # Usuario configura
+            'mano_obra': 0,   # Usuario configura
             'fuente': 'complementarios',
             'items': cotizacion['complementarios']
         }
@@ -662,7 +674,7 @@ def configurar_hitos_default(contrato_1: Dict, contrato_2: Dict) -> List[Dict]:
             'porcentaje_c2': 10,
             'monto': contrato_1['monto'] * 0.10 + contrato_2['monto'] * 0.10,
             'fase_vinculada': 'Entrega',
-            'momento': 'fin'  # Corregido: pago al FIN de la fase Entrega
+            'momento': 'fin'  # CRÍTICO: Al FIN de Entrega, no al inicio
         }
     ]
     
@@ -727,7 +739,7 @@ def generar_proyeccion_completa(
         egresos_fase['imprevistos'] += totales_aiu['imprevistos'] * (fase['pct_imprevistos'] / 100)
         egresos_fase['logistica'] += totales_aiu['logistica'] * (fase['pct_logistica'] / 100)
         
-        # Distribuir semanalmente (lineal)
+        # Distribuir semanalmente de forma LINEAL (como Excel)
         egresos_semanales = {
             k: v / duracion for k, v in egresos_fase.items()
         }
@@ -1090,6 +1102,115 @@ def render_paso_2_configurar_proyecto():
     if duraciones_actualizadas:
         st.session_state.fases_config_fcl = fases
     
+    st.markdown("---")
+    
+    # ========================================================================
+    # EDITAR PORCENTAJES MAT/MO (SOLO PARA CONCEPTOS SIN DISCRIMINAR)
+    # ========================================================================
+    
+    st.markdown("#### 🔢 Distribución de Costos por Concepto")
+    
+    st.info("""
+    📌 **¿Para qué sirve esto?**  
+    
+    Los conceptos que no tienen discriminación de costos en la cotización (como Cimentación y Complementarios) 
+    necesitan una estimación de cómo se distribuyen entre Materiales, Equipos y Mano de Obra.
+    
+    Ajuste estos porcentajes según su experiencia con proyectos similares.
+    """)
+    
+    porcentajes_actualizados = False
+    
+    # Identificar qué conceptos necesitan estimación
+    conceptos_editables = {}
+    
+    for fase in fases:
+        for nombre_concepto in fase['conceptos']:
+            if nombre_concepto in conceptos:
+                concepto_datos = conceptos[nombre_concepto]
+                # Verificar si NO tiene discriminación completa
+                tiene_discriminacion = (
+                    concepto_datos.get('materiales', 0) > 0 or
+                    concepto_datos.get('equipos', 0) > 0 or
+                    concepto_datos.get('mano_obra', 0) > 0
+                )
+                
+                if not tiene_discriminacion and nombre_concepto not in conceptos_editables:
+                    conceptos_editables[nombre_concepto] = {
+                        'fase': fase['nombre'],
+                        'total': concepto_datos['total'],
+                        'pct_materiales': fase['porcentajes_usuario']['materiales'],
+                        'pct_mano_obra': fase['porcentajes_usuario']['mano_obra']
+                    }
+    
+    if conceptos_editables:
+        st.markdown("**Conceptos que requieren estimación:**")
+        
+        for i, (nombre_concepto, datos) in enumerate(conceptos_editables.items()):
+            with st.expander(f"⚙️ {nombre_concepto} (${datos['total']:,.0f})", expanded=False):
+                st.caption(f"📍 Fase asociada: {datos['fase']}")
+                
+                col1, col2, col3 = st.columns(3)
+                
+                with col1:
+                    materiales = st.number_input(
+                        "Materiales (%)",
+                        min_value=0,
+                        max_value=100,
+                        value=datos['pct_materiales'],
+                        step=5,
+                        key=f"concepto_mat_{i}",
+                        help="Porcentaje del costo que corresponde a materiales"
+                    )
+                
+                with col2:
+                    mano_obra = st.number_input(
+                        "Mano de Obra (%)",
+                        min_value=0,
+                        max_value=100,
+                        value=datos['pct_mano_obra'],
+                        step=5,
+                        key=f"concepto_mo_{i}",
+                        help="Porcentaje del costo que corresponde a mano de obra"
+                    )
+                
+                with col3:
+                    equipos = 100 - materiales - mano_obra
+                    
+                    if equipos >= 0:
+                        st.metric("Equipos (%)", equipos, 
+                                 help="Calculado automáticamente como: 100% - Materiales - M.O.")
+                        
+                        if materiales + mano_obra == 100:
+                            st.success("✅ 100%")
+                        elif materiales + mano_obra < 100:
+                            st.info(f"ℹ️ {equipos}% para equipos")
+                    else:
+                        st.error(f"❌ Excede 100% por {abs(equipos)}%")
+                
+                # Actualizar si cambió
+                if materiales != datos['pct_materiales'] or mano_obra != datos['pct_mano_obra']:
+                    # Actualizar en la fase correspondiente
+                    for fase in fases:
+                        if fase['nombre'] == datos['fase']:
+                            fase['porcentajes_usuario']['materiales'] = materiales
+                            fase['porcentajes_usuario']['mano_obra'] = mano_obra
+                            porcentajes_actualizados = True
+                            break
+                
+                # Mostrar estimación en pesos
+                st.caption(f"💰 Estimación: Materiales ${datos['total'] * materiales/100:,.0f} | "
+                          f"M.O. ${datos['total'] * mano_obra/100:,.0f} | "
+                          f"Equipos ${datos['total'] * equipos/100:,.0f}")
+        
+        if porcentajes_actualizados:
+            st.session_state.fases_config_fcl = fases
+            st.success("✅ Porcentajes actualizados")
+    else:
+        st.success("✅ Todos los conceptos tienen discriminación completa en la cotización")
+    
+    st.markdown("---")
+    
     # Calcular y mostrar duración total y cronograma
     duracion_total = sum([f['duracion_semanas'] for f in fases if f['duracion_semanas']])
     
@@ -1198,7 +1319,7 @@ def render_paso_2_configurar_proyecto():
     if st.button("▶️ Generar Proyección", type="primary", use_container_width=True):
         # Validar que todas las fases tengan duración
         if all([f['duracion_semanas'] for f in fases]):
-            # fecha_inicio_fcl ya está en session_state por el widget
+            st.session_state.fecha_inicio_fcl = fecha_inicio
             st.session_state.paso_fcl = 3
             st.rerun()
         else:
@@ -1278,6 +1399,109 @@ def render_paso_3_proyeccion():
     with col4:
         st.metric("⏱️ Duración", f"{semanas_total} semanas", 
                   delta=f"{semanas_total/4:.1f} meses")
+    
+    st.markdown("---")
+    
+    # ========================================================================
+    # ALERTAS DE SALDOS NEGATIVOS
+    # ========================================================================
+    
+    saldo_minimo = proyeccion_df['Saldo_Acumulado'].min()
+    
+    if saldo_minimo < 0:
+        semanas_negativas = proyeccion_df[proyeccion_df['Saldo_Acumulado'] < 0]
+        primera_semana_deficit = semanas_negativas['Semana'].iloc[0]
+        ultima_semana_deficit = semanas_negativas['Semana'].iloc[-1]
+        
+        st.error(f"""
+        ⚠️ **ALERTA DE FLUJO DE CAJA**
+        
+        La proyección muestra **saldos negativos** en {len(semanas_negativas)} semanas del proyecto.
+        
+        - **Saldo más bajo:** ${saldo_minimo:,.0f}
+        - **Primera semana afectada:** Semana {primera_semana_deficit}
+        - **Última semana afectada:** Semana {ultima_semana_deficit}
+        
+        **Esto significa:**
+        - El proyecto requiere financiamiento adicional temporal
+        - Los hitos de pago no están sincronizados con los egresos
+        - Se necesita capital de trabajo para cubrir el déficit
+        
+        **Soluciones sugeridas:**
+        1. **Negociar hitos de pago intermedios** con el cliente
+        2. **Ajustar el cronograma** para equilibrar ingresos/egresos
+        3. **Considerar línea de crédito** por ${abs(saldo_minimo):,.0f}
+        4. **Revisar distribución de conceptos** entre fases
+        """)
+        
+        # Gráfica específica de déficit
+        with st.expander("📊 Ver Análisis Detallado de Déficit", expanded=True):
+            fig_deficit = go.Figure()
+            
+            # Saldo acumulado con relleno
+            fig_deficit.add_trace(go.Scatter(
+                x=proyeccion_df['Semana'],
+                y=proyeccion_df['Saldo_Acumulado'],
+                fill='tozeroy',
+                fillcolor='rgba(239, 68, 68, 0.3)',
+                line=dict(color='rgb(239, 68, 68)', width=3),
+                name='Saldo Acumulado',
+                hovertemplate='Semana %{x}<br>Saldo: $%{y:,.0f}<extra></extra>'
+            ))
+            
+            # Línea en cero
+            fig_deficit.add_hline(
+                y=0, 
+                line_dash="dash", 
+                line_color="black",
+                line_width=2,
+                annotation_text="Línea de equilibrio",
+                annotation_position="right"
+            )
+            
+            # Resaltar zona de déficit
+            fig_deficit.add_vrect(
+                x0=primera_semana_deficit - 0.5,
+                x1=ultima_semana_deficit + 0.5,
+                fillcolor="rgba(255, 0, 0, 0.1)",
+                line_width=0,
+                annotation_text=f"Zona de Déficit ({len(semanas_negativas)} semanas)",
+                annotation_position="top left"
+            )
+            
+            fig_deficit.update_layout(
+                title='Análisis de Saldo Acumulado - Identificación de Déficit',
+                xaxis_title='Semana',
+                yaxis_title='Saldo ($)',
+                height=450,
+                hovermode='x unified'
+            )
+            
+            st.plotly_chart(fig_deficit, use_container_width=True)
+            
+            # Tabla de semanas críticas
+            st.markdown("**Semanas con Saldo Negativo:**")
+            semanas_criticas = proyeccion_df[proyeccion_df['Saldo_Acumulado'] < 0][
+                ['Semana', 'Fecha', 'Fase', 'Ingresos_Proyectados', 'Total_Egresos', 
+                 'Flujo_Neto', 'Saldo_Acumulado']
+            ].copy()
+            
+            # Formatear montos
+            for col in ['Ingresos_Proyectados', 'Total_Egresos', 'Flujo_Neto', 'Saldo_Acumulado']:
+                semanas_criticas[col] = semanas_criticas[col].apply(lambda x: f"${x:,.0f}")
+            
+            st.dataframe(semanas_criticas, use_container_width=True, hide_index=True)
+    else:
+        st.success(f"""
+        ✅ **FLUJO DE CAJA SALUDABLE**
+        
+        El proyecto mantiene saldo positivo durante toda la ejecución.
+        
+        - **Saldo mínimo:** ${saldo_minimo:,.0f}
+        - **Saldo final:** ${saldo_final:,.0f}
+        
+        No se requiere financiamiento adicional en condiciones ideales.
+        """)
     
     st.markdown("---")
     
@@ -1622,11 +1846,16 @@ def render_opciones_guardar(df: pd.DataFrame, cotizacion: dict):
     
     with col1:
         # Exportar CSV
+        # Obtener nombre del proyecto y limpiarlo
+        nombre_proyecto = cotizacion.get('proyecto', {}).get('nombre', 'proyecto')
+        nombre_limpio = nombre_proyecto.replace(' ', '_').replace('/', '_')
+        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        
         csv = df.to_csv(index=False).encode('utf-8')
         st.download_button(
             label="📥 Descargar CSV",
             data=csv,
-            file_name=f"proyeccion_fcl_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
+            file_name=f"{nombre_limpio}_proyeccion_{timestamp}.csv",
             mime="text/csv",
             use_container_width=True
         )
@@ -1637,7 +1866,7 @@ def render_opciones_guardar(df: pd.DataFrame, cotizacion: dict):
         st.download_button(
             label="📥 Descargar JSON",
             data=json_str,
-            file_name=f"proyeccion_fcl_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json",
+            file_name=f"{nombre_limpio}_proyeccion_{timestamp}.json",
             mime="application/json",
             use_container_width=True
         )
