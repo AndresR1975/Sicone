@@ -1713,12 +1713,18 @@ def render_paso_3_proyeccion():
         proyeccion_data = st.session_state.proyeccion_cargada
         df = pd.DataFrame(proyeccion_data['proyeccion_semanal'])
         
-        # Restaurar TODAS las variables necesarias
+        # Restaurar variables Y guardar en session_state
         cotizacion = st.session_state.cotizacion_fcl
         contratos = proyeccion_data['contratos']
         fecha_inicio = datetime.fromisoformat(proyeccion_data['proyecto']['fecha_inicio']).date()
         fases = proyeccion_data.get('configuracion', {}).get('fases', [])
         hitos = proyeccion_data.get('configuracion', {}).get('hitos', [])
+        
+        # CRÍTICO: Guardar en session_state para que render_opciones_guardar() tenga acceso
+        st.session_state.fecha_inicio_fcl = fecha_inicio
+        st.session_state.contratos_fcl = contratos
+        st.session_state.fases_config_fcl = fases
+        st.session_state.hitos_fcl = hitos
         
         col_btn1, col_btn2, col_btn3 = st.columns(3)
         
