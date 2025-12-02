@@ -406,12 +406,6 @@ def asignar_contratos(conceptos: Dict, cotizacion: dict) -> Tuple[Dict, Dict]:
         imprevistos_pct = config_aiu.get('Imprevistos (%)', 0) / 100
         admin_pct = config_aiu.get('Administración (%)', 0) / 100
         logistica_pct = config_aiu.get('Logística (%)', 0) / 100
-        
-        # AIU se calcula sobre base constructiva
-        aiu_c1 = base_constructiva_c1 * (comision_pct + imprevistos_pct + admin_pct + logistica_pct)
-        
-        contrato_1['aiu'] = aiu_c1
-        contrato_1['desglose']['AIU Contrato 1'] = aiu_c1
     
     # Aplicar AIU GENERAL sobre C1 (incluye utilidad)
     if 'config_aiu' in cotizacion:
