@@ -413,6 +413,25 @@ def asignar_contratos(conceptos: Dict, cotizacion: dict) -> Tuple[Dict, Dict]:
         contrato_1['aiu'] = aiu_c1
         contrato_1['desglose']['AIU Contrato 1'] = aiu_c1
     
+    # Aplicar AIU GENERAL sobre C1 (incluye utilidad)
+    if 'config_aiu' in cotizacion:
+        config_aiu = cotizacion['config_aiu']
+        
+        comision_pct = config_aiu.get('Comisión de Ventas (%)', 0) / 100
+        imprevistos_pct = config_aiu.get('Imprevistos (%)', 0) / 100
+        admin_pct = config_aiu.get('Administración (%)', 0) / 100
+        logistica_pct = config_aiu.get('Logística (%)', 0) / 100
+        utilidad_pct = config_aiu.get('Utilidad (%)', 0) / 100
+        
+        # AIU TOTAL incluye utilidad (como en cotizador)
+        factor_aiu_total = comision_pct + imprevistos_pct + admin_pct + logistica_pct + utilidad_pct
+        
+        aiu_total_c1 = base_constructiva_c1 * factor_aiu_total
+        
+        # Desglosar para visualización
+        contrato_1['aiu'] = aiu_total_c1
+        contrato_1['desglose']['AIU (incluye Utilidad)'] = aiu_total_c1
+    
     # Monto total C1
     contrato_1['monto'] = sum(contrato_1['desglose'].values())
     
@@ -443,6 +462,9 @@ def asignar_contratos(conceptos: Dict, cotizacion: dict) -> Tuple[Dict, Dict]:
                 base_comp = datos['total'] / (1 + factor_aiu)
                 aiu_incluido = datos['total'] - base_comp
                 contrato_2['aiu'] += aiu_incluido
+    
+    # Monto total C2 (AIU y utilidad ya incluidos en Cimentaciones y Complementarios)
+    contrato_2['monto'] = sum(contrato_2['desglose'].values())
     
     return contrato_1, contrato_2
 
@@ -893,7 +915,7 @@ def render_paso_2_configurar_proyecto():
         
         with st.expander("Ver desglose"):
             for concepto, monto in contratos['contrato_1']['desglose'].items():
-                if concepto == 'AIU Contrato 1':
+                if 'AIU' in concepto:
                     st.write(f"• **{concepto}:** ${monto:,.0f} ⚙️")
                 else:
                     st.write(f"• **{concepto}:** ${monto:,.0f}")
@@ -906,7 +928,7 @@ def render_paso_2_configurar_proyecto():
             for concepto, monto in contratos['contrato_2']['desglose'].items():
                 st.write(f"• **{concepto}:** ${monto:,.0f}")
             if contratos['contrato_2']['aiu'] > 0:
-                st.caption(f"   (incluye AIU: ${contratos['contrato_2']['aiu']:,.0f})")
+                st.caption(f"   (AIU y utilidad incluidos: ${contratos['contrato_2']['aiu']:,.0f})")
     
     st.markdown("---")
     
