@@ -1072,7 +1072,15 @@ def render_paso_1_cargar_cotizacion():
                     
                     with col_b:
                         if st.button("⚙️ Editar Configuración", type="primary", use_container_width=True):
-                            # Cargar configuración para editar
+                            # Reconstruir cotización básica desde proyección
+                            cotizacion_reconstruida = {
+                                'proyecto': proyecto_info,
+                                'version': '3.0'
+                            }
+                            
+                            # Inicializar cotización en session_state
+                            st.session_state.cotizacion_fcl = cotizacion_reconstruida
+                            # Marcar que viene de proyección cargada (datos limitados)
                             st.session_state.proyeccion_para_editar = proyeccion_data
                             st.session_state.modo_edicion = True
                             st.session_state.paso_fcl = 2  # Ir a configuración
@@ -1101,8 +1109,6 @@ def render_paso_1_cargar_cotizacion():
 def render_paso_2_configurar_proyecto():
     """Paso 2: Configurar contratos, fases y cronograma"""
     
-    cotizacion = st.session_state.cotizacion_fcl
-    
     st.header("⚙️ Paso 2: Configuración del Proyecto")
     
     # ========================================================================
@@ -1116,9 +1122,31 @@ def render_paso_2_configurar_proyecto():
         proy_data = st.session_state.proyeccion_para_editar
         config_guardada = proy_data.get('configuracion', {})
         
-        # Precargar contratos desde proyección
+        # Reconstruir cotizacion_fcl si no existe
+        if 'cotizacion_fcl' not in st.session_state:
+            st.session_state.cotizacion_fcl = {
+                'proyecto': proy_data['proyecto'],
+                'version': '2.0'
+            }
+        
+        # Precargar contratos desde proyección (ajustar estructura)
         if 'contratos_fcl' not in st.session_state:
-            st.session_state.contratos_fcl = proy_data['contratos']
+            contratos_json = proy_data['contratos']
+            # Convertir estructura JSON a estructura session_state
+            st.session_state.contratos_fcl = {
+                'contrato_1': {
+                    'nombre': contratos_json['contrato_1']['nombre'],
+                    'monto': contratos_json['contrato_1']['monto'],
+                    'desglose': contratos_json['contrato_1']['desglose'],
+                    'aiu': 0  # No disponible en JSON, usar 0
+                },
+                'contrato_2': {
+                    'nombre': contratos_json['contrato_2']['nombre'],
+                    'monto': contratos_json['contrato_2']['monto'],
+                    'desglose': contratos_json['contrato_2']['desglose'],
+                    'aiu': 0  # No disponible en JSON, usar 0
+                }
+            }
         
         # Precargar fases desde proyección
         if 'fases_config_fcl' not in st.session_state:
@@ -1169,13 +1197,22 @@ def render_paso_2_configurar_proyecto():
     
     st.markdown("---")
     
-    # Extraer conceptos (solo si no viene de edición)
+    # Obtener cotizacion DESPUÉS de inicialización
+    cotizacion = st.session_state.cotizacion_fcl
+    
+    # Extraer conceptos (solo si no viene de edición Y cotización está completa)
     if 'conceptos_fcl' not in st.session_state:
-        with st.spinner("Extrayendo conceptos de la cotización..."):
-            conceptos = extraer_conceptos_dinamico(cotizacion)
-            st.session_state.conceptos_fcl = conceptos
-    else:
-        conceptos = st.session_state.conceptos_fcl
+        # Verificar si cotización tiene estructura completa
+        if cotizacion and len(cotizacion) > 2:  # Más que solo proyecto y version
+            with st.spinner("Extrayendo conceptos de la cotización..."):
+                conceptos = extraer_conceptos_dinamico(cotizacion)
+                st.session_state.conceptos_fcl = conceptos
+        else:
+            # Cotización incompleta (viene de JSON proyección)
+            # Usar conceptos vacíos
+            st.session_state.conceptos_fcl = {}
+    
+    conceptos = st.session_state.conceptos_fcl
     
     # Asignar contratos (solo si no viene de edición)
     if 'contratos_fcl' not in st.session_state:
@@ -1207,8 +1244,10 @@ def render_paso_2_configurar_proyecto():
         with st.expander("Ver desglose"):
             for concepto, monto in contratos['contrato_2']['desglose'].items():
                 st.write(f"• **{concepto}:** ${monto:,.0f}")
-            if contratos['contrato_2']['aiu'] > 0:
-                st.caption(f"   (AIU y utilidad incluidos: ${contratos['contrato_2']['aiu']:,.0f})")
+            # Mostrar AIU solo si existe (puede no existir en JSON cargado)
+            aiu = contratos['contrato_2'].get('aiu', 0)
+            if aiu > 0:
+                st.caption(f"   (AIU y utilidad incluidos: ${aiu:,.0f})")
     
     st.markdown("---")
     
@@ -1218,8 +1257,8 @@ def render_paso_2_configurar_proyecto():
     
     st.subheader("📅 Fecha de Inicio del Proyecto")
     
-    # Mostrar contexto de cotización si existe
-    if 'fecha_guardado' in cotizacion:
+    # Mostrar contexto de cotización si existe Y está completo
+    if cotizacion and 'fecha_guardado' in cotizacion:
         try:
             fecha_cot = datetime.fromisoformat(cotizacion['fecha_guardado']).strftime('%d/%m/%Y')
             st.caption(f"ℹ️ Cotización creada el: {fecha_cot}")
