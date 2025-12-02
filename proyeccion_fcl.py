@@ -343,82 +343,23 @@ def extraer_conceptos_dinamico(cotizacion: dict) -> Dict:
 # ============================================================================
 # FUNCIONES DE ASIGNACIÓN A CONTRATOS
 # ============================================================================
+
 def asignar_contratos(conceptos: Dict, cotizacion: dict) -> Tuple[Dict, Dict]:
     """
-    Asigna conceptos a contratos usando resumen_calculado del JSON.
-    Si no existe resumen_calculado, usa método de cálculo tradicional.
+    Asigna conceptos a contratos según estructura SICONE
     
-    ARQUITECTURA MEJORADA:
-    - Usa resumen_calculado del cotizador (fuente única de verdad)
-    - Garantiza consistencia de valores entre módulos
-    - Elimina recálculos y diferencias por redondeos
-    - Mantiene retrocompatibilidad con JSON antiguos
+    CONTRATO 1 (Obra Gris): 
+        - Diseños y Planificación (incluye todo admin)
+        - Estructura
+        - Mampostería  
+        - Complementarios (Techos) - Solo Entrepiso
+        - Techos (Cubierta) - Superboard, Shingle, Pérgolas
+        + AIU sobre base constructiva
     
-    Args:
-        conceptos: Dict con conceptos extraídos (usado como fallback)
-        cotizacion: Dict con datos completos del JSON
-        
-    Returns:
-        Tuple[Dict, Dict]: (contrato_1, contrato_2)
+    CONTRATO 2 (Cimentación y Obras Complementarias): 
+        - Cimentaciones (con AIU incluido)
+        - Complementarios (con AIU incluido)
     """
-    
-    # ========================================================================
-    # MÉTODO PREFERIDO: Usar resumen_calculado del JSON
-    # ========================================================================
-    
-    if 'resumen_calculado' in cotizacion and cotizacion['resumen_calculado'] is not None:
-        resumen = cotizacion['resumen_calculado']
-        
-        # Extraer contratos directamente (valores exactos del cotizador)
-        c1_data = resumen['contratos']['contrato_1']
-        c2_data = resumen['contratos']['contrato_2']
-        
-        # Construir estructura esperada por FCL
-        contrato_1 = {
-            'nombre': c1_data['nombre'],
-            'monto': c1_data['monto'],
-            'conceptos': [k for k in c1_data['desglose'].keys() if k != 'AIU (incluye Utilidad)'],
-            'desglose': c1_data['desglose'],
-            'materiales': 0,
-            'equipos': 0,
-            'mano_obra': 0,
-            'admin': 0,
-            'aiu': c1_data['desglose'].get('AIU (incluye Utilidad)', 0)
-        }
-        
-        contrato_2 = {
-            'nombre': c2_data['nombre'],
-            'monto': c2_data['monto'],
-            'conceptos': list(c2_data['desglose'].keys()),
-            'desglose': c2_data['desglose'],
-            'materiales': 0,
-            'equipos': 0,
-            'mano_obra': 0,
-            'admin': 0,
-            'aiu': 0  # C2 ya incluye AIU en cada concepto
-        }
-        
-        # Calcular totales de Mat/MO/Equipos/Admin desde conceptos_para_fcl
-        if 'conceptos_para_fcl' in resumen:
-            conceptos_fcl = resumen['conceptos_para_fcl']
-            
-            for concepto_nombre, datos in conceptos_fcl.items():
-                if datos.get('contrato') == 'contrato_1':
-                    contrato_1['materiales'] += datos.get('materiales', 0)
-                    contrato_1['equipos'] += datos.get('equipos', 0)
-                    contrato_1['mano_obra'] += datos.get('mano_obra', 0)
-                    contrato_1['admin'] += datos.get('admin', 0)
-                elif datos.get('contrato') == 'contrato_2':
-                    contrato_2['materiales'] += datos.get('materiales', 0)
-                    contrato_2['equipos'] += datos.get('equipos', 0)
-                    contrato_2['mano_obra'] += datos.get('mano_obra', 0)
-                    contrato_2['admin'] += datos.get('admin', 0)
-        
-        return contrato_1, contrato_2
-    
-    # ========================================================================
-    # MÉTODO FALLBACK: Cálculo tradicional (retrocompatibilidad)
-    # ========================================================================
     
     contrato_1 = {
         'nombre': 'Contrato 1 - Obra Gris',
@@ -474,6 +415,15 @@ def asignar_contratos(conceptos: Dict, cotizacion: dict) -> Tuple[Dict, Dict]:
             if concepto != 'Diseños y Planificación':
                 base_constructiva_c1 += datos['total']
     
+    # Calcular AIU del Contrato 1
+    if 'config_aiu' in cotizacion:
+        config_aiu = cotizacion['config_aiu']
+        
+        comision_pct = config_aiu.get('Comisión de Ventas (%)', 0) / 100
+        imprevistos_pct = config_aiu.get('Imprevistos (%)', 0) / 100
+        admin_pct = config_aiu.get('Administración (%)', 0) / 100
+        logistica_pct = config_aiu.get('Logística (%)', 0) / 100
+    
     # Aplicar AIU GENERAL sobre C1 (incluye utilidad)
     if 'config_aiu' in cotizacion:
         config_aiu = cotizacion['config_aiu']
@@ -516,15 +466,12 @@ def asignar_contratos(conceptos: Dict, cotizacion: dict) -> Tuple[Dict, Dict]:
     for concepto in contrato_2['conceptos']:
         if concepto in conceptos:
             datos = conceptos[concepto]
-            
-            # Sumar al desglose
-            contrato_2['desglose'][concepto] = datos['total']
-            
-            # Acumular categorías
+            contrato_2['monto'] += datos['total']
             contrato_2['materiales'] += datos.get('materiales', 0)
             contrato_2['equipos'] += datos.get('equipos', 0)
             contrato_2['mano_obra'] += datos.get('mano_obra', 0)
             contrato_2['admin'] += datos.get('admin', 0)
+            contrato_2['desglose'][concepto] = datos['total']
             
             # El AIU ya está incluido en Cimentaciones y Complementarios
             # pero lo separamos para visualización
@@ -852,7 +799,55 @@ def generar_proyeccion_completa(
             
             semana_actual += 1
     
-    return pd.DataFrame(proyeccion)
+    # ========================================================================
+    # VALIDACIÓN: Verificar que la suma de egresos coincide con totales
+    # ========================================================================
+    df = pd.DataFrame(proyeccion)
+    
+    # Calcular totales proyectados
+    total_materiales_proyectado = df['Materiales'].sum()
+    total_equipos_proyectado = df['Equipos'].sum()
+    total_mo_proyectado = df['Mano_Obra'].sum()
+    total_admin_proyectado = df['Admin'].sum()
+    total_imprevistos_proyectado = df['Imprevistos'].sum()
+    total_logistica_proyectado = df['Logistica'].sum()
+    
+    total_egresos_proyectado = (
+        total_materiales_proyectado + 
+        total_equipos_proyectado + 
+        total_mo_proyectado + 
+        total_admin_proyectado + 
+        total_imprevistos_proyectado + 
+        total_logistica_proyectado
+    )
+    
+    # Calcular totales esperados desde contratos
+    total_contratos = contrato_1['monto'] + contrato_2['monto']
+    
+    # Verificar diferencia (permitir hasta 1% de tolerancia por redondeos)
+    diferencia = abs(total_egresos_proyectado - total_contratos)
+    pct_diferencia = (diferencia / total_contratos) * 100 if total_contratos > 0 else 0
+    
+    # Agregar metadata al DataFrame
+    df.attrs['validacion'] = {
+        'total_egresos_proyectado': total_egresos_proyectado,
+        'total_contratos': total_contratos,
+        'diferencia': diferencia,
+        'pct_diferencia': pct_diferencia,
+        'consistente': pct_diferencia < 1.0  # Menos de 1% es aceptable
+    }
+    
+    # Si hay inconsistencia mayor, registrar advertencia
+    if pct_diferencia >= 1.0:
+        import warnings
+        warnings.warn(
+            f"⚠️ Inconsistencia detectada: "
+            f"Egresos proyectados ${total_egresos_proyectado:,.0f} vs "
+            f"Total contratos ${total_contratos:,.0f} "
+            f"(Diferencia: {pct_diferencia:.2f}%)"
+        )
+    
+    return df
 
 # ============================================================================
 # INTERFACE DE USUARIO - PASO 1: CARGAR COTIZACIÓN
@@ -1059,7 +1054,13 @@ def render_paso_2_configurar_proyecto():
                 st.rerun()
     
     # Input principal (siempre visible)
-    fecha_default = st.session_state.get('fecha_inicio_calculada', datetime.now().date())
+    # Preservar fecha: usar la del widget si ya existe, sino la calculada, sino la actual
+    if 'fecha_inicio_fcl' in st.session_state:
+        fecha_default = st.session_state.fecha_inicio_fcl
+    elif 'fecha_inicio_calculada' in st.session_state:
+        fecha_default = st.session_state.fecha_inicio_calculada
+    else:
+        fecha_default = datetime.now().date()
     
     fecha_inicio = st.date_input(
         "Fecha de inicio del proyecto:",
@@ -1468,6 +1469,38 @@ def render_paso_3_proyeccion():
     with col4:
         st.metric("⏱️ Duración", f"{semanas_total} semanas", 
                   delta=f"{semanas_total/4:.1f} meses")
+    
+    st.markdown("---")
+    
+    # ========================================================================
+    # VALIDACIÓN DE CONSISTENCIA
+    # ========================================================================
+    
+    # Mostrar validación si está disponible
+    if hasattr(proyeccion_df, 'attrs') and 'validacion' in proyeccion_df.attrs:
+        validacion = proyeccion_df.attrs['validacion']
+        
+        if validacion['consistente']:
+            st.success(f"""
+            ✅ **Validación de Consistencia: APROBADA**
+            
+            - Total egresos proyectado: ${validacion['total_egresos_proyectado']:,.0f}
+            - Total contratos (referencia): ${validacion['total_contratos']:,.0f}
+            - Diferencia: ${validacion['diferencia']:,.0f} ({validacion['pct_diferencia']:.3f}%)
+            
+            La proyección es consistente con los totales de los contratos.
+            """)
+        else:
+            st.warning(f"""
+            ⚠️ **Validación de Consistencia: ADVERTENCIA**
+            
+            - Total egresos proyectado: ${validacion['total_egresos_proyectado']:,.0f}
+            - Total contratos (referencia): ${validacion['total_contratos']:,.0f}
+            - Diferencia: ${validacion['diferencia']:,.0f} ({validacion['pct_diferencia']:.2f}%)
+            
+            Hay una diferencia mayor al 1% entre la proyección y los contratos.
+            Esto puede deberse a ajustes de configuración en las fases.
+            """)
     
     st.markdown("---")
     
@@ -1971,5 +2004,6 @@ def main():
 # EJECUCIÓN
 # ============================================================================
 
-if __name__ == "__main__":
-    main()
+# Hacer main() disponible para importación desde main.py
+# (No usar if __name__ == "__main__" para permitir llamada externa)
+
