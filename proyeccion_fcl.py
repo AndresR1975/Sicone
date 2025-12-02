@@ -2,9 +2,14 @@
 SICONE - Módulo de Proyección de Flujo de Caja
 Fase 1: Configuración y Proyección de Ingresos/Egresos
 
-Versión: 1.0
+Versión: 1.1
 Fecha: Diciembre 2025
 Autor: AI-MindNovation
+
+CHANGELOG v1.1:
+- FIX: Hito 'Fin de Obra' ahora se ejecuta al FINAL de la fase Entrega (no al inicio)
+- FIX: Eliminada asignación redundante de fecha_inicio_fcl que causaba StreamlitAPIException
+- Mejoras en la estabilidad del manejo de session_state
 """
 
 import streamlit as st
@@ -657,7 +662,7 @@ def configurar_hitos_default(contrato_1: Dict, contrato_2: Dict) -> List[Dict]:
             'porcentaje_c2': 10,
             'monto': contrato_1['monto'] * 0.10 + contrato_2['monto'] * 0.10,
             'fase_vinculada': 'Entrega',
-            'momento': 'inicio'
+            'momento': 'fin'  # Corregido: pago al FIN de la fase Entrega
         }
     ]
     
@@ -1193,7 +1198,7 @@ def render_paso_2_configurar_proyecto():
     if st.button("▶️ Generar Proyección", type="primary", use_container_width=True):
         # Validar que todas las fases tengan duración
         if all([f['duracion_semanas'] for f in fases]):
-            st.session_state.fecha_inicio_fcl = fecha_inicio
+            # fecha_inicio_fcl ya está en session_state por el widget
             st.session_state.paso_fcl = 3
             st.rerun()
         else:
