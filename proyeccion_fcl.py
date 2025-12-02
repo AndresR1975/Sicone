@@ -1319,7 +1319,7 @@ def render_paso_2_configurar_proyecto():
     if st.button("▶️ Generar Proyección", type="primary", use_container_width=True):
         # Validar que todas las fases tengan duración
         if all([f['duracion_semanas'] for f in fases]):
-            st.session_state.fecha_inicio_fcl = fecha_inicio
+            # fecha_inicio ya está en session_state desde el widget
             st.session_state.paso_fcl = 3
             st.rerun()
         else:
