@@ -1901,13 +1901,33 @@ def render_paso_3_proyeccion():
             if st.session_state.get('modo_edicion', False):
                 st.caption("✏️ **Modo Edición:** Regenerando proyección con nuevos parámetros")
         
-        # Obtener datos de session_state
-        cotizacion = st.session_state.cotizacion_fcl
-        conceptos = st.session_state.conceptos_fcl
-        fases = st.session_state.fases_config_fcl
-        hitos = st.session_state.hitos_fcl
-        contratos = st.session_state.contratos_fcl
-        fecha_inicio = st.session_state.fecha_inicio_fcl
+        # Obtener datos de session_state con verificación robusta
+        cotizacion = st.session_state.get('cotizacion_fcl')
+        conceptos = st.session_state.get('conceptos_fcl', {})
+        fases = st.session_state.get('fases_config_fcl', [])
+        hitos = st.session_state.get('hitos_fcl', [])
+        contratos = st.session_state.get('contratos_fcl', {})
+        
+        # Fecha de inicio: manejar múltiples fuentes
+        if 'fecha_inicio_fcl' in st.session_state:
+            fecha_inicio = st.session_state.fecha_inicio_fcl
+        elif 'proyeccion_para_editar' in st.session_state:
+            # Restaurar desde proyección cargada
+            fecha_str = st.session_state.proyeccion_para_editar['proyecto']['fecha_inicio']
+            fecha_inicio = datetime.fromisoformat(fecha_str).date()
+            st.session_state.fecha_inicio_fcl = fecha_inicio
+        else:
+            # Fallback: fecha de hoy
+            fecha_inicio = datetime.now().date()
+            st.session_state.fecha_inicio_fcl = fecha_inicio
+        
+        # Verificar que tenemos todos los datos necesarios
+        if not cotizacion or not fases:
+            st.error("❌ Datos incompletos para generar proyección")
+            if st.button("🔄 Volver a cargar configuración"):
+                st.session_state.paso_fcl = 2
+                st.rerun()
+            st.stop()
         
         # Calcular totales de AIU
         if 'totales_aiu_fcl' not in st.session_state:
@@ -1941,13 +1961,10 @@ def render_paso_3_proyeccion():
                 )
                 st.session_state.proyeccion_df = proyeccion_df
                 
-                # Si era regeneración, limpiar flags de edición
+                # Si era regeneración, mostrar mensaje pero NO limpiar flags aún
+                # (se necesitan para exportar)
                 if regenerar:
                     st.success("✅ Proyección regenerada con nuevos parámetros")
-                    # Limpiar flags de edición para que no se regenere en cada refresh
-                    for key in ['modo_edicion', 'proyeccion_para_editar']:
-                        if key in st.session_state:
-                            del st.session_state[key]
         else:
             proyeccion_df = st.session_state.proyeccion_df
         
