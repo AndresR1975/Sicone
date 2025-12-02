@@ -1864,13 +1864,13 @@ def render_paso_3_proyeccion():
         render_graficas_proyeccion(df)
     
     with tab2:
-        render_tabla_detallada(proyeccion_df)
+        render_tabla_detallada(df)
     
     with tab3:
-        render_analisis_fases(proyeccion_df, fases)
+        render_analisis_fases(df, fases)
     
     with tab4:
-        render_opciones_guardar(proyeccion_df, cotizacion)
+        render_opciones_guardar(df, cotizacion, contratos, fecha_inicio, fases, hitos)
 
 def render_graficas_proyeccion(df: pd.DataFrame):
     """Renderiza gráficas de la proyección"""
@@ -2100,7 +2100,14 @@ def render_analisis_fases(df: pd.DataFrame, fases: List[Dict]):
             for concepto in fase['conceptos']:
                 st.write(f"✓ {concepto}")
 
-def render_opciones_guardar(df: pd.DataFrame, cotizacion: dict):
+def render_opciones_guardar(
+    df: pd.DataFrame, 
+    cotizacion: dict, 
+    contratos: dict, 
+    fecha_inicio, 
+    fases: list, 
+    hitos: list
+):
     """Renderiza opciones para guardar la proyección"""
     
     # ========================================================================
@@ -2124,6 +2131,24 @@ def render_opciones_guardar(df: pd.DataFrame, cotizacion: dict):
     nombre_limpio = nombre_proyecto.replace(' ', '_').replace('/', '_')
     timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
     
+    # Manejar fecha_inicio (puede ser date, datetime, o string)
+    if isinstance(fecha_inicio, str):
+        fecha_inicio_str = fecha_inicio
+    elif hasattr(fecha_inicio, 'strftime'):
+        fecha_inicio_str = fecha_inicio.strftime('%Y-%m-%d')
+    else:
+        fecha_inicio_str = str(fecha_inicio)
+    
+    # Manejar estructura de contratos (puede venir de session_state o JSON cargado)
+    if 'contrato_1' in contratos:
+        # Estructura de session_state
+        c1 = contratos['contrato_1']
+        c2 = contratos['contrato_2']
+    else:
+        # Estructura de JSON cargado (ya viene como dict directo)
+        c1 = contratos.get('contrato_1', {})
+        c2 = contratos.get('contrato_2', {})
+    
     # Construir JSON enriquecido
     proyeccion_completa = {
         'version': '2.0',
@@ -2133,22 +2158,22 @@ def render_opciones_guardar(df: pd.DataFrame, cotizacion: dict):
             'nombre': cotizacion['proyecto']['nombre'],
             'cliente': cotizacion['proyecto'].get('cliente', ''),
             'area_base': cotizacion['proyecto'].get('area_base', 0),
-            'fecha_inicio': fecha_inicio.strftime('%Y-%m-%d')
+            'fecha_inicio': fecha_inicio_str
         },
         'contratos': {
             'contrato_1': {
-                'nombre': contratos['contrato_1']['nombre'],
-                'monto': contratos['contrato_1']['monto'],
-                'desglose': contratos['contrato_1']['desglose']
+                'nombre': c1.get('nombre', 'Contrato 1'),
+                'monto': c1.get('monto', 0),
+                'desglose': c1.get('desglose', {})
             },
             'contrato_2': {
-                'nombre': contratos['contrato_2']['nombre'],
-                'monto': contratos['contrato_2']['monto'],
-                'desglose': contratos['contrato_2']['desglose']
+                'nombre': c2.get('nombre', 'Contrato 2'),
+                'monto': c2.get('monto', 0),
+                'desglose': c2.get('desglose', {})
             }
         },
         'totales': {
-            'total_proyecto': contratos['contrato_1']['monto'] + contratos['contrato_2']['monto'],
+            'total_proyecto': c1.get('monto', 0) + c2.get('monto', 0),
             'total_ingresos': float(df['Ingresos_Proyectados'].sum()),
             'total_egresos': float(df['Total_Egresos'].sum()),
             'saldo_final': float(df['Saldo_Acumulado'].iloc[-1]),
