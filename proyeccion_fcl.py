@@ -1170,11 +1170,79 @@ def render_paso_2_configurar_proyecto():
             fecha_str = proy_data['proyecto']['fecha_inicio']
             st.session_state.fecha_inicio_fcl = datetime.fromisoformat(fecha_str).date()
         
-        # Reconstruir conceptos desde contratos (simplificado)
+        # Reconstruir conceptos desde totales guardados
         if 'conceptos_fcl' not in st.session_state:
-            # Como no tenemos la cotización completa, creamos conceptos vacíos
-            # pero con la estructura mínima necesaria
-            st.session_state.conceptos_fcl = {}
+            # Crear conceptos sintéticos por fase usando totales guardados
+            totales_cat = proy_data.get('totales_categorias', {})
+            
+            if totales_cat:
+                # Calcular total sin AIU para distribuir
+                total_mat = totales_cat.get('materiales', 0)
+                total_eq = totales_cat.get('equipos', 0)
+                total_mo = totales_cat.get('mano_obra', 0)
+                total_sin_aiu = total_mat + total_eq + total_mo
+                
+                # Crear un concepto sintético por fase con proporciones
+                conceptos_sinteticos = {}
+                fases_guardadas = config_guardada.get('fases', [])
+                
+                for fase in fases_guardadas:
+                    nombre_fase = fase['nombre']
+                    duracion = fase.get('duracion_semanas', 0)
+                    
+                    if duracion and duracion > 0:
+                        # Estimar proporción de esta fase (por duración relativa)
+                        total_duracion = sum([f.get('duracion_semanas', 0) for f in fases_guardadas])
+                        proporcion = duracion / total_duracion if total_duracion > 0 else 0
+                        
+                        # Crear concepto sintético para esta fase
+                        concepto_fase = f"__fase_{nombre_fase}"
+                        conceptos_sinteticos[concepto_fase] = {
+                            'total': total_sin_aiu * proporcion,
+                            'materiales': total_mat * proporcion,
+                            'equipos': total_eq * proporcion,
+                            'mano_obra': total_mo * proporcion,
+                            'tiene_discriminacion': True
+                        }
+                        
+                        # Agregar este concepto sintético a la fase
+                        fase['conceptos'] = [concepto_fase]
+                
+                st.session_state.conceptos_fcl = conceptos_sinteticos
+                st.session_state.fases_config_fcl = fases_guardadas
+            else:
+                # Fallback: calcular desde proyeccion_semanal
+                df_temp = pd.DataFrame(proy_data['proyeccion_semanal'])
+                total_mat = float(df_temp['Materiales'].sum())
+                total_eq = float(df_temp['Equipos'].sum())
+                total_mo = float(df_temp['Mano_Obra'].sum())
+                total_sin_aiu = total_mat + total_eq + total_mo
+                
+                # Crear conceptos sintéticos
+                conceptos_sinteticos = {}
+                fases_guardadas = config_guardada.get('fases', [])
+                
+                for fase in fases_guardadas:
+                    nombre_fase = fase['nombre']
+                    duracion = fase.get('duracion_semanas', 0)
+                    
+                    if duracion and duracion > 0:
+                        total_duracion = sum([f.get('duracion_semanas', 0) for f in fases_guardadas])
+                        proporcion = duracion / total_duracion if total_duracion > 0 else 0
+                        
+                        concepto_fase = f"__fase_{nombre_fase}"
+                        conceptos_sinteticos[concepto_fase] = {
+                            'total': total_sin_aiu * proporcion,
+                            'materiales': total_mat * proporcion,
+                            'equipos': total_eq * proporcion,
+                            'mano_obra': total_mo * proporcion,
+                            'tiene_discriminacion': True
+                        }
+                        
+                        fase['conceptos'] = [concepto_fase]
+                
+                st.session_state.conceptos_fcl = conceptos_sinteticos
+                st.session_state.fases_config_fcl = fases_guardadas
         
         # Restaurar totales AIU desde proyección
         if 'totales_aiu_fcl' not in st.session_state:
@@ -2347,6 +2415,11 @@ def render_opciones_guardar(
             'admin': float(df['Admin'].sum()),
             'imprevistos': float(df['Imprevistos'].sum()),
             'logistica': float(df['Logistica'].sum())
+        },
+        'totales_categorias': {
+            'materiales': float(df['Materiales'].sum()),
+            'equipos': float(df['Equipos'].sum()),
+            'mano_obra': float(df['Mano_Obra'].sum())
         },
         'configuracion': {
             'fases': fases,
