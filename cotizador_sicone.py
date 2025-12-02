@@ -615,6 +615,18 @@ def serializar_cotizacion():
         }
     }
     
+    # =====================================================================
+    # NUEVO: Calcular resumen para FCL (garantiza consistencia)
+    # =====================================================================
+    try:
+        cotizacion_data['resumen_calculado'] = calcular_resumen_para_fcl()
+    except Exception as e:
+        # Si hay error, registrar pero no impedir guardado
+        import traceback
+        print(f"Advertencia: No se pudo calcular resumen_calculado: {e}")
+        print(traceback.format_exc())
+        cotizacion_data['resumen_calculado'] = None
+    
     return cotizacion_data
 
 def deserializar_cotizacion(cotizacion_data):
@@ -1503,6 +1515,256 @@ def calcular_resumen_global():
         'pct_admin_calculado': pct_admin_calculado,
         'total_proyecto': total_proyecto,
         'precio_m2': precio_m2
+    }
+
+
+def calcular_resumen_para_fcl():
+    """
+    Calcula el resumen completo de contratos, conceptos y hitos
+    para uso directo en el módulo de Proyección FCL.
+    
+    Este bloque se exporta en el JSON y garantiza que FCL use
+    exactamente los mismos valores que el cotizador muestra.
+    
+    GARANTIZA CONSISTENCIA: Los valores aquí son los mismos que
+    muestra el cotizador, eliminando diferencias por recálculos.
+    
+    Returns:
+        dict: Resumen completo con contratos, conceptos y hitos
+    """
+    from datetime import datetime
+    
+    # Obtener resumen global calculado por el cotizador
+    resumen = calcular_resumen_global()
+    
+    # =====================================================================
+    # CONTRATOS - Valores EXACTOS del cotizador
+    # =====================================================================
+    
+    # CONTRATO 1: Diseños + Estructura + Mampostería + Techos + AIU
+    disenos = calcular_disenos()
+    estructura = calcular_estructura()
+    mamposteria = calcular_mamposteria()
+    mamposteria_techos = calcular_mamposteria_techos()
+    
+    # Separar techos en Cubierta vs Complementarios
+    area_base = st.session_state.proyecto.area_base
+    techos_cubierta = 0
+    techos_complementarios = 0
+    
+    # Discriminación detallada de techos por categoría
+    techos_cubierta_items = {}
+    techos_comp_items = {}
+    
+    items_cubierta = ['Ruana', 'Cubierta, Superboard y Manto', 'Cubierta, Superboard y Shingle', 
+                      'Canoas', 'Tapacanal y Lagrimal']
+    items_complementarios = ['Contramarcos - Ventana', 'Contramarcos - Puerta', 
+                            'Embudos y boquillas', 'Entrepiso Placa Fácil', 
+                            'Pérgolas y Estructura sin Techo']
+    
+    for nombre, item in st.session_state.mamposteria_techos.items():
+        if item.cantidad > 0:
+            precio_total = item.precio_materiales + item.precio_equipos + item.precio_mano_obra
+            subtotal = item.cantidad * precio_total
+            
+            if nombre in items_cubierta:
+                techos_cubierta += subtotal
+                techos_cubierta_items[nombre] = {
+                    'cantidad': item.cantidad,
+                    'materiales': item.cantidad * item.precio_materiales,
+                    'equipos': item.cantidad * item.precio_equipos,
+                    'mano_obra': item.cantidad * item.precio_mano_obra,
+                    'total': subtotal
+                }
+            elif nombre in items_complementarios:
+                techos_complementarios += subtotal
+                techos_comp_items[nombre] = {
+                    'cantidad': item.cantidad,
+                    'materiales': item.cantidad * item.precio_materiales,
+                    'equipos': item.cantidad * item.precio_equipos,
+                    'mano_obra': item.cantidad * item.precio_mano_obra,
+                    'total': subtotal
+                }
+    
+    # AIU del Contrato 1
+    aiu_c1 = resumen['cotizacion1']['aiu']['total']
+    
+    contrato_1 = {
+        'nombre': 'Contrato 1 - Obra Gris',
+        'monto': resumen['cotizacion1']['total'],
+        'desglose': {
+            'Diseños y Planificación': disenos,
+            'Estructura': estructura,
+            'Mampostería': mamposteria,
+            'Complementarios (Techos)': techos_complementarios,
+            'Techos (Cubierta)': techos_cubierta,
+            'AIU (incluye Utilidad)': aiu_c1
+        }
+    }
+    
+    # CONTRATO 2: Cimentaciones + Complementarios (ya con AIU incluido)
+    cimentacion = calcular_cimentacion()
+    complementarios = calcular_complementarios()
+    
+    contrato_2 = {
+        'nombre': 'Contrato 2 - Cimentación y Obras Complementarias',
+        'monto': resumen['cotizacion2']['total'],
+        'desglose': {
+            'Cimentaciones': cimentacion['total'],
+            'Complementarios': complementarios['total']
+        }
+    }
+    
+    # =====================================================================
+    # CONCEPTOS PARA FCL - Con discriminación Mat/MO/Equipos/Admin
+    # =====================================================================
+    
+    # Calcular discriminación de Estructura
+    cant_estructura = st.session_state.estructura.cantidad
+    estructura_mat = cant_estructura * st.session_state.estructura.precio_materiales
+    estructura_eq = cant_estructura * st.session_state.estructura.precio_equipos
+    estructura_mo = cant_estructura * st.session_state.estructura.precio_mano_obra
+    
+    # Calcular discriminación de Mampostería
+    cant_mamp = st.session_state.mamposteria.cantidad
+    mamp_mat = cant_mamp * st.session_state.mamposteria.precio_materiales
+    mamp_eq = cant_mamp * st.session_state.mamposteria.precio_equipos
+    mamp_mo = cant_mamp * st.session_state.mamposteria.precio_mano_obra
+    
+    # Sumar discriminación de Techos Cubierta
+    cubierta_mat = sum([item['materiales'] for item in techos_cubierta_items.values()])
+    cubierta_eq = sum([item['equipos'] for item in techos_cubierta_items.values()])
+    cubierta_mo = sum([item['mano_obra'] for item in techos_cubierta_items.values()])
+    
+    # Sumar discriminación de Complementarios Techos
+    comp_techos_mat = sum([item['materiales'] for item in techos_comp_items.values()])
+    comp_techos_eq = sum([item['equipos'] for item in techos_comp_items.values()])
+    comp_techos_mo = sum([item['mano_obra'] for item in techos_comp_items.values()])
+    
+    conceptos_fcl = {
+        'Diseños y Planificación': {
+            'total': disenos,
+            'materiales': 0,
+            'equipos': 0,
+            'mano_obra': 0,
+            'admin': disenos,  # Diseños es 100% admin
+            'fase': 'Procesos Administrativos',
+            'contrato': 'contrato_1'
+        },
+        'Estructura': {
+            'total': estructura,
+            'materiales': estructura_mat,
+            'equipos': estructura_eq,
+            'mano_obra': estructura_mo,
+            'admin': 0,
+            'fase': 'Estructura, Mampostería y Complementarios',
+            'contrato': 'contrato_1'
+        },
+        'Mampostería': {
+            'total': mamposteria,
+            'materiales': mamp_mat,
+            'equipos': mamp_eq,
+            'mano_obra': mamp_mo,
+            'admin': 0,
+            'fase': 'Estructura, Mampostería y Complementarios',
+            'contrato': 'contrato_1'
+        },
+        'Complementarios (Techos)': {
+            'total': techos_complementarios,
+            'materiales': comp_techos_mat,
+            'equipos': comp_techos_eq,
+            'mano_obra': comp_techos_mo,
+            'admin': 0,
+            'fase': 'Estructura, Mampostería y Complementarios',
+            'contrato': 'contrato_1'
+        },
+        'Techos (Cubierta)': {
+            'total': techos_cubierta,
+            'materiales': cubierta_mat,
+            'equipos': cubierta_eq,
+            'mano_obra': cubierta_mo,
+            'admin': 0,
+            'fase': 'Cubierta',
+            'contrato': 'contrato_1'
+        },
+        'Cimentaciones': {
+            'total': cimentacion['total'],
+            'materiales': 0,  # Usuario configura en FCL
+            'equipos': 0,
+            'mano_obra': 0,
+            'admin': 0,
+            'fase': 'Cimentación',
+            'contrato': 'contrato_2'
+        },
+        'Complementarios': {
+            'total': complementarios['total'],
+            'materiales': 0,  # Usuario configura en FCL
+            'equipos': 0,
+            'mano_obra': 0,
+            'admin': 0,
+            'fase': 'Estructura, Mampostería y Complementarios',
+            'contrato': 'contrato_2'
+        }
+    }
+    
+    # =====================================================================
+    # HITOS DEFAULT - Configuración estándar
+    # =====================================================================
+    
+    hitos_default = [
+        {
+            'nombre': 'Anticipo Procesos Administrativos',
+            'contratos': ['contrato_1'],
+            'porcentajes': {'contrato_1': 50},
+            'monto': contrato_1['monto'] * 0.50,
+            'fase_vinculada': 'Procesos Administrativos',
+            'momento': 'inicio'
+        },
+        {
+            'nombre': 'Inicio Cimentación',
+            'contratos': ['contrato_2'],
+            'porcentajes': {'contrato_2': 50},
+            'monto': contrato_2['monto'] * 0.50,
+            'fase_vinculada': 'Cimentación',
+            'momento': 'inicio'
+        },
+        {
+            'nombre': 'Fin Cimentación / Inicio Obra Gris',
+            'contratos': ['contrato_1', 'contrato_2'],
+            'porcentajes': {'contrato_1': 40, 'contrato_2': 40},
+            'monto': contrato_1['monto'] * 0.40 + contrato_2['monto'] * 0.40,
+            'fase_vinculada': 'Estructura, Mampostería y Complementarios',
+            'momento': 'inicio'
+        },
+        {
+            'nombre': 'Fin de Obra',
+            'contratos': ['contrato_1', 'contrato_2'],
+            'porcentajes': {'contrato_1': 10, 'contrato_2': 10},
+            'monto': contrato_1['monto'] * 0.10 + contrato_2['monto'] * 0.10,
+            'fase_vinculada': 'Entrega',
+            'momento': 'fin'
+        }
+    ]
+    
+    # =====================================================================
+    # RETORNAR RESUMEN COMPLETO
+    # =====================================================================
+    
+    return {
+        'version': '1.0',
+        'fecha_calculo': datetime.now().isoformat(),
+        'contratos': {
+            'contrato_1': contrato_1,
+            'contrato_2': contrato_2,
+            'total_proyecto': resumen['total_proyecto']
+        },
+        'conceptos_para_fcl': conceptos_fcl,
+        'hitos_default': hitos_default,
+        'metadatos': {
+            'calculado_por': 'cotizador_sicone',
+            'precio_m2': resumen['precio_m2'],
+            'area_base': area_base
+        }
     }
 
 
