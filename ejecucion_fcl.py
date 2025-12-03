@@ -2,38 +2,54 @@
 SICONE - Módulo de Ejecución Real FCL
 Análisis de FCL Real Ejecutado vs FCL Planeado
 
-Versión: 1.0.0
+Versión: 1.1.0 (Beta)
 Fecha: Diciembre 2024
 Autor: AI-MindNovation
 
 ESTRUCTURA MODULAR:
 └── ejecucion_fcl.py
-    ├── Módulo 1: CARTERA (Ingresos Reales)
+    ├── Módulo 1: CARTERA (Ingresos Reales) ✅
     │   ├── Ingreso de cobros por hito
     │   ├── Conciliación automática
     │   ├── Comparación ingresos proyectados vs reales
     │   └── Alertas de cartera
     │
-    └── Módulo 2: EGRESOS REALES (Futuro - Fase 2)
-        ├── Ingreso/Parser de gastos contables
-        ├── Categorización de egresos
-        ├── Comparación egresos proyectados vs reales
-        └── Alertas de sobrecostos
+    ├── Módulo 2: EGRESOS REALES ✅
+    │   ├── Parser automático de Excel contable
+    │   ├── Clasificación de cuentas (Materiales, MO, Variables, Admin)
+    │   ├── Agrupación semanal de gastos
+    │   ├── Comparación egresos proyectados vs reales
+    │   └── Análisis por categoría
+    │
+    └── Módulo 3: ANÁLISIS FCL COMPLETO (Futuro - Fase 3) 🔜
+        ├── Dashboard consolidado (ingresos + egresos)
+        ├── Flujo de caja real completo
+        ├── Alertas integradas
+        └── Exportación JSON v4.0
 
-FUNCIONALIDADES ACTUALES (v1.0.0 - MÓDULO CARTERA):
-- Carga de proyección desde JSON v2.0
-- Ingreso de datos de cartera (hitos + pagos reales)
-- Conciliación automática (detecta sobrepagos, retenciones, etc.)
-- Comparación ingresos proyectados vs reales
-- Generación de alertas de cartera
-- Dashboard de análisis de ingresos
-- Exportación JSON v3.0 (proyección + cartera)
+FUNCIONALIDADES ACTUALES (v1.1.0 Beta):
+- ✅ Carga de proyección desde JSON v2.0
+- ✅ Ingreso de datos de cartera (hitos + pagos reales)
+- ✅ Conciliación automática (detecta sobrepagos, retenciones, etc.)
+- ✅ Comparación ingresos proyectados vs reales
+- ✅ Generación de alertas de cartera
+- ✅ Dashboard de análisis de ingresos
+- ✅ Parser automático de Excel de ejecución contable
+- ✅ Clasificación automática de cuentas (34 cuentas mapeadas)
+- ✅ Agrupación de gastos por semana y categoría
+- ✅ Soporte para archivos acumulados anuales
+- ✅ Consolidación de múltiples archivos (2 años)
+- ✅ Comparación rápida vs proyección por categoría
+- ✅ Exportación JSON v3.0 (proyección + cartera)
+- 🔜 Dashboard de análisis de egresos (Paso 5)
+- 🔜 Análisis FCL completo (Paso 6)
 
 ROADMAP:
 - v1.0.0: Módulo Cartera (ingresos) ✅
-- v1.1.0: Módulo Egresos Reales (gastos) 🔜
-- v1.2.0: Análisis FCL completo (ingresos + egresos) 🔜
-- v1.3.0: Dashboard consolidado multiproyectos 🔜
+- v1.1.0: Módulo Egresos (ingreso/parser) ✅
+- v1.2.0: Análisis de Egresos completo (dashboard) 🔜
+- v1.3.0: Análisis FCL completo (ingresos + egresos) 🔜
+- v1.4.0: Dashboard consolidado multiproyectos 🔜
 """
 
 import streamlit as st
@@ -77,6 +93,56 @@ def formatear_moneda(valor: float) -> str:
 def calcular_porcentaje(parte: float, total: float) -> float:
     """Calcula porcentaje de forma segura"""
     return (parte / total * 100) if total > 0 else 0
+
+
+# ============================================================================
+# TABLA DE CLASIFICACIÓN DE CUENTAS CONTABLES
+# ============================================================================
+
+TABLA_CLASIFICACION_CUENTAS = {
+    "Aporte a fondos de pensión y/o cesantías": "Mano de Obra",
+    "Aportes a administradora de riesgos laborales": "Mano de Obra",
+    "Aportes cajas de compensación familiar": "Mano de Obra",
+    "Auxilio de transporte": "Mano de Obra",
+    "Bonificaciones no constitutivas": "Mano de Obra",
+    "Casino y Restaurante": "Variables",
+    "Cesantías": "Mano de Obra",
+    "Combustibles (Acpm - Gasolina)": "Variables",
+    "Costos indirectos": "Variables",
+    "Costos no deducibles sin seguridad social": "Variables",
+    "Costos sin factura electrónica": "Variables",
+    "Dotación y suministro a trabajadores": "Mano de Obra",
+    "Elementos de Aseo en General": "Variables",
+    "Garantía de Cumplimiento": "Administracion",
+    "Herramientas": "Variables",
+    "Honorarios de Topografo": "Mano de Obra",
+    "Honorarios Estudio de Suelos, Pavimentos, Concreto": "Mano de Obra",
+    "Horas extras y recargos": "Mano de Obra",
+    "Ingeniero Residente de Obra": "Mano de Obra",
+    "Intereses sobre cesantías": "Administracion",
+    "Materiales de Operación": "Materiales",
+    "Prima de servicios": "Mano de Obra",
+    "Servicios de Construcción": "Variables",
+    "Sueldos": "Mano de Obra",
+    "Transporte en bus o taxi": "Variables",
+    "Transportes de Materiales": "Materiales",
+    "Útiles, papelería y Fotocopias": "Variables",
+    "Vacaciones": "Mano de Obra",
+    "Materia prima": "Materiales",
+    "Incapacidades": "Mano de Obra",
+    "Servicio de Metalmecanica": "Variables",
+    "Herramientas y otros": "Variables",
+    "Parqueaderos": "Variables",
+    "Costos No deducibles no cumple requisitos Factura": "Variables"
+}
+
+# Mapeo de categorías ejecución a proyección
+MAPEO_CATEGORIAS_EJECUCION_PROYECCION = {
+    "Materiales": "Materiales",
+    "Mano de Obra": "Mano_Obra",
+    "Variables": "Variables",  # Agrupa: Equipos + Imprevistos + Logistica
+    "Administracion": "Admin"
+}
 
 
 # ============================================================================
@@ -350,6 +416,172 @@ def render_tabla_alertas(alertas: List[Dict]):
                     st.metric("Semanas Atraso", alerta['semanas_atraso'])
                 elif 'pct' in alerta:
                     st.metric("Porcentaje", f"{alerta['pct']:.1f}%")
+
+
+# ============================================================================
+# FUNCIONES DE PARSER DE EGRESOS REALES
+# ============================================================================
+
+def validar_excel_egresos(archivo) -> Tuple[bool, str]:
+    """
+    Valida estructura del archivo Excel de egresos
+    
+    Returns:
+        (es_valido, mensaje_error)
+    """
+    try:
+        # Leer Excel
+        df = pd.read_excel(archivo, sheet_name=0, header=7)
+        
+        # Verificar columnas esenciales
+        columnas_requeridas = ['Código contable', 'Cuenta contable', 
+                              'Fecha elaboración', 'Débito']
+        columnas_faltantes = [col for col in columnas_requeridas if col not in df.columns]
+        
+        if columnas_faltantes:
+            return False, f"Faltan columnas: {', '.join(columnas_faltantes)}"
+        
+        # Verificar que hay datos
+        df_trans = df[df['Código contable'].notna()]
+        df_trans = df_trans[~df_trans['Código contable'].astype(str).str.startswith('Procesado')]
+        
+        if len(df_trans) == 0:
+            return False, "El archivo no contiene registros transaccionales"
+        
+        return True, "Archivo válido"
+        
+    except Exception as e:
+        return False, f"Error al leer archivo: {str(e)}"
+
+
+def parse_excel_egresos(
+    archivo,
+    fecha_inicio_proyecto: date,
+    nombre_centro_costo: str = None
+) -> Dict:
+    """
+    Parsea archivo Excel de ejecución contable y agrupa por semana/categoría
+    
+    Args:
+        archivo: UploadedFile de Streamlit
+        fecha_inicio_proyecto: Fecha de inicio del proyecto
+        nombre_centro_costo: Filtrar por centro de costo específico (opcional)
+    
+    Returns:
+        Dict con:
+            - archivo: nombre del archivo
+            - fecha_proceso: fecha de procesamiento
+            - semana_ultima: última semana con datos
+            - periodo_covered: rango de fechas
+            - registros_procesados: cantidad de registros
+            - egresos_semanales: lista de dict por semana
+            - totales_acumulados: dict con totales por categoría
+            - cuentas_sin_clasificar: lista de cuentas no mapeadas
+    """
+    try:
+        # Leer Excel (header en fila 8 = índice 7)
+        df = pd.read_excel(archivo, sheet_name=0, header=7)
+        
+        # Filtrar datos transaccionales
+        df_trans = df[df['Código contable'].notna()].copy()
+        df_trans = df_trans[~df_trans['Código contable'].astype(str).str.startswith('Procesado')]
+        
+        # Filtrar por centro de costo si se especifica
+        if nombre_centro_costo and 'Centro de costo' in df_trans.columns:
+            df_trans = df_trans[
+                df_trans['Centro de costo'].str.contains(nombre_centro_costo, case=False, na=False)
+            ]
+        
+        # Mapear cuentas a categorías
+        df_trans['Categoria'] = df_trans['Cuenta contable'].map(TABLA_CLASIFICACION_CUENTAS)
+        
+        # Identificar cuentas sin clasificar
+        cuentas_sin_clasificar = df_trans[df_trans['Categoria'].isna()]['Cuenta contable'].unique().tolist()
+        
+        # Filtrar solo registros clasificados
+        df_clasificado = df_trans[df_trans['Categoria'].notna()].copy()
+        
+        # Convertir fecha a datetime
+        df_clasificado['Fecha elaboración'] = pd.to_datetime(
+            df_clasificado['Fecha elaboración'], 
+            errors='coerce'
+        )
+        
+        # Calcular semana del proyecto
+        df_clasificado['Semana'] = df_clasificado['Fecha elaboración'].apply(
+            lambda x: calcular_semana_desde_fecha(fecha_inicio_proyecto, x.date()) 
+            if pd.notna(x) else None
+        )
+        
+        # Agrupar por semana y categoría
+        df_agrupado = df_clasificado.groupby(['Semana', 'Categoria'])['Débito'].sum().reset_index()
+        
+        # Crear tabla pivote: semanas en filas, categorías en columnas
+        df_pivot = df_agrupado.pivot_table(
+            index='Semana',
+            columns='Categoria',
+            values='Débito',
+            fill_value=0
+        ).reset_index()
+        
+        # Asegurar que todas las categorías existen
+        for cat in ['Materiales', 'Mano de Obra', 'Variables', 'Administracion']:
+            if cat not in df_pivot.columns:
+                df_pivot[cat] = 0
+        
+        # Calcular total por semana
+        df_pivot['Total'] = (
+            df_pivot['Materiales'] + 
+            df_pivot['Mano de Obra'] + 
+            df_pivot['Variables'] + 
+            df_pivot['Administracion']
+        )
+        
+        # Convertir a lista de diccionarios
+        egresos_semanales = []
+        for _, row in df_pivot.iterrows():
+            semana = int(row['Semana'])
+            fecha_inicio_semana = fecha_inicio_proyecto + timedelta(weeks=semana-1)
+            
+            egresos_semanales.append({
+                'semana': semana,
+                'fecha_inicio': fecha_inicio_semana.isoformat(),
+                'materiales': float(row['Materiales']),
+                'mano_obra': float(row['Mano de Obra']),
+                'variables': float(row['Variables']),
+                'admin': float(row['Administracion']),
+                'total': float(row['Total'])
+            })
+        
+        # Calcular totales acumulados
+        totales_acumulados = {
+            'materiales': float(df_pivot['Materiales'].sum()),
+            'mano_obra': float(df_pivot['Mano de Obra'].sum()),
+            'variables': float(df_pivot['Variables'].sum()),
+            'admin': float(df_pivot['Administracion'].sum()),
+            'total': float(df_pivot['Total'].sum())
+        }
+        
+        # Detectar última fecha y semana
+        ultima_fecha = df_clasificado['Fecha elaboración'].max()
+        semana_ultima = df_clasificado['Semana'].max() if not df_clasificado['Semana'].isna().all() else 0
+        primera_fecha = df_clasificado['Fecha elaboración'].min()
+        
+        return {
+            'archivo': archivo.name,
+            'fecha_proceso': datetime.now().isoformat(),
+            'semana_ultima': int(semana_ultima) if pd.notna(semana_ultima) else 0,
+            'periodo_covered': f"{primera_fecha.strftime('%Y-%m-%d')} a {ultima_fecha.strftime('%Y-%m-%d')}" if pd.notna(primera_fecha) and pd.notna(ultima_fecha) else "N/A",
+            'registros_procesados': len(df_clasificado),
+            'registros_totales': len(df_trans),
+            'egresos_semanales': egresos_semanales,
+            'totales_acumulados': totales_acumulados,
+            'cuentas_sin_clasificar': cuentas_sin_clasificar
+        }
+        
+    except Exception as e:
+        st.error(f"Error al procesar archivo: {str(e)}")
+        return None
 
 
 # ============================================================================
@@ -1176,6 +1408,385 @@ def render_paso_3_analisis():
     - ✅ Comparación proyección vs real
     - ✅ Alertas generadas
     """)
+    
+    # Botón para continuar a Egresos
+    st.markdown("---")
+    st.subheader("➡️ Siguiente Paso: Análisis de Egresos")
+    st.info("Continúe con el análisis de gastos reales del proyecto comparándolos con la proyección.")
+    
+    if st.button("▶️ Continuar a Egresos Reales", type="primary", use_container_width=True):
+        st.session_state.paso_ejecucion = 4
+        st.rerun()
+
+
+# ============================================================================
+# COMPONENTES DE INTERFAZ - PASO 4: INGRESAR EGRESOS REALES
+# ============================================================================
+
+def render_paso_4_ingresar_egresos():
+    """Paso 4: Ingresar egresos reales desde Excel contable"""
+    
+    st.header("💰 Paso 4: Ingresar Egresos Reales")
+    st.caption("📍 Módulo 2: EGRESOS | Gastos de ejecución contable")
+    
+    # Botón volver
+    col_v1, col_v2 = st.columns([1, 4])
+    with col_v1:
+        if st.button("◀️ Volver a Cartera"):
+            st.session_state.paso_ejecucion = 3
+            st.rerun()
+    
+    st.markdown("---")
+    
+    # Verificar que existe proyección cargada
+    if 'proyeccion_cartera' not in st.session_state:
+        st.error("⚠️ No hay proyección cargada. Por favor regrese al Paso 1.")
+        return
+    
+    proyeccion = st.session_state.proyeccion_cartera
+    fecha_inicio = datetime.fromisoformat(proyeccion['proyecto']['fecha_inicio']).date()
+    nombre_proyecto = proyeccion['proyecto']['nombre']
+    
+    # Instrucciones
+    st.info("""
+    **📁 Instrucciones:**
+    
+    Cargue el archivo Excel de ejecución contable (formato estándar):
+    - **Formato:** `AÑO_2025_OBRA_NOMBRE.xlsx`
+    - **Estructura:** Encabezados en fila 8, datos transaccionales desde fila 9
+    - **Columnas requeridas:** Código contable, Cuenta contable, Fecha elaboración, Débito
+    - **Archivos:** Puede cargar 1 o 2 archivos (año actual + año anterior si aplica)
+    
+    El sistema clasificará automáticamente los gastos en:
+    - 💎 Materiales
+    - 👷 Mano de Obra  
+    - 📦 Variables (Equipos, Combustibles, Servicios, etc.)
+    - 🏢 Administración
+    """)
+    
+    # Upload de archivo(s)
+    st.subheader("📁 Cargar Archivo(s) de Ejecución")
+    
+    archivos_subidos = st.file_uploader(
+        "Seleccione uno o dos archivos Excel (.xlsx)",
+        type=['xlsx'],
+        accept_multiple_files=True,
+        key='upload_egresos',
+        help="Puede cargar hasta 2 archivos si el proyecto abarca 2 años"
+    )
+    
+    if not archivos_subidos:
+        st.warning("⚠️ Por favor cargue al menos un archivo Excel para continuar.")
+        return
+    
+    # Validar archivos
+    st.markdown("---")
+    st.subheader("✅ Validación de Archivos")
+    
+    archivos_validos = []
+    for archivo in archivos_subidos:
+        with st.expander(f"📄 {archivo.name}", expanded=True):
+            es_valido, mensaje = validar_excel_egresos(archivo)
+            
+            if es_valido:
+                st.success(f"✅ {mensaje}")
+                archivos_validos.append(archivo)
+                
+                # Mostrar preview
+                df_preview = pd.read_excel(archivo, sheet_name=0, header=7, nrows=5)
+                st.caption("Vista previa (primeras 5 filas):")
+                st.dataframe(df_preview[['Código contable', 'Cuenta contable', 
+                                        'Fecha elaboración', 'Débito']].head(), 
+                           use_container_width=True)
+            else:
+                st.error(f"❌ {mensaje}")
+    
+    if not archivos_validos:
+        st.error("❌ Ningún archivo pasó la validación. Por favor verifique los archivos.")
+        return
+    
+    # Procesar archivos
+    st.markdown("---")
+    st.subheader("🔄 Procesamiento de Datos")
+    
+    # Botón de procesamiento
+    if st.button("🚀 Procesar Archivos", type="primary", use_container_width=True):
+        
+        # Procesar cada archivo
+        datos_egresos_todos = []
+        
+        with st.spinner("Procesando archivos..."):
+            for archivo in archivos_validos:
+                st.info(f"📊 Procesando: {archivo.name}")
+                
+                datos_egresos = parse_excel_egresos(
+                    archivo=archivo,
+                    fecha_inicio_proyecto=fecha_inicio,
+                    nombre_centro_costo=None  # Procesar todos los centros de costo
+                )
+                
+                if datos_egresos:
+                    datos_egresos_todos.append(datos_egresos)
+                    
+                    # Mostrar resumen por archivo
+                    col1, col2, col3 = st.columns(3)
+                    with col1:
+                        st.metric("Registros procesados", 
+                                f"{datos_egresos['registros_procesados']:,}")
+                    with col2:
+                        st.metric("Semanas", 
+                                f"1 a {datos_egresos['semana_ultima']}")
+                    with col3:
+                        st.metric("Período", 
+                                datos_egresos['periodo_covered'])
+                    
+                    # Alertas de cuentas sin clasificar
+                    if datos_egresos['cuentas_sin_clasificar']:
+                        st.warning(f"⚠️ {len(datos_egresos['cuentas_sin_clasificar'])} cuenta(s) sin clasificar:")
+                        for cuenta in datos_egresos['cuentas_sin_clasificar'][:5]:
+                            st.write(f"   • {cuenta}")
+                        if len(datos_egresos['cuentas_sin_clasificar']) > 5:
+                            st.write(f"   • ... y {len(datos_egresos['cuentas_sin_clasificar'])-5} más")
+        
+        if not datos_egresos_todos:
+            st.error("❌ No se pudo procesar ningún archivo.")
+            return
+        
+        # Consolidar datos si hay múltiples archivos
+        if len(datos_egresos_todos) == 1:
+            datos_consolidados = datos_egresos_todos[0]
+        else:
+            # Consolidar múltiples archivos
+            st.info("🔄 Consolidando datos de múltiples archivos...")
+            datos_consolidados = consolidar_egresos_multiples_archivos(datos_egresos_todos)
+        
+        # Guardar en session_state
+        st.session_state.egresos_reales_input = datos_consolidados
+        
+        st.success("✅ Datos procesados exitosamente")
+    
+    # Mostrar vista previa si ya hay datos procesados
+    if 'egresos_reales_input' in st.session_state:
+        st.markdown("---")
+        st.subheader("📊 Vista Previa de Datos Procesados")
+        
+        datos = st.session_state.egresos_reales_input
+        
+        # KPIs principales
+        col1, col2, col3, col4 = st.columns(4)
+        
+        with col1:
+            st.metric(
+                "Total Gastado",
+                formatear_moneda(datos['totales_acumulados']['total'])
+            )
+        
+        with col2:
+            st.metric(
+                "Semanas con Datos",
+                f"1 a {datos['semana_ultima']}"
+            )
+        
+        with col3:
+            st.metric(
+                "Registros",
+                f"{datos['registros_procesados']:,}"
+            )
+        
+        with col4:
+            st.metric(
+                "Archivos",
+                len(datos_egresos_todos) if 'datos_egresos_todos' in locals() else 1
+            )
+        
+        # Totales por categoría
+        st.markdown("### 💰 Totales por Categoría")
+        
+        totales = datos['totales_acumulados']
+        total_general = totales['total']
+        
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            st.metric(
+                "💎 Materiales",
+                formatear_moneda(totales['materiales']),
+                delta=f"{calcular_porcentaje(totales['materiales'], total_general):.1f}%"
+            )
+            st.metric(
+                "👷 Mano de Obra",
+                formatear_moneda(totales['mano_obra']),
+                delta=f"{calcular_porcentaje(totales['mano_obra'], total_general):.1f}%"
+            )
+        
+        with col2:
+            st.metric(
+                "📦 Variables",
+                formatear_moneda(totales['variables']),
+                delta=f"{calcular_porcentaje(totales['variables'], total_general):.1f}%"
+            )
+            st.metric(
+                "🏢 Administración",
+                formatear_moneda(totales['admin']),
+                delta=f"{calcular_porcentaje(totales['admin'], total_general):.1f}%"
+            )
+        
+        # Tabla semanal (últimas 10 semanas)
+        st.markdown("### 📅 Egresos Semanales (Últimas 10 Semanas)")
+        
+        egresos_semanales = datos['egresos_semanales']
+        ultimas_semanas = egresos_semanales[-10:] if len(egresos_semanales) > 10 else egresos_semanales
+        
+        df_preview = pd.DataFrame(ultimas_semanas)
+        df_preview_display = df_preview[['semana', 'materiales', 'mano_obra', 'variables', 'admin', 'total']].copy()
+        df_preview_display.columns = ['Semana', 'Materiales', 'Mano Obra', 'Variables', 'Admin', 'Total']
+        
+        # Formatear como moneda
+        for col in ['Materiales', 'Mano Obra', 'Variables', 'Admin', 'Total']:
+            df_preview_display[col] = df_preview_display[col].apply(lambda x: formatear_moneda(x))
+        
+        st.dataframe(df_preview_display, use_container_width=True, hide_index=True)
+        
+        # Comparación rápida vs proyección (si existe)
+        if 'proyeccion_semanal' in proyeccion:
+            st.markdown("### ⚡ Comparación Rápida vs Proyección")
+            
+            df_proy = pd.DataFrame(proyeccion['proyeccion_semanal'])
+            
+            # Calcular totales proyectados por categoría (acumulado hasta semana última)
+            semana_ultima = datos['semana_ultima']
+            df_proy_filtrado = df_proy[df_proy['semana'] <= semana_ultima]
+            
+            proy_materiales = df_proy_filtrado['materiales'].sum()
+            proy_mano_obra = df_proy_filtrado['mano_obra'].sum()
+            proy_equipos = df_proy_filtrado.get('equipos', pd.Series([0])).sum()
+            proy_imprevistos = df_proy_filtrado.get('imprevistos', pd.Series([0])).sum()
+            proy_logistica = df_proy_filtrado.get('logistica', pd.Series([0])).sum()
+            proy_admin = df_proy_filtrado.get('admin', pd.Series([0])).sum()
+            
+            # Variables = Equipos + Imprevistos + Logística
+            proy_variables = proy_equipos + proy_imprevistos + proy_logistica
+            
+            col1, col2, col3, col4 = st.columns(4)
+            
+            with col1:
+                desv_mat = totales['materiales'] - proy_materiales
+                pct_mat = calcular_porcentaje(desv_mat, proy_materiales)
+                st.metric(
+                    "Materiales",
+                    f"{'+' if desv_mat > 0 else ''}{pct_mat:.1f}%",
+                    delta=formatear_moneda(desv_mat),
+                    delta_color="inverse"
+                )
+            
+            with col2:
+                desv_mo = totales['mano_obra'] - proy_mano_obra
+                pct_mo = calcular_porcentaje(desv_mo, proy_mano_obra)
+                st.metric(
+                    "Mano de Obra",
+                    f"{'+' if desv_mo > 0 else ''}{pct_mo:.1f}%",
+                    delta=formatear_moneda(desv_mo),
+                    delta_color="inverse"
+                )
+            
+            with col3:
+                desv_var = totales['variables'] - proy_variables
+                pct_var = calcular_porcentaje(desv_var, proy_variables)
+                st.metric(
+                    "Variables",
+                    f"{'+' if desv_var > 0 else ''}{pct_var:.1f}%",
+                    delta=formatear_moneda(desv_var),
+                    delta_color="inverse"
+                )
+            
+            with col4:
+                desv_admin = totales['admin'] - proy_admin
+                pct_admin = calcular_porcentaje(desv_admin, proy_admin)
+                st.metric(
+                    "Administración",
+                    f"{'+' if desv_admin > 0 else ''}{pct_admin:.1f}%",
+                    delta=formatear_moneda(desv_admin),
+                    delta_color="inverse"
+                )
+        
+        # Botón generar análisis
+        st.markdown("---")
+        
+        if st.button("▶️ Generar Análisis de Egresos", type="primary", use_container_width=True):
+            st.session_state.paso_ejecucion = 5
+            st.rerun()
+
+
+def consolidar_egresos_multiples_archivos(lista_datos: List[Dict]) -> Dict:
+    """
+    Consolida datos de múltiples archivos de egresos en uno solo
+    
+    Args:
+        lista_datos: Lista de diccionarios con datos parseados
+    
+    Returns:
+        Dict consolidado con estructura similar a parse_excel_egresos
+    """
+    if len(lista_datos) == 1:
+        return lista_datos[0]
+    
+    # Consolidar egresos semanales
+    egresos_consolidados = {}
+    
+    for datos in lista_datos:
+        for egreso_semanal in datos['egresos_semanales']:
+            semana = egreso_semanal['semana']
+            
+            if semana not in egresos_consolidados:
+                egresos_consolidados[semana] = {
+                    'semana': semana,
+                    'fecha_inicio': egreso_semanal['fecha_inicio'],
+                    'materiales': 0,
+                    'mano_obra': 0,
+                    'variables': 0,
+                    'admin': 0,
+                    'total': 0
+                }
+            
+            egresos_consolidados[semana]['materiales'] += egreso_semanal['materiales']
+            egresos_consolidados[semana]['mano_obra'] += egreso_semanal['mano_obra']
+            egresos_consolidados[semana]['variables'] += egreso_semanal['variables']
+            egresos_consolidados[semana]['admin'] += egreso_semanal['admin']
+            egresos_consolidados[semana]['total'] += egreso_semanal['total']
+    
+    # Convertir a lista ordenada
+    egresos_semanales_final = sorted(egresos_consolidados.values(), key=lambda x: x['semana'])
+    
+    # Calcular totales acumulados
+    totales_acumulados = {
+        'materiales': sum([e['materiales'] for e in egresos_semanales_final]),
+        'mano_obra': sum([e['mano_obra'] for e in egresos_semanales_final]),
+        'variables': sum([e['variables'] for e in egresos_semanales_final]),
+        'admin': sum([e['admin'] for e in egresos_semanales_final]),
+        'total': sum([e['total'] for e in egresos_semanales_final])
+    }
+    
+    # Consolidar metadatos
+    archivos_nombres = [d['archivo'] for d in lista_datos]
+    registros_totales = sum([d['registros_procesados'] for d in lista_datos])
+    semana_ultima = max([d['semana_ultima'] for d in lista_datos])
+    
+    # Consolidar cuentas sin clasificar
+    cuentas_sin_clasificar = []
+    for datos in lista_datos:
+        cuentas_sin_clasificar.extend(datos.get('cuentas_sin_clasificar', []))
+    cuentas_sin_clasificar = list(set(cuentas_sin_clasificar))  # Eliminar duplicados
+    
+    return {
+        'archivo': f"{len(lista_datos)} archivos: {', '.join(archivos_nombres)}",
+        'fecha_proceso': datetime.now().isoformat(),
+        'semana_ultima': semana_ultima,
+        'periodo_covered': "Consolidado",
+        'registros_procesados': registros_totales,
+        'egresos_semanales': egresos_semanales_final,
+        'totales_acumulados': totales_acumulados,
+        'cuentas_sin_clasificar': cuentas_sin_clasificar
+    }
 
 
 # ============================================================================
@@ -1198,27 +1809,35 @@ def main():
     
     # =======================================================================
     # NOTA DESARROLLO MODULAR:
-    # El sistema está diseñado para 2 módulos:
-    # 1. CARTERA (Ingresos Reales) - v1.0.0 ✅
-    # 2. EGRESOS REALES (Gastos) - v1.1.0 🔜
+    # El sistema está diseñado para 2 módulos integrados:
+    # 1. CARTERA (Ingresos Reales) - Pasos 1-3 ✅
+    # 2. EGRESOS REALES (Gastos) - Pasos 4-5 ✅
+    # 3. ANÁLISIS FCL COMPLETO - Paso 6 🔜
     # 
-    # Estructura futura (v1.1.0+):
-    # - Usuario selecciona módulo (tabs o sidebar)
-    # - Cada módulo tiene sus propios pasos
-    # - Al final: análisis integrado FCL completo
+    # Flujo:
+    # Paso 1: Cargar Proyección
+    # Paso 2: Ingresar Cartera (ingresos reales)
+    # Paso 3: Análisis Cartera
+    # Paso 4: Ingresar Egresos (gastos reales)
+    # Paso 5: Análisis Egresos
+    # Paso 6: Análisis FCL Completo (ingresos + egresos)
     # =======================================================================
     
-    # Por ahora, solo módulo de cartera
     paso = st.session_state.paso_ejecucion
     
     # Indicador de progreso
     progress_labels = {
         1: "📁 Cargar Proyección",
         2: "💰 Ingresar Cartera",
-        3: "📊 Análisis"
+        3: "📊 Análisis Cartera",
+        4: "💰 Ingresar Egresos",
+        5: "📊 Análisis Egresos"
     }
     
-    st.progress(paso / 3, text=f"Paso {paso}/3: {progress_labels[paso]}")
+    # Determinar total de pasos (5 por ahora, 6 cuando se implemente FCL completo)
+    total_pasos = 5
+    
+    st.progress(paso / total_pasos, text=f"Paso {paso}/{total_pasos}: {progress_labels.get(paso, 'Análisis')}")
     
     st.markdown("---")
     
@@ -1241,6 +1860,99 @@ def main():
             st.rerun()
         else:
             render_paso_3_analisis()
+    
+    elif paso == 4:
+        if 'proyeccion_cartera' not in st.session_state:
+            st.error("❌ No se ha cargado una proyección. Regresando al paso 1...")
+            st.session_state.paso_ejecucion = 1
+            st.rerun()
+        else:
+            render_paso_4_ingresar_egresos()
+    
+    elif paso == 5:
+        if 'egresos_reales_input' not in st.session_state:
+            st.error("❌ No se han ingresado datos de egresos. Regresando al paso 4...")
+            st.session_state.paso_ejecucion = 4
+            st.rerun()
+        else:
+            render_paso_5_analisis_egresos()
+
+
+# ============================================================================
+# COMPONENTES DE INTERFAZ - PASO 5: ANÁLISIS DE EGRESOS
+# ============================================================================
+
+def render_paso_5_analisis_egresos():
+    """Paso 5: Análisis de egresos reales vs proyectados"""
+    
+    st.header("📊 Análisis de Egresos - Gastos Reales vs Proyectados")
+    st.caption("📍 Módulo 2: EGRESOS | Dashboard de análisis de gastos")
+    
+    # Botón volver
+    col_v1, col_v2 = st.columns([1, 4])
+    with col_v1:
+        if st.button("◀️ Editar Datos"):
+            st.session_state.paso_ejecucion = 4
+            st.rerun()
+    
+    st.markdown("---")
+    
+    # TODO: Implementar análisis completo de egresos
+    # Por ahora, mostrar placeholder
+    
+    st.info("""
+    ### 🚧 En Desarrollo
+    
+    **Próximas funcionalidades (v1.1.0):**
+    
+    1. **KPIs de Egresos:**
+       - Total gastado vs presupuestado
+       - Desviación por categoría
+       - Estado de ejecución presupuestal
+    
+    2. **Gráfica Proyección vs Real:**
+       - Egresos proyectados acumulados
+       - Gastos reales acumulados
+       - Línea de semana actual
+    
+    3. **Comparación por Categoría:**
+       - Materiales: Proyectado vs Real
+       - Mano de Obra: Proyectado vs Real
+       - Variables: Proyectado vs Real
+       - Administración: Proyectado vs Real
+    
+    4. **Sistema de Alertas:**
+       - Sobrecostos por categoría
+       - Tendencias de gasto
+       - Proyecciones de déficit
+    
+    5. **Exportación JSON v4.0:**
+       - Proyección + Cartera + Egresos
+    """)
+    
+    # Mostrar datos cargados (preview)
+    if 'egresos_reales_input' in st.session_state:
+        datos = st.session_state.egresos_reales_input
+        
+        st.markdown("### 📊 Datos Cargados")
+        
+        col1, col2, col3 = st.columns(3)
+        
+        with col1:
+            st.metric("Total Gastado", formatear_moneda(datos['totales_acumulados']['total']))
+        
+        with col2:
+            st.metric("Semanas", f"1 a {datos['semana_ultima']}")
+        
+        with col3:
+            st.metric("Registros", f"{datos['registros_procesados']:,}")
+    
+    # Botón temporal para regresar
+    st.markdown("---")
+    
+    if st.button("◀️ Volver a Cartera", use_container_width=True):
+        st.session_state.paso_ejecucion = 3
+        st.rerun()
 
 
 # ============================================================================
