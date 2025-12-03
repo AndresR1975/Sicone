@@ -309,62 +309,90 @@ def render_modulo_cotizaciones():
         st.exception(e)
 
 def render_modulo_flujo_caja():
-    """Renderiza el módulo de Flujo de Caja - Proyección FCL"""
+    """Renderiza el módulo de Flujo de Caja con submenú Proyección/Cartera"""
     # Botón de regreso
     with st.sidebar:
         if st.button("◄ Volver al Inicio", use_container_width=True):
             st.session_state.modulo_actual = None
             st.rerun()
+        
+        st.markdown("---")
+        
+        # Submenú de Flujo de Caja
+        st.markdown("### 📊 Flujo de Caja")
+        
+        # Inicializar submodulo si no existe
+        if 'submodulo_fcl' not in st.session_state:
+            st.session_state.submodulo_fcl = 'proyeccion'
+        
+        submodulo = st.radio(
+            "Seleccione:",
+            ["🏗️ Proyección FCL", "💼 Ejecución Real FCL"],
+            index=0 if st.session_state.submodulo_fcl == 'proyeccion' else 1,
+            key='radio_submodulo_fcl'
+        )
+        
+        # Actualizar submodulo
+        if "Proyección" in submodulo:
+            st.session_state.submodulo_fcl = 'proyeccion'
+        else:
+            st.session_state.submodulo_fcl = 'ejecucion'
+        
         st.markdown("---")
         st.markdown(f"👤 **Usuario:** {st.session_state.usuario_actual['nombre_completo']}")
         st.caption(f"Rol: {st.session_state.usuario_actual['rol']}")
     
-    # Importar y ejecutar el módulo de proyección FCL
-    try:
-        import importlib
-        import sys
+    # Renderizar submódulo correspondiente
+    if st.session_state.submodulo_fcl == 'proyeccion':
+        # Módulo de Proyección FCL
+        try:
+            import importlib
+            import sys
+            
+            # Recargar módulo para usar versión más reciente
+            if 'proyeccion_fcl' in sys.modules:
+                import proyeccion_fcl
+                importlib.reload(proyeccion_fcl)
+            else:
+                import proyeccion_fcl
+            
+            # Ejecutar
+            if hasattr(proyeccion_fcl, 'main'):
+                proyeccion_fcl.main()
+            else:
+                st.error("❌ Error: proyeccion_fcl.py no tiene función main()")
         
-        # Si el módulo ya fue importado, recargarlo para usar versión más reciente
-        if 'proyeccion_fcl' in sys.modules:
-            import proyeccion_fcl
-            importlib.reload(proyeccion_fcl)
-        else:
-            import proyeccion_fcl
+        except ImportError as e:
+            st.error(f"❌ Error al importar proyeccion_fcl: {e}")
+        except Exception as e:
+            st.error(f"❌ Error inesperado: {e}")
+            st.exception(e)
+    
+    else:  # ejecucion
+        # Módulo de Ejecución Real FCL
+        try:
+            import importlib
+            import sys
+            
+            # Recargar módulo para usar versión más reciente
+            if 'ejecucion_fcl' in sys.modules:
+                import ejecucion_fcl
+                importlib.reload(ejecucion_fcl)
+            else:
+                import ejecucion_fcl
+            
+            # Ejecutar
+            if hasattr(ejecucion_fcl, 'main'):
+                ejecucion_fcl.main()
+            else:
+                st.error("❌ Error: ejecucion_fcl.py no tiene función main()")
         
-        # Verificar que main() existe antes de llamarla
-        if not hasattr(proyeccion_fcl, 'main'):
-            st.error("❌ Error: El módulo `proyeccion_fcl.py` no tiene una función `main()`")
-            st.info("Por favor, verifique que el archivo proyeccion_fcl.py esté actualizado")
-        else:
-            proyeccion_fcl.main()
-        
-    except ImportError as e:
-        st.error(f"❌ Error al importar el módulo de proyección FCL: {e}")
-        st.info("**Solución:** Asegúrese de que `proyeccion_fcl.py` esté en el mismo directorio que `main.py`")
-    except Exception as e:
-        st.error(f"❌ Error inesperado: {e}")
-        st.exception(e)
-    
-    st.markdown("""
-    ### 📊 Módulo de Flujo de Caja
-    
-    **Características planificadas:**
-    
-    #### Fase 1: Proyección
-    - Configuración de contratos y hitos
-    - Cronograma de fases
-    - Proyección de ingresos y egresos
-    
-    #### Fase 2: Ejecución Real
-    - Importación de datos contables
-    - Importación de informe de cartera
-    - Flujo de caja real
-    
-    #### Fase 3: Análisis
-    - Comparación proyección vs real
-    - 11 KPIs financieros
-    - Dashboard interactivo
-    """)
+        except ImportError as e:
+            st.error(f"❌ Error al importar ejecucion_fcl: {e}")
+            st.info("**Solución:** Asegúrese de que `ejecucion_fcl.py` esté en el mismo directorio")
+        except Exception as e:
+            st.error(f"❌ Error inesperado: {e}")
+            st.exception(e)
 
 # ============================================================================
 # MAIN - PUNTO DE ENTRADA
