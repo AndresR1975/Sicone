@@ -712,6 +712,14 @@ def render_paso_2_ingresar_cartera():
     if 'pagos_por_hito' not in st.session_state:
         st.session_state.pagos_por_hito = {str(h['id']): [] for h in hitos_proyeccion}
     
+    # Inicializar conjunto de hitos expandidos
+    if 'hitos_expandidos_cartera' not in st.session_state:
+        # Por default, expandir hitos sin pagos
+        st.session_state.hitos_expandidos_cartera = {
+            str(h['id']) for h in hitos_proyeccion 
+            if len(st.session_state.pagos_por_hito.get(str(h['id']), [])) == 0
+        }
+    
     # Mostrar información general
     total_proyectado = sum([h['monto'] for h in hitos_proyeccion])
     
@@ -728,8 +736,8 @@ def render_paso_2_ingresar_cartera():
         hito_id = str(hito['id'])
         
         with st.expander(
-            f"💎 Hito {hito['id']}: {hito['nombre']} - {formatear_moneda(hito['monto'])}", 
-            expanded=len(st.session_state.pagos_por_hito.get(hito_id, [])) == 0
+            f"💎 Hito {hito['id']}: {hito['nombre']} : {formatear_moneda(hito['monto'])}", 
+            expanded=hito_id in st.session_state.hitos_expandidos_cartera
         ):
             # Información del hito
             col_h1, col_h2, col_h3 = st.columns(3)
@@ -823,6 +831,8 @@ def render_paso_2_ingresar_cartera():
                     'recibo': '',
                     'monto': 0
                 })
+                # Mantener hito expandido
+                st.session_state.hitos_expandidos_cartera.add(hito_id)
                 st.rerun()
             
             # Resumen de conciliación
@@ -879,7 +889,7 @@ def render_paso_2_ingresar_cartera():
             else:
                 contratos_keys = [f'contrato_{contrato_key}']
             
-            for cont_key in contratos_keys:
+            for idx_cont, cont_key in enumerate(contratos_keys):
                 if cont_key not in contratos_dict:
                     # Buscar info del contrato en proyección
                     cont_data = proyeccion['contratos'].get(cont_key, {})
@@ -890,16 +900,38 @@ def render_paso_2_ingresar_cartera():
                         'hitos': []
                     }
                 
-                # Agregar hito a contrato
-                pagos_hito = st.session_state.pagos_por_hito.get(hito_id, [])
+                # Determinar porcentaje para este contrato
+                if contrato_key == 'ambos':
+                    # Hito compartido - usar porcentajes específicos
+                    if cont_key == 'contrato_1':
+                        porcentaje = hito.get('porcentaje_c1', 50) / 100
+                    else:  # contrato_2
+                        porcentaje = hito.get('porcentaje_c2', 50) / 100
+                else:
+                    # Hito exclusivo de un contrato
+                    porcentaje = 1.0
                 
+                # Obtener pagos y distribuir según porcentaje
+                pagos_hito_completos = st.session_state.pagos_por_hito.get(hito_id, [])
+                pagos_distribuidos = [
+                    {
+                        'fecha': p['fecha'],
+                        'recibo': p['recibo'],
+                        'monto': p['monto'] * porcentaje
+                    }
+                    for p in pagos_hito_completos
+                ]
+                
+                # Agregar hito a contrato con montos distribuidos
                 contratos_dict[cont_key]['hitos'].append({
                     'numero': hito['id'],
                     'descripcion': hito['nombre'],
-                    'monto_esperado': hito['monto'],
+                    'monto_esperado': hito['monto'] * porcentaje,
                     'semana_esperada': 1,  # TODO: calcular desde fase_vinculada
                     'fecha_vencimiento': None,
-                    'pagos': pagos_hito
+                    'pagos': pagos_distribuidos,
+                    'es_compartido': contrato_key == 'ambos',
+                    'porcentaje_contrato': porcentaje * 100
                 })
         
         st.session_state.contratos_cartera_input = list(contratos_dict.values())
