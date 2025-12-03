@@ -372,6 +372,61 @@ def render_paso_1_cargar_proyeccion():
     *Nota: El módulo de Egresos Reales (gastos) se agregará en la siguiente fase*
     """)
     
+    # Verificar si ya hay proyección cargada (desde proyeccion_fcl)
+    if 'proyeccion_cartera' in st.session_state:
+        proyeccion_data = st.session_state.proyeccion_cartera
+        
+        st.success("✅ Proyección cargada desde módulo de Proyección FCL")
+        
+        # Mostrar información del proyecto
+        proyecto = proyeccion_data['proyecto']
+        totales = proyeccion_data['totales']
+        
+        col1, col2, col3 = st.columns(3)
+        
+        with col1:
+            st.info(f"**Proyecto:** {proyecto['nombre']}")
+            st.info(f"**Cliente:** {proyecto.get('cliente', 'N/A')}")
+        
+        with col2:
+            st.info(f"**Fecha Inicio:** {proyecto['fecha_inicio']}")
+            st.info(f"**Duración:** {totales['semanas_total']} semanas")
+        
+        with col3:
+            st.info(f"**Total Proyecto:** {formatear_moneda(totales['total_proyecto'])}")
+            st.info(f"**Contratos:** {len(proyeccion_data['contratos'])}")
+        
+        # Mostrar contratos
+        st.markdown("---")
+        st.subheader("💼 Contratos")
+        
+        for cont_key, cont_data in proyeccion_data['contratos'].items():
+            with st.expander(f"{cont_key}: {cont_data.get('nombre', 'Sin nombre')}", expanded=False):
+                st.metric("Monto", formatear_moneda(cont_data['monto']))
+                
+                if 'desglose' in cont_data:
+                    st.write("**Desglose:**")
+                    for concepto, monto in cont_data['desglose'].items():
+                        st.write(f"- {concepto}: {formatear_moneda(monto)}")
+        
+        # Opción de cargar otra proyección
+        st.markdown("---")
+        if st.checkbox("🔄 Cargar otra proyección", value=False):
+            if st.button("🗑️ Limpiar y cargar nuevo archivo"):
+                del st.session_state.proyeccion_cartera
+                if 'pagos_por_hito' in st.session_state:
+                    del st.session_state.pagos_por_hito
+                st.rerun()
+        
+        # Botón continuar
+        st.markdown("---")
+        if st.button("▶️ Continuar a Ingreso de Cartera", type="primary", use_container_width=True):
+            st.session_state.paso_ejecucion = 2
+            st.rerun()
+        
+        return  # Salir de la función
+    
+    # Si no hay proyección cargada, mostrar uploader
     archivo_json = st.file_uploader(
         "Seleccione archivo JSON de proyección",
         type=['json'],
@@ -615,83 +670,239 @@ def render_formulario_hito(contrato_idx: int, hito_idx: int, contrato_numero: st
 
 
 def render_paso_2_ingresar_cartera():
-    """Paso 2: Ingresar datos de cartera (ingresos reales)"""
+    """Paso 2: Ingresar pagos reales a hitos predefinidos"""
     
-    st.header("💰 Paso 2: Ingresar Cartera - Ingresos Reales")
-    st.caption("📍 Módulo 1: CARTERA | Ingreso de cobros por hito")
+    st.header("💰 Paso 2: Registrar Pagos Recibidos")
+    st.caption("📍 Módulo 1: CARTERA | Asignar pagos reales a hitos de la proyección")
     
     # Botón volver
     col_v1, col_v2 = st.columns([1, 4])
     with col_v1:
         if st.button("◀️ Volver"):
+            # NO limpiar datos, solo cambiar paso
             st.session_state.paso_ejecucion = 1
             st.rerun()
     
     proyeccion = st.session_state.proyeccion_cartera
     
+    st.info("""
+    **Los hitos de pago ya están definidos en tu proyección.**
+    
+    A continuación, asigna los pagos reales recibidos a cada hito.
+    """)
+    
     # Fecha de corte
     fecha_corte = st.date_input(
         "📅 Fecha de Corte de Cartera",
         value=datetime.now().date(),
-        key='fecha_corte_cartera',
+        key='widget_fecha_corte_cartera',
         help="Fecha hasta la cual se reportan los cobros"
     )
     
     st.markdown("---")
     
-    # Inicializar contratos_cartera_data si no existe
-    if 'contratos_cartera_data' not in st.session_state:
-        st.session_state.contratos_cartera_data = {}
+    # Extraer hitos de la proyección
+    hitos_proyeccion = proyeccion['configuracion'].get('hitos', [])
     
-    # Iterar sobre contratos de la proyección
-    contratos_cartera = []
+    if not hitos_proyeccion:
+        st.error("❌ No se encontraron hitos en la proyección. Regrese a Proyección FCL y configure hitos.")
+        return
     
-    for idx, (cont_key, cont_data) in enumerate(proyeccion['contratos'].items()):
-        st.subheader(f"📋 {cont_key.upper()}: {cont_data.get('nombre', 'Sin nombre')}")
-        st.write(f"**Monto Contrato:** {formatear_moneda(cont_data.get('monto', 0))}")
+    # Inicializar estructura de pagos si no existe
+    if 'pagos_por_hito' not in st.session_state:
+        st.session_state.pagos_por_hito = {str(h['id']): [] for h in hitos_proyeccion}
+    
+    # Mostrar información general
+    total_proyectado = sum([h['monto'] for h in hitos_proyeccion])
+    
+    col1, col2 = st.columns(2)
+    with col1:
+        st.metric("Total Proyectado (Hitos)", formatear_moneda(total_proyectado))
+    with col2:
+        st.metric("Hitos Definidos", len(hitos_proyeccion))
+    
+    st.markdown("---")
+    
+    # Renderizar cada hito
+    for hito in hitos_proyeccion:
+        hito_id = str(hito['id'])
         
-        # Número de hitos para este contrato
-        num_hitos_key = f"num_hitos_contrato_{idx}"
-        if num_hitos_key not in st.session_state:
-            # Inicializar con hitos de la proyección si existen
-            hitos_proyeccion = [h for h in proyeccion['configuracion'].get('hitos', []) 
-                               if h.get('contrato') == cont_key]
-            st.session_state[num_hitos_key] = max(1, len(hitos_proyeccion))
-        
-        num_hitos = st.session_state[num_hitos_key]
-        
-        hitos = []
-        for hito_idx in range(num_hitos):
-            # Buscar hito existente en data guardada
-            hito_data_existente = None
-            if cont_key in st.session_state.contratos_cartera_data:
-                hitos_guardados = st.session_state.contratos_cartera_data[cont_key].get('hitos', [])
-                if hito_idx < len(hitos_guardados):
-                    hito_data_existente = hitos_guardados[hito_idx]
+        with st.expander(
+            f"💎 Hito {hito['id']}: {hito['nombre']} - {formatear_moneda(hito['monto'])}", 
+            expanded=len(st.session_state.pagos_por_hito.get(hito_id, [])) == 0
+        ):
+            # Información del hito
+            col_h1, col_h2, col_h3 = st.columns(3)
             
-            hito = render_formulario_hito(idx, hito_idx, cont_key, hito_data_existente)
-            hitos.append(hito)
-        
-        if st.button(f"➕ Agregar Hito a {cont_key}", key=f"add_hito_{idx}"):
-            st.session_state[num_hitos_key] += 1
-            st.rerun()
-        
-        contratos_cartera.append({
-            'numero': cont_key,
-            'descripcion': cont_data.get('nombre', ''),
-            'monto': cont_data.get('monto', 0),
-            'hitos': hitos
-        })
-        
-        st.markdown("---")
-    
-    # Guardar datos
-    st.session_state.contratos_cartera_input = contratos_cartera
-    st.session_state.fecha_corte_cartera = fecha_corte
+            with col_h1:
+                contrato_texto = hito.get('contrato', 'N/A')
+                if contrato_texto == 'ambos':
+                    st.write(f"**Contrato:** Ambos (C1: {hito.get('porcentaje_c1', 0)}%, C2: {hito.get('porcentaje_c2', 0)}%)")
+                else:
+                    st.write(f"**Contrato:** {contrato_texto}")
+            
+            with col_h2:
+                st.write(f"**Fase:** {hito.get('fase_vinculada', 'N/A')}")
+            
+            with col_h3:
+                st.write(f"**Momento:** {hito.get('momento', 'N/A').title()}")
+            
+            st.markdown("---")
+            
+            # Sección de pagos
+            st.markdown("**💰 Pagos Recibidos:**")
+            
+            # Obtener pagos actuales
+            pagos_hito = st.session_state.pagos_por_hito.get(hito_id, [])
+            
+            if not pagos_hito:
+                st.info("No hay pagos registrados para este hito")
+            else:
+                # Encabezados
+                cols = st.columns([2, 2, 3, 1])
+                cols[0].markdown("**Fecha**")
+                cols[1].markdown("**Recibo**")
+                cols[2].markdown("**Monto**")
+                cols[3].markdown("**Acc**")
+            
+            # Renderizar pagos existentes
+            pagos_actualizados = []
+            indices_eliminar = []
+            
+            for idx, pago in enumerate(pagos_hito):
+                pago_key = f"pago_{hito_id}_{idx}"
+                cols = st.columns([2, 2, 3, 1])
+                
+                with cols[0]:
+                    fecha_pago = st.date_input(
+                        "Fecha",
+                        value=pago.get('fecha', datetime.now().date()),
+                        key=f"{pago_key}_fecha",
+                        label_visibility="collapsed"
+                    )
+                
+                with cols[1]:
+                    recibo = st.text_input(
+                        "Recibo",
+                        value=pago.get('recibo', ''),
+                        placeholder="RC-000",
+                        key=f"{pago_key}_recibo",
+                        label_visibility="collapsed"
+                    )
+                
+                with cols[2]:
+                    monto = st.number_input(
+                        "Monto",
+                        min_value=0.0,
+                        value=float(pago.get('monto', 0)),
+                        step=1000000.0,
+                        format="%.0f",
+                        key=f"{pago_key}_monto",
+                        label_visibility="collapsed"
+                    )
+                
+                with cols[3]:
+                    if st.button("🗑️", key=f"{pago_key}_delete", help="Eliminar pago"):
+                        indices_eliminar.append(idx)
+                
+                # Guardar pago actualizado (si no fue eliminado)
+                if idx not in indices_eliminar:
+                    pagos_actualizados.append({
+                        'fecha': fecha_pago,
+                        'recibo': recibo,
+                        'monto': monto
+                    })
+            
+            # Actualizar lista de pagos
+            st.session_state.pagos_por_hito[hito_id] = pagos_actualizados
+            
+            # Botón agregar pago
+            if st.button(f"➕ Agregar Pago", key=f"add_pago_{hito_id}"):
+                st.session_state.pagos_por_hito[hito_id].append({
+                    'fecha': datetime.now().date(),
+                    'recibo': '',
+                    'monto': 0
+                })
+                st.rerun()
+            
+            # Resumen de conciliación
+            total_pagado_hito = sum([p['monto'] for p in st.session_state.pagos_por_hito[hito_id]])
+            
+            if total_pagado_hito > 0:
+                st.markdown("---")
+                st.markdown("**📊 Resumen:**")
+                
+                col_r1, col_r2, col_r3 = st.columns(3)
+                
+                with col_r1:
+                    st.metric("Esperado", formatear_moneda(hito['monto']))
+                
+                with col_r2:
+                    st.metric("Pagado", formatear_moneda(total_pagado_hito))
+                
+                with col_r3:
+                    desv = total_pagado_hito - hito['monto']
+                    pct = calcular_porcentaje(desv, hito['monto'])
+                    
+                    if abs(pct) <= 1:
+                        st.success(f"✅ Completo ({pct:+.1f}%)")
+                    elif pct > 1:
+                        st.warning(f"⚠️ Sobrepago (+{pct:.1f}%)")
+                    elif total_pagado_hito == 0:
+                        st.error(f"🔴 Pendiente")
+                    else:
+                        st.info(f"🔶 Parcial ({calcular_porcentaje(total_pagado_hito, hito['monto']):.1f}%)")
     
     # Botón generar análisis
     st.markdown("---")
-    if st.button("▶️ Generar Análisis de Cartera", type="primary", use_container_width=True):
+    
+    # Verificar que haya al menos un pago
+    total_pagos = sum([len(pagos) for pagos in st.session_state.pagos_por_hito.values()])
+    
+    if total_pagos == 0:
+        st.warning("⚠️ No has registrado ningún pago. Agrega al menos un pago para continuar.")
+    else:
+        st.success(f"✅ {total_pagos} pagos registrados")
+    
+    if st.button("▶️ Generar Análisis de Cartera", type="primary", use_container_width=True, disabled=total_pagos == 0):
+        # Preparar estructura de contratos_cartera_input
+        # Convertir de pagos_por_hito a estructura esperada
+        contratos_dict = {}
+        
+        for hito in hitos_proyeccion:
+            hito_id = str(hito['id'])
+            contrato_key = hito.get('contrato', '1')
+            
+            # Determinar a qué contrato(s) pertenece
+            if contrato_key == 'ambos':
+                contratos_keys = ['contrato_1', 'contrato_2']
+            else:
+                contratos_keys = [f'contrato_{contrato_key}']
+            
+            for cont_key in contratos_keys:
+                if cont_key not in contratos_dict:
+                    # Buscar info del contrato en proyección
+                    cont_data = proyeccion['contratos'].get(cont_key, {})
+                    contratos_dict[cont_key] = {
+                        'numero': cont_key,
+                        'descripcion': cont_data.get('nombre', ''),
+                        'monto': cont_data.get('monto', 0),
+                        'hitos': []
+                    }
+                
+                # Agregar hito a contrato
+                pagos_hito = st.session_state.pagos_por_hito.get(hito_id, [])
+                
+                contratos_dict[cont_key]['hitos'].append({
+                    'numero': hito['id'],
+                    'descripcion': hito['nombre'],
+                    'monto_esperado': hito['monto'],
+                    'semana_esperada': 1,  # TODO: calcular desde fase_vinculada
+                    'fecha_vencimiento': None,
+                    'pagos': pagos_hito
+                })
+        
+        st.session_state.contratos_cartera_input = list(contratos_dict.values())
         st.session_state.paso_ejecucion = 3
         st.rerun()
 
@@ -715,7 +926,7 @@ def render_paso_3_analisis():
     
     proyeccion = st.session_state.proyeccion_cartera
     contratos_cartera = st.session_state.contratos_cartera_input
-    fecha_corte = st.session_state.fecha_corte_cartera
+    fecha_corte = st.session_state.widget_fecha_corte_cartera  # Leer del widget
     
     # Calcular semana actual
     fecha_inicio = datetime.fromisoformat(proyeccion['proyecto']['fecha_inicio']).date()
