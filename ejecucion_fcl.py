@@ -95,6 +95,39 @@ def calcular_porcentaje(parte: float, total: float) -> float:
     return (parte / total * 100) if total > 0 else 0
 
 
+def mostrar_boton_cargar_otra_proyeccion():
+    """
+    Muestra botón para cargar otra proyección en cualquier paso
+    Se muestra en el header de cada paso
+    """
+    if 'proyeccion_cartera' in st.session_state:
+        with st.expander("🔄 Cargar Otra Proyección", expanded=False):
+            st.warning("""
+            ⚠️ **Advertencia:** 
+            Al cargar otra proyección se perderán todos los datos no guardados del proyecto actual.
+            Asegúrese de exportar el JSON antes de continuar.
+            """)
+            
+            if st.button("🗑️ Confirmar y Cargar Nuevo Proyecto", type="secondary", use_container_width=True):
+                # Limpiar todos los datos del proyecto actual
+                keys_to_delete = [
+                    'proyeccion_cartera',
+                    'pagos_por_hito',
+                    'contratos_cartera_input',
+                    'widget_fecha_corte_cartera',
+                    'hitos_expandidos_cartera',
+                    'egresos_reales_input'
+                ]
+                
+                for key in keys_to_delete:
+                    if key in st.session_state:
+                        del st.session_state[key]
+                
+                # Regresar al paso 1
+                st.session_state.paso_ejecucion = 1
+                st.rerun()
+
+
 # ============================================================================
 # TABLA DE CLASIFICACIÓN DE CUENTAS CONTABLES
 # ============================================================================
@@ -430,20 +463,63 @@ def validar_excel_egresos(archivo) -> Tuple[bool, str]:
         (es_valido, mensaje_error)
     """
     try:
-        # Leer Excel
-        df = pd.read_excel(archivo, sheet_name=0, header=7)
+        # Intentar con diferentes filas de encabezado
+        encabezados_posibles = [7, 6, 8, 9]  # índices 0-based
+        df = None
+        header_usado = None
+        
+        for header_row in encabezados_posibles:
+            try:
+                df_temp = pd.read_excel(archivo, sheet_name=0, header=header_row)
+                
+                # Verificar si tiene al menos algunas columnas esperadas
+                columnas_clave = ['Código contable', 'Cuenta contable', 'Débito']
+                coincidencias = sum(1 for col in columnas_clave if col in df_temp.columns)
+                
+                if coincidencias >= 2:  # Al menos 2 de 3 columnas
+                    df = df_temp
+                    header_usado = header_row
+                    break
+            except:
+                continue
+        
+        if df is None:
+            return False, "No se pudo detectar la estructura del archivo. Verifique que sea un archivo de ejecución contable válido."
         
         # Verificar columnas esenciales
         columnas_requeridas = ['Código contable', 'Cuenta contable', 
                               'Fecha elaboración', 'Débito']
+        columnas_encontradas = [col for col in columnas_requeridas if col in df.columns]
         columnas_faltantes = [col for col in columnas_requeridas if col not in df.columns]
         
         if columnas_faltantes:
-            return False, f"Faltan columnas: {', '.join(columnas_faltantes)}"
+            # Mostrar columnas disponibles para debugging
+            columnas_disponibles = list(df.columns[:10])  # Primeras 10 columnas
+            return False, f"""
+            **Columnas faltantes:** {', '.join(columnas_faltantes)}
+            
+            **Columnas encontradas:** {', '.join(columnas_encontradas)}
+            
+            **Primeras 10 columnas del archivo:**
+            {', '.join(columnas_disponibles)}
+            
+            **Fila de encabezado detectada:** {header_usado + 1}
+            
+            💡 **Sugerencia:** Verifique que el archivo tenga la estructura estándar de ejecución contable.
+            """
         
         # Verificar que hay datos
         df_trans = df[df['Código contable'].notna()]
         df_trans = df_trans[~df_trans['Código contable'].astype(str).str.startswith('Procesado')]
+        
+        if len(df_trans) == 0:
+            return False, "El archivo no contiene registros transaccionales"
+        
+        mensaje_exito = f"Archivo válido (encabezados en fila {header_usado + 1}, {len(df_trans)} registros)"
+        return True, mensaje_exito
+        
+    except Exception as e:
+        return False, f"Error al leer archivo: {str(e)}"
         
         if len(df_trans) == 0:
             return False, "El archivo no contiene registros transaccionales"
@@ -479,8 +555,25 @@ def parse_excel_egresos(
             - cuentas_sin_clasificar: lista de cuentas no mapeadas
     """
     try:
-        # Leer Excel (header en fila 8 = índice 7)
-        df = pd.read_excel(archivo, sheet_name=0, header=7)
+        # Detectar fila de encabezado automáticamente
+        encabezados_posibles = [7, 6, 8, 9]
+        df = None
+        
+        for header_row in encabezados_posibles:
+            try:
+                df_temp = pd.read_excel(archivo, sheet_name=0, header=header_row)
+                
+                # Verificar si tiene las columnas clave
+                columnas_clave = ['Código contable', 'Cuenta contable', 'Débito']
+                if all(col in df_temp.columns for col in columnas_clave):
+                    df = df_temp
+                    break
+            except:
+                continue
+        
+        if df is None:
+            st.error("No se pudo detectar la estructura del archivo Excel.")
+            return None
         
         # Filtrar datos transaccionales
         df_trans = df[df['Código contable'].notna()].copy()
@@ -680,6 +773,78 @@ def render_paso_1_cargar_proyeccion():
             # Guardar en session_state
             st.session_state.proyeccion_cartera = proyeccion_data
             
+            # Si es JSON v3.0 con datos de cartera, cargarlos también
+            if proyeccion_data.get('version') == '3.0' and 'cartera' in proyeccion_data:
+                st.info("🔄 Detectado JSON v3.0 con datos de cartera. Cargando datos previos...")
+                
+                cartera = proyeccion_data['cartera']
+                
+                # Cargar contratos_cartera_input
+                if 'contratos_cartera' in cartera:
+                    st.session_state.contratos_cartera_input = cartera['contratos_cartera']
+                
+                # Reconstruir pagos_por_hito desde contratos_cartera
+                pagos_por_hito = {}
+                if 'contratos_cartera' in cartera:
+                    for contrato in cartera['contratos_cartera']:
+                        for hito in contrato.get('hitos', []):
+                            hito_id = str(hito['numero'])
+                            
+                            # Si es hito compartido, ya habrá pagos del primer contrato
+                            if hito_id not in pagos_por_hito:
+                                pagos_por_hito[hito_id] = []
+                            
+                            # Agregar pagos (solo si no es compartido o es la primera vez)
+                            if not hito.get('es_compartido', False) or hito_id not in pagos_por_hito or len(pagos_por_hito[hito_id]) == 0:
+                                for pago in hito.get('pagos', []):
+                                    # Convertir fecha string a date
+                                    fecha_pago = datetime.fromisoformat(pago['fecha']).date() if isinstance(pago['fecha'], str) else pago['fecha']
+                                    
+                                    # Para hitos compartidos, sumar los montos distribuidos
+                                    if hito.get('es_compartido', False):
+                                        # Buscar si ya existe este recibo
+                                        pago_existente = next((p for p in pagos_por_hito[hito_id] if p['recibo'] == pago['recibo']), None)
+                                        if pago_existente:
+                                            # Sumar monto (reconstruir monto original)
+                                            pago_existente['monto'] += pago['monto']
+                                        else:
+                                            pagos_por_hito[hito_id].append({
+                                                'fecha': fecha_pago,
+                                                'recibo': pago['recibo'],
+                                                'monto': pago['monto']
+                                            })
+                                    else:
+                                        # Hito no compartido, agregar directamente
+                                        pagos_por_hito[hito_id].append({
+                                            'fecha': fecha_pago,
+                                            'recibo': pago['recibo'],
+                                            'monto': pago['monto']
+                                        })
+                
+                st.session_state.pagos_por_hito = pagos_por_hito
+                
+                # Cargar fecha_corte
+                if 'fecha_corte' in cartera:
+                    fecha_corte = datetime.fromisoformat(cartera['fecha_corte']).date() if isinstance(cartera['fecha_corte'], str) else cartera['fecha_corte']
+                    st.session_state.widget_fecha_corte_cartera = fecha_corte
+                
+                # Inicializar hitos_expandidos_cartera (todos colapsados por defecto al recargar)
+                hitos_proyeccion = proyeccion_data['configuracion'].get('hitos_pago', [])
+                st.session_state.hitos_expandidos_cartera = set()
+                
+                # Mostrar resumen de datos cargados
+                total_pagos = sum(len(pagos) for pagos in pagos_por_hito.values())
+                hitos_con_pagos = len([h for h in pagos_por_hito.values() if len(h) > 0])
+                
+                st.success(f"""
+                ✅ **Datos de cartera cargados:**
+                - {hitos_con_pagos} hitos con pagos
+                - {total_pagos} pagos registrados
+                - Fecha de corte: {cartera.get('fecha_corte', 'N/A')}
+                
+                Puede continuar al **Paso 3** para ver el análisis o al **Paso 2** para editar.
+                """)
+            
             # Mostrar información del proyecto
             proyecto = proyeccion_data['proyecto']
             totales = proyeccion_data['totales']
@@ -715,9 +880,33 @@ def render_paso_1_cargar_proyeccion():
             
             # Botón continuar
             st.markdown("---")
-            if st.button("▶️ Continuar a Ingreso de Cartera", type="primary", use_container_width=True):
-                st.session_state.paso_ejecucion = 2
-                st.rerun()
+            
+            # Determinar a qué paso saltar
+            if proyeccion_data.get('version') == '3.0' and 'cartera' in proyeccion_data:
+                # JSON v3.0 con datos de cartera
+                st.subheader("⏭️ Seleccione el paso al que desea continuar:")
+                
+                col1, col2, col3 = st.columns(3)
+                
+                with col1:
+                    if st.button("📝 Paso 2: Editar Cartera", use_container_width=True):
+                        st.session_state.paso_ejecucion = 2
+                        st.rerun()
+                
+                with col2:
+                    if st.button("📊 Paso 3: Ver Análisis Cartera", type="primary", use_container_width=True):
+                        st.session_state.paso_ejecucion = 3
+                        st.rerun()
+                
+                with col3:
+                    if st.button("💰 Paso 4: Ingresar Egresos", use_container_width=True):
+                        st.session_state.paso_ejecucion = 4
+                        st.rerun()
+            else:
+                # JSON v2.0 sin datos de cartera
+                if st.button("▶️ Continuar a Ingreso de Cartera", type="primary", use_container_width=True):
+                    st.session_state.paso_ejecucion = 2
+                    st.rerun()
         
         except json.JSONDecodeError:
             st.error("❌ Error al leer el archivo JSON. Verifique que sea un archivo válido.")
@@ -906,6 +1095,9 @@ def render_paso_2_ingresar_cartera():
     
     st.header("💰 Paso 2: Registrar Pagos Recibidos")
     st.caption("📍 Módulo 1: CARTERA | Asignar pagos reales a hitos de la proyección")
+    
+    # Botón cargar otra proyección
+    mostrar_boton_cargar_otra_proyeccion()
     
     # Botón volver
     col_v1, col_v2 = st.columns([1, 4])
@@ -1200,6 +1392,9 @@ def render_paso_3_analisis():
     st.header("📊 Análisis de Cartera - Ingresos Reales vs Proyectados")
     st.caption("📍 Módulo 1: CARTERA | Dashboard de análisis de ingresos")
     
+    # Botón cargar otra proyección
+    mostrar_boton_cargar_otra_proyeccion()
+    
     # Botón volver
     col_v1, col_v2 = st.columns([1, 4])
     with col_v1:
@@ -1428,6 +1623,9 @@ def render_paso_4_ingresar_egresos():
     
     st.header("💰 Paso 4: Ingresar Egresos Reales")
     st.caption("📍 Módulo 2: EGRESOS | Gastos de ejecución contable")
+    
+    # Botón cargar otra proyección
+    mostrar_boton_cargar_otra_proyeccion()
     
     # Botón volver
     col_v1, col_v2 = st.columns([1, 4])
@@ -1887,6 +2085,9 @@ def render_paso_5_analisis_egresos():
     
     st.header("📊 Análisis de Egresos - Gastos Reales vs Proyectados")
     st.caption("📍 Módulo 2: EGRESOS | Dashboard de análisis de gastos")
+    
+    # Botón cargar otra proyección
+    mostrar_boton_cargar_otra_proyeccion()
     
     # Botón volver
     col_v1, col_v2 = st.columns([1, 4])
