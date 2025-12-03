@@ -900,24 +900,42 @@ def render_paso_2_ingresar_cartera():
                         'hitos': []
                     }
                 
-                # Determinar porcentaje para este contrato
+                # Determinar monto esperado y proporción para este contrato
                 if contrato_key == 'ambos':
-                    # Hito compartido - usar porcentajes específicos
+                    # Hito compartido - calcular proporción basada en montos de contratos
+                    cont_1_data = proyeccion['contratos'].get('contrato_1', {})
+                    cont_2_data = proyeccion['contratos'].get('contrato_2', {})
+                    
+                    porcentaje_c1 = hito.get('porcentaje_c1', 50)
+                    porcentaje_c2 = hito.get('porcentaje_c2', 50)
+                    
+                    # Monto esperado de cada contrato en este hito
+                    monto_esperado_c1 = cont_1_data.get('monto', 0) * (porcentaje_c1 / 100)
+                    monto_esperado_c2 = cont_2_data.get('monto', 0) * (porcentaje_c2 / 100)
+                    total_esperado_hito = monto_esperado_c1 + monto_esperado_c2
+                    
+                    # Determinar proporción y monto para este contrato específico
                     if cont_key == 'contrato_1':
-                        porcentaje = hito.get('porcentaje_c1', 50) / 100
+                        monto_esperado = monto_esperado_c1
+                        proporcion = monto_esperado_c1 / total_esperado_hito if total_esperado_hito > 0 else 0.5
+                        porcentaje_display = porcentaje_c1
                     else:  # contrato_2
-                        porcentaje = hito.get('porcentaje_c2', 50) / 100
+                        monto_esperado = monto_esperado_c2
+                        proporcion = monto_esperado_c2 / total_esperado_hito if total_esperado_hito > 0 else 0.5
+                        porcentaje_display = porcentaje_c2
                 else:
                     # Hito exclusivo de un contrato
-                    porcentaje = 1.0
+                    monto_esperado = hito['monto']
+                    proporcion = 1.0
+                    porcentaje_display = 100
                 
-                # Obtener pagos y distribuir según porcentaje
+                # Obtener pagos y distribuir según proporción
                 pagos_hito_completos = st.session_state.pagos_por_hito.get(hito_id, [])
                 pagos_distribuidos = [
                     {
                         'fecha': p['fecha'],
                         'recibo': p['recibo'],
-                        'monto': p['monto'] * porcentaje
+                        'monto': p['monto'] * proporcion
                     }
                     for p in pagos_hito_completos
                 ]
@@ -926,12 +944,13 @@ def render_paso_2_ingresar_cartera():
                 contratos_dict[cont_key]['hitos'].append({
                     'numero': hito['id'],
                     'descripcion': hito['nombre'],
-                    'monto_esperado': hito['monto'] * porcentaje,
+                    'monto_esperado': monto_esperado,
                     'semana_esperada': 1,  # TODO: calcular desde fase_vinculada
                     'fecha_vencimiento': None,
                     'pagos': pagos_distribuidos,
                     'es_compartido': contrato_key == 'ambos',
-                    'porcentaje_contrato': porcentaje * 100
+                    'porcentaje_contrato': porcentaje_display,
+                    'proporcion_distribucion': proporcion * 100
                 })
         
         st.session_state.contratos_cartera_input = list(contratos_dict.values())
@@ -958,7 +977,14 @@ def render_paso_3_analisis():
     
     proyeccion = st.session_state.proyeccion_cartera
     contratos_cartera = st.session_state.contratos_cartera_input
-    fecha_corte = st.session_state.widget_fecha_corte_cartera  # Leer del widget
+    
+    # Leer fecha_corte con fallback
+    if 'widget_fecha_corte_cartera' in st.session_state:
+        fecha_corte = st.session_state.widget_fecha_corte_cartera
+    else:
+        # Fallback: usar fecha actual
+        fecha_corte = datetime.now().date()
+        st.warning("⚠️ Usando fecha actual como fecha de corte (no se detectó fecha del paso anterior)")
     
     # Calcular semana actual
     fecha_inicio = datetime.fromisoformat(proyeccion['proyecto']['fecha_inicio']).date()
