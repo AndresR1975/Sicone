@@ -2,7 +2,7 @@
 SICONE - Módulo de Ejecución Real FCL
 Análisis de FCL Real Ejecutado vs FCL Planeado
 
-Versión: 2.0.0
+Versión: 2.0.1
 Fecha: Diciembre 2024
 Autor: AI-MindNovation
 
@@ -2271,6 +2271,9 @@ def calcular_comparacion_egresos(proyeccion: Dict, egresos_data: Dict, semana_ac
     # Cargar proyección semanal
     df_proy = pd.DataFrame(proyeccion['proyeccion_semanal'])
     
+    # Normalizar nombres de columnas (manejar mayúsculas/minúsculas)
+    df_proy.columns = df_proy.columns.str.lower()
+    
     # Filtrar hasta semana actual
     df_proy_actual = df_proy[df_proy['semana'] <= semana_actual].copy()
     
@@ -2428,6 +2431,10 @@ def render_grafica_egresos_acumulados(proyeccion_df: pd.DataFrame, egresos_data:
     
     # Preparar datos de proyección acumulada
     df_proy = proyeccion_df.copy()
+    
+    # Normalizar nombres de columnas (manejar mayúsculas/minúsculas)
+    df_proy.columns = df_proy.columns.str.lower()
+    
     df_proy = df_proy[df_proy['semana'] <= semana_actual]
     
     # Calcular egresos proyectados acumulados
