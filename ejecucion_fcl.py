@@ -165,8 +165,8 @@ TABLA_CLASIFICACION_CUENTAS = {
     "Incapacidades": "Mano de Obra",
     "Servicio de Metalmecanica": "Variables",
     "Herramientas y otros": "Variables",
-    "Parqueaderos": "Variables",
-    "Costos No deducibles no cumple requisitos Factura": "Variables"
+    "Parqueaderos": "Administracion",
+    "Costos No deducibles no cumple requisitos Factura": "Administracion"
 }
 
 # Mapeo de categorías ejecución a proyección
@@ -668,20 +668,22 @@ def parse_excel_egresos(
             # Mapear cuentas a categorías
             df_trans['Categoria'] = df_trans['Cuenta contable'].map(TABLA_CLASIFICACION_CUENTAS)
             
-            # Acumular cuentas sin clasificar
+            # Acumular cuentas sin clasificar (para reportarlas)
             cuentas_sin_clasificar_hoja = df_trans[df_trans['Categoria'].isna()]['Cuenta contable'].unique().tolist()
             todas_cuentas_sin_clasificar.update(cuentas_sin_clasificar_hoja)
             
-            # Filtrar solo registros clasificados
-            df_clasificado = df_trans[df_trans['Categoria'].notna()].copy()
+            # NO descartar registros sin clasificar, asignarlos a categoría "Sin Clasificar"
+            df_trans['Categoria'] = df_trans['Categoria'].fillna('Sin Clasificar')
+            df_clasificado = df_trans.copy()
             
             if len(df_clasificado) == 0:
-                st.warning(f"   ⚠️ {hoja_nombre}: todos los registros tienen cuentas sin clasificar")
+                st.warning(f"   ⚠️ {hoja_nombre}: no tiene registros válidos")
                 continue
             
-            # Convertir fecha a datetime
+            # Convertir fecha a datetime con formato DD/MM/YYYY (europeo/colombiano)
             df_clasificado['Fecha elaboración'] = pd.to_datetime(
                 df_clasificado['Fecha elaboración'], 
+                format='%d/%m/%Y',
                 errors='coerce'
             )
             
@@ -715,7 +717,8 @@ def parse_excel_egresos(
                         'materiales': 0,
                         'mano_obra': 0,
                         'variables': 0,
-                        'admin': 0
+                        'admin': 0,
+                        'sin_clasificar': 0
                     }
                 
                 # Mapear categoría
@@ -727,6 +730,8 @@ def parse_excel_egresos(
                     todos_egresos_semanales[semana]['variables'] += monto
                 elif categoria == 'Administracion':
                     todos_egresos_semanales[semana]['admin'] += monto
+                elif categoria == 'Sin Clasificar':
+                    todos_egresos_semanales[semana]['sin_clasificar'] += monto
             
             todos_registros += len(df_clasificado)
             
@@ -753,7 +758,8 @@ def parse_excel_egresos(
                 datos_semana['materiales'] + 
                 datos_semana['mano_obra'] + 
                 datos_semana['variables'] + 
-                datos_semana['admin']
+                datos_semana['admin'] + 
+                datos_semana['sin_clasificar']
             )
             
             egresos_semanales_final.append({
@@ -763,6 +769,7 @@ def parse_excel_egresos(
                 'mano_obra': datos_semana['mano_obra'],
                 'variables': datos_semana['variables'],
                 'admin': datos_semana['admin'],
+                'sin_clasificar': datos_semana['sin_clasificar'],
                 'total': total_semana
             })
         
@@ -772,6 +779,7 @@ def parse_excel_egresos(
             'mano_obra': sum([e['mano_obra'] for e in egresos_semanales_final]),
             'variables': sum([e['variables'] for e in egresos_semanales_final]),
             'admin': sum([e['admin'] for e in egresos_semanales_final]),
+            'sin_clasificar': sum([e['sin_clasificar'] for e in egresos_semanales_final]),
             'total': sum([e['total'] for e in egresos_semanales_final])
         }
         
@@ -1904,7 +1912,7 @@ def render_paso_4_ingresar_egresos():
         totales = datos['totales_acumulados']
         total_general = totales['total']
         
-        col1, col2 = st.columns(2)
+        col1, col2, col3 = st.columns(3)
         
         with col1:
             st.metric(
@@ -1930,6 +1938,17 @@ def render_paso_4_ingresar_egresos():
                 delta=f"{calcular_porcentaje(totales['admin'], total_general):.1f}%"
             )
         
+        with col3:
+            # Mostrar "Sin Clasificar" solo si hay montos
+            sin_clasificar = totales.get('sin_clasificar', 0)
+            if sin_clasificar > 0:
+                st.metric(
+                    "❓ Sin Clasificar",
+                    formatear_moneda(sin_clasificar),
+                    delta=f"{calcular_porcentaje(sin_clasificar, total_general):.1f}%",
+                    help="Cuentas contables que aún no están mapeadas en la tabla de clasificación"
+                )
+        
         # Tabla semanal (últimas 10 semanas)
         st.markdown("### 📅 Egresos Semanales (Últimas 10 Semanas)")
         
@@ -1937,11 +1956,28 @@ def render_paso_4_ingresar_egresos():
         ultimas_semanas = egresos_semanales[-10:] if len(egresos_semanales) > 10 else egresos_semanales
         
         df_preview = pd.DataFrame(ultimas_semanas)
-        df_preview_display = df_preview[['semana', 'materiales', 'mano_obra', 'variables', 'admin', 'total']].copy()
-        df_preview_display.columns = ['Semana', 'Materiales', 'Mano Obra', 'Variables', 'Admin', 'Total']
+        
+        # Incluir sin_clasificar solo si hay datos
+        columnas_base = ['semana', 'materiales', 'mano_obra', 'variables', 'admin']
+        nombres_base = ['Semana', 'Materiales', 'Mano Obra', 'Variables', 'Admin']
+        
+        if sin_clasificar > 0:
+            columnas_base.append('sin_clasificar')
+            nombres_base.append('Sin Clasificar')
+        
+        columnas_base.append('total')
+        nombres_base.append('Total')
+        
+        df_preview_display = df_preview[columnas_base].copy()
+        df_preview_display.columns = nombres_base
         
         # Formatear como moneda
-        for col in ['Materiales', 'Mano Obra', 'Variables', 'Admin', 'Total']:
+        columnas_a_formatear = ['Materiales', 'Mano Obra', 'Variables', 'Admin']
+        if sin_clasificar > 0:
+            columnas_a_formatear.append('Sin Clasificar')
+        columnas_a_formatear.append('Total')
+        
+        for col in columnas_a_formatear:
             df_preview_display[col] = df_preview_display[col].apply(lambda x: formatear_moneda(x))
         
         st.dataframe(df_preview_display, use_container_width=True, hide_index=True)
