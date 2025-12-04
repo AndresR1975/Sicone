@@ -2,54 +2,84 @@
 SICONE - Módulo de Ejecución Real FCL
 Análisis de FCL Real Ejecutado vs FCL Planeado
 
-Versión: 1.1.0 (Beta)
+Versión: 2.0.0
 Fecha: Diciembre 2024
 Autor: AI-MindNovation
 
 ESTRUCTURA MODULAR:
 └── ejecucion_fcl.py
     ├── Módulo 1: CARTERA (Ingresos Reales) ✅
-    │   ├── Ingreso de cobros por hito
-    │   ├── Conciliación automática
-    │   ├── Comparación ingresos proyectados vs reales
-    │   └── Alertas de cartera
+    │   ├── Paso 1: Cargar proyección
+    │   ├── Paso 2: Registrar pagos por hito
+    │   ├── Paso 3: Análisis de cartera
+    │   │   ├── Conciliación automática
+    │   │   ├── Comparación ingresos proyectados vs reales
+    │   │   ├── Alertas de cartera
+    │   │   └── Exportación JSON v3.0
     │
-    ├── Módulo 2: EGRESOS REALES ✅
-    │   ├── Parser automático de Excel contable
-    │   ├── Clasificación de cuentas (Materiales, MO, Variables, Admin)
-    │   ├── Agrupación semanal de gastos
-    │   ├── Comparación egresos proyectados vs reales
-    │   └── Análisis por categoría
+    ├── Módulo 2: EGRESOS (Gastos Reales) ✅
+    │   ├── Paso 4: Ingresar egresos desde Excel
+    │   │   ├── Parser automático de Excel contable
+    │   │   ├── Clasificación de cuentas (34 cuentas)
+    │   │   ├── Formato DD/MM/YYYY automático
+    │   │   ├── Soporte multi-hojas "AÑO XXXX"
+    │   │   └── Agrupación semanal de gastos
+    │   │
+    │   └── Paso 5: Análisis de egresos ✅
+    │       ├── KPIs principales (total, desviación, burn rate)
+    │       ├── Gráfica proyectado vs real acumulado
+    │       ├── Comparación por categoría
+    │       ├── Sistema de alertas de sobrecostos
+    │       └── Exportación JSON v4.0
     │
-    └── Módulo 3: ANÁLISIS FCL COMPLETO (Futuro - Fase 3) 🔜
+    └── Módulo 3: ANÁLISIS FCL COMPLETO (Futuro - v3.0) 🔜
         ├── Dashboard consolidado (ingresos + egresos)
         ├── Flujo de caja real completo
-        ├── Alertas integradas
-        └── Exportación JSON v4.0
+        ├── Proyecciones automáticas
+        └── Alertas integradas
 
-FUNCIONALIDADES ACTUALES (v1.1.0 Beta):
-- ✅ Carga de proyección desde JSON v2.0
-- ✅ Ingreso de datos de cartera (hitos + pagos reales)
-- ✅ Conciliación automática (detecta sobrepagos, retenciones, etc.)
+FUNCIONALIDADES ACTUALES (v2.0.0):
+
+**CARTERA (Ingresos):**
+- ✅ Carga de proyección desde JSON v2.0+
+- ✅ Soporte para múltiples contratos con hitos compartidos
+- ✅ Ingreso manual de cobros por hito
+- ✅ Conciliación automática (detecta sobrepagos, retenciones)
 - ✅ Comparación ingresos proyectados vs reales
 - ✅ Generación de alertas de cartera
-- ✅ Dashboard de análisis de ingresos
-- ✅ Parser automático de Excel de ejecución contable
-- ✅ Clasificación automática de cuentas (34 cuentas mapeadas)
-- ✅ Agrupación de gastos por semana y categoría
-- ✅ Soporte para archivos acumulados anuales
-- ✅ Consolidación de múltiples archivos (2 años)
-- ✅ Comparación rápida vs proyección por categoría
+- ✅ Dashboard visual con gráficas
 - ✅ Exportación JSON v3.0 (proyección + cartera)
-- 🔜 Dashboard de análisis de egresos (Paso 5)
-- 🔜 Análisis FCL completo (Paso 6)
+
+**EGRESOS (Gastos):**
+- ✅ Parser automático de Excel de ejecución contable
+- ✅ Clasificación automática de 34 cuentas contables
+- ✅ Formato DD/MM/YYYY (Colombia/internacional)
+- ✅ Soporte multi-hojas "AÑO 2024", "AÑO 2025", etc.
+- ✅ Consolidación automática de datos multi-año
+- ✅ Agrupación de gastos por semana y categoría
+- ✅ Detección de cuentas sin clasificar
+- ✅ Comparación vs proyección por categoría
+- ✅ Dashboard completo de análisis de egresos
+- ✅ KPIs: Total gastado, desviación, burn rate
+- ✅ Gráfica de egresos acumulados (proyectado vs real)
+- ✅ Tabla de comparación por categoría
+- ✅ Sistema de alertas automáticas (sobrecostos, subejecución)
+- ✅ Exportación JSON v4.0 (proyección + cartera + egresos)
+
+CORRECCIONES CRÍTICAS (Diciembre 2024):
+- ✅ v1.1.2: Soporte multi-hojas consolidado
+- ✅ v1.1.3: Bug hitos compartidos (pérdida de datos C2)
+- ✅ v1.1.4: KeyError 'semana' en comparación
+- ✅ v1.1.5: Registros sin clasificar descartados ($412M)
+- ✅ v1.1.6: Formato fechas DD/MM/YYYY (79.5% datos perdidos)
+- ✅ v2.0.0: Paso 5 completo (análisis de egresos)
 
 ROADMAP:
 - v1.0.0: Módulo Cartera (ingresos) ✅
 - v1.1.0: Módulo Egresos (ingreso/parser) ✅
-- v1.2.0: Análisis de Egresos completo (dashboard) 🔜
-- v1.3.0: Análisis FCL completo (ingresos + egresos) 🔜
-- v1.4.0: Dashboard consolidado multiproyectos 🔜
+- v2.0.0: Análisis de Egresos completo (Paso 5) ✅
+- v3.0.0: Análisis FCL completo (ingresos + egresos + flujo) 🔜
+- v4.0.0: Dashboard consolidado multiproyectos 🔜
 """
 
 import streamlit as st
@@ -2227,6 +2257,417 @@ def main():
 # COMPONENTES DE INTERFAZ - PASO 5: ANÁLISIS DE EGRESOS
 # ============================================================================
 
+# ============================================================================
+# FUNCIONES DE ANÁLISIS DE EGRESOS
+# ============================================================================
+
+def calcular_comparacion_egresos(proyeccion: Dict, egresos_data: Dict, semana_actual: int) -> Dict:
+    """
+    Compara egresos proyectados vs reales hasta la semana actual
+    
+    Returns:
+        Dict con totales proyectados, reales, desviaciones por categoría
+    """
+    # Cargar proyección semanal
+    df_proy = pd.DataFrame(proyeccion['proyeccion_semanal'])
+    
+    # Filtrar hasta semana actual
+    df_proy_actual = df_proy[df_proy['semana'] <= semana_actual].copy()
+    
+    # Calcular totales proyectados acumulados hasta hoy
+    proyectado_materiales = df_proy_actual['materiales'].sum()
+    proyectado_mano_obra = df_proy_actual['mano_obra'].sum()
+    proyectado_equipos = df_proy_actual['equipos'].sum()
+    proyectado_imprevistos = df_proy_actual['imprevistos'].sum()
+    proyectado_logistica = df_proy_actual['logistica'].sum()
+    proyectado_admin = df_proy_actual['admin'].sum()
+    
+    # Variables = equipos + imprevistos + logística
+    proyectado_variables = proyectado_equipos + proyectado_imprevistos + proyectado_logistica
+    proyectado_total = proyectado_materiales + proyectado_mano_obra + proyectado_variables + proyectado_admin
+    
+    # Obtener totales reales
+    totales_reales = egresos_data.get('totales_acumulados', {})
+    real_materiales = totales_reales.get('materiales', 0)
+    real_mano_obra = totales_reales.get('mano_obra', 0)
+    real_variables = totales_reales.get('variables', 0)
+    real_admin = totales_reales.get('admin', 0)
+    real_sin_clasificar = totales_reales.get('sin_clasificar', 0)
+    real_total = totales_reales.get('total', 0)
+    
+    # Calcular desviaciones
+    comparacion = {
+        'materiales': {
+            'proyectado': proyectado_materiales,
+            'real': real_materiales,
+            'desviacion': real_materiales - proyectado_materiales,
+            'pct_desviacion': calcular_porcentaje(real_materiales - proyectado_materiales, proyectado_materiales),
+            'pct_ejecutado': calcular_porcentaje(real_materiales, proyectado_materiales)
+        },
+        'mano_obra': {
+            'proyectado': proyectado_mano_obra,
+            'real': real_mano_obra,
+            'desviacion': real_mano_obra - proyectado_mano_obra,
+            'pct_desviacion': calcular_porcentaje(real_mano_obra - proyectado_mano_obra, proyectado_mano_obra),
+            'pct_ejecutado': calcular_porcentaje(real_mano_obra, proyectado_mano_obra)
+        },
+        'variables': {
+            'proyectado': proyectado_variables,
+            'real': real_variables,
+            'desviacion': real_variables - proyectado_variables,
+            'pct_desviacion': calcular_porcentaje(real_variables - proyectado_variables, proyectado_variables),
+            'pct_ejecutado': calcular_porcentaje(real_variables, proyectado_variables)
+        },
+        'admin': {
+            'proyectado': proyectado_admin,
+            'real': real_admin,
+            'desviacion': real_admin - proyectado_admin,
+            'pct_desviacion': calcular_porcentaje(real_admin - proyectado_admin, proyectado_admin),
+            'pct_ejecutado': calcular_porcentaje(real_admin, proyectado_admin)
+        },
+        'sin_clasificar': {
+            'real': real_sin_clasificar,
+            'pct_del_total': calcular_porcentaje(real_sin_clasificar, real_total)
+        },
+        'total': {
+            'proyectado': proyectado_total,
+            'real': real_total,
+            'desviacion': real_total - proyectado_total,
+            'pct_desviacion': calcular_porcentaje(real_total - proyectado_total, proyectado_total),
+            'pct_ejecutado': calcular_porcentaje(real_total, proyectado_total)
+        }
+    }
+    
+    return comparacion
+
+
+def generar_alertas_egresos(comparacion: Dict, umbral_alerta: float = 10.0) -> List[Dict]:
+    """
+    Genera alertas basadas en desviaciones de egresos
+    
+    Args:
+        comparacion: Diccionario con comparaciones por categoría
+        umbral_alerta: % de desviación para generar alerta
+    
+    Returns:
+        Lista de alertas con nivel de severidad
+    """
+    alertas = []
+    
+    categorias = {
+        'materiales': '💎 Materiales',
+        'mano_obra': '👷 Mano de Obra',
+        'variables': '📦 Variables',
+        'admin': '🏢 Administración'
+    }
+    
+    for cat_key, cat_nombre in categorias.items():
+        cat_data = comparacion[cat_key]
+        pct_desv = cat_data['pct_desviacion']
+        
+        if abs(pct_desv) > umbral_alerta:
+            if pct_desv > 0:
+                # Sobrecosto
+                severidad = 'ALTA' if pct_desv > 20 else 'MEDIA'
+                alertas.append({
+                    'tipo': 'sobrecosto',
+                    'categoria': cat_nombre,
+                    'severidad': severidad,
+                    'mensaje': f"Sobrecosto de {pct_desv:+.1f}% ({formatear_moneda(cat_data['desviacion'])})",
+                    'valor': pct_desv
+                })
+            else:
+                # Subejecución (puede ser bueno o malo)
+                severidad = 'BAJA'
+                alertas.append({
+                    'tipo': 'subejecucion',
+                    'categoria': cat_nombre,
+                    'severidad': severidad,
+                    'mensaje': f"Subejecución de {pct_desv:.1f}% ({formatear_moneda(abs(cat_data['desviacion']))} menos)",
+                    'valor': pct_desv
+                })
+    
+    # Alerta de total
+    total_desv = comparacion['total']['pct_desviacion']
+    if abs(total_desv) > umbral_alerta:
+        if total_desv > 0:
+            severidad = 'CRÍTICA' if total_desv > 20 else 'ALTA'
+            alertas.append({
+                'tipo': 'sobrecosto_total',
+                'categoria': '💰 Total',
+                'severidad': severidad,
+                'mensaje': f"Sobrecosto general de {total_desv:+.1f}% ({formatear_moneda(comparacion['total']['desviacion'])})",
+                'valor': total_desv
+            })
+        else:
+            alertas.append({
+                'tipo': 'subejecucion_total',
+                'categoria': '💰 Total',
+                'severidad': 'BAJA',
+                'mensaje': f"Subejecución general de {total_desv:.1f}%",
+                'valor': total_desv
+            })
+    
+    # Alerta de cuentas sin clasificar
+    if comparacion['sin_clasificar']['real'] > 0:
+        pct_sin_clasificar = comparacion['sin_clasificar']['pct_del_total']
+        if pct_sin_clasificar > 5:
+            alertas.append({
+                'tipo': 'sin_clasificar',
+                'categoria': '❓ Sin Clasificar',
+                'severidad': 'MEDIA',
+                'mensaje': f"{pct_sin_clasificar:.1f}% de gastos sin clasificar ({formatear_moneda(comparacion['sin_clasificar']['real'])})",
+                'valor': pct_sin_clasificar
+            })
+    
+    return alertas
+
+
+def render_grafica_egresos_acumulados(proyeccion_df: pd.DataFrame, egresos_data: Dict, semana_actual: int):
+    """Renderiza gráfica de egresos proyectados vs reales acumulados"""
+    
+    # Preparar datos de proyección acumulada
+    df_proy = proyeccion_df.copy()
+    df_proy = df_proy[df_proy['semana'] <= semana_actual]
+    
+    # Calcular egresos proyectados acumulados
+    df_proy['materiales_acum'] = df_proy['materiales'].cumsum()
+    df_proy['mano_obra_acum'] = df_proy['mano_obra'].cumsum()
+    df_proy['equipos_acum'] = df_proy['equipos'].cumsum()
+    df_proy['imprevistos_acum'] = df_proy['imprevistos'].cumsum()
+    df_proy['logistica_acum'] = df_proy['logistica'].cumsum()
+    df_proy['admin_acum'] = df_proy['admin'].cumsum()
+    df_proy['variables_acum'] = df_proy['equipos_acum'] + df_proy['imprevistos_acum'] + df_proy['logistica_acum']
+    df_proy['total_proy_acum'] = df_proy['materiales_acum'] + df_proy['mano_obra_acum'] + df_proy['variables_acum'] + df_proy['admin_acum']
+    
+    # Preparar datos de egresos reales acumulados
+    egresos_semanales = egresos_data.get('egresos_semanales', [])
+    
+    if not egresos_semanales:
+        st.warning("⚠️ No hay datos de egresos semanales para graficar")
+        return
+    
+    df_real = pd.DataFrame(egresos_semanales)
+    df_real = df_real.sort_values('semana')
+    
+    # Calcular acumulados reales
+    df_real['materiales_acum'] = df_real['materiales'].cumsum()
+    df_real['mano_obra_acum'] = df_real['mano_obra'].cumsum()
+    df_real['variables_acum'] = df_real['variables'].cumsum()
+    df_real['admin_acum'] = df_real['admin'].cumsum()
+    df_real['sin_clasificar_acum'] = df_real.get('sin_clasificar', pd.Series([0] * len(df_real))).cumsum()
+    df_real['total_real_acum'] = df_real['total'].cumsum()
+    
+    # Crear gráfica
+    fig = go.Figure()
+    
+    # Línea de proyección
+    fig.add_trace(go.Scatter(
+        x=df_proy['semana'],
+        y=df_proy['total_proy_acum'],
+        name='Proyectado',
+        mode='lines',
+        line=dict(color='blue', width=2, dash='dash'),
+        hovertemplate='Semana %{x}<br>Proyectado: $%{y:,.0f}<extra></extra>'
+    ))
+    
+    # Línea de real
+    fig.add_trace(go.Scatter(
+        x=df_real['semana'],
+        y=df_real['total_real_acum'],
+        name='Real',
+        mode='lines+markers',
+        line=dict(color='green', width=3),
+        marker=dict(size=6),
+        hovertemplate='Semana %{x}<br>Real: $%{y:,.0f}<extra></extra>'
+    ))
+    
+    # Línea vertical de semana actual
+    max_y = max(df_proy['total_proy_acum'].max(), df_real['total_real_acum'].max())
+    fig.add_vline(
+        x=semana_actual,
+        line_dash="dot",
+        line_color="red",
+        annotation_text=f"Semana Actual ({semana_actual})",
+        annotation_position="top"
+    )
+    
+    # Configuración
+    fig.update_layout(
+        title="Egresos Acumulados: Proyectado vs Real",
+        xaxis_title="Semana del Proyecto",
+        yaxis_title="Monto Acumulado (COP)",
+        hovermode='x unified',
+        height=500,
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
+    )
+    
+    fig.update_yaxis(tickformat="$,.0f")
+    
+    st.plotly_chart(fig, use_container_width=True)
+
+
+def render_kpis_egresos(comparacion: Dict):
+    """Renderiza KPIs principales de egresos"""
+    
+    col1, col2, col3, col4 = st.columns(4)
+    
+    with col1:
+        st.metric(
+            "💰 Total Gastado",
+            formatear_moneda(comparacion['total']['real']),
+            f"{comparacion['total']['pct_ejecutado']:.1f}% del proyectado"
+        )
+    
+    with col2:
+        st.metric(
+            "📊 Total Proyectado",
+            formatear_moneda(comparacion['total']['proyectado']),
+            help="Presupuesto proyectado hasta la semana actual"
+        )
+    
+    with col3:
+        desv = comparacion['total']['desviacion']
+        pct_desv = comparacion['total']['pct_desviacion']
+        
+        # Determinar color basado en desviación
+        delta_color = "inverse" if desv < 0 else "normal"
+        
+        st.metric(
+            "📈 Desviación",
+            formatear_moneda(abs(desv)),
+            f"{pct_desv:+.1f}%",
+            delta_color=delta_color
+        )
+    
+    with col4:
+        # Calcular burn rate (gasto promedio semanal)
+        semana_ultima = comparacion.get('semana_actual', 1)
+        burn_rate = comparacion['total']['real'] / semana_ultima if semana_ultima > 0 else 0
+        
+        st.metric(
+            "🔥 Burn Rate",
+            formatear_moneda(burn_rate),
+            help="Gasto promedio por semana"
+        )
+
+
+def render_comparacion_por_categoria(comparacion: Dict):
+    """Renderiza tabla de comparación por categoría"""
+    
+    st.subheader("📋 Comparación por Categoría")
+    
+    # Preparar datos para tabla
+    categorias = {
+        'materiales': '💎 Materiales',
+        'mano_obra': '👷 Mano de Obra',
+        'variables': '📦 Variables',
+        'admin': '🏢 Administración'
+    }
+    
+    data_tabla = []
+    for cat_key, cat_nombre in categorias.items():
+        cat_data = comparacion[cat_key]
+        
+        data_tabla.append({
+            'Categoría': cat_nombre,
+            'Proyectado': formatear_moneda(cat_data['proyectado']),
+            'Real': formatear_moneda(cat_data['real']),
+            'Desviación': formatear_moneda(abs(cat_data['desviacion'])),
+            '% Desv': f"{cat_data['pct_desviacion']:+.1f}%",
+            '% Ejec': f"{cat_data['pct_ejecutado']:.1f}%",
+            '_desv_num': cat_data['pct_desviacion']  # Para colorear
+        })
+    
+    # Agregar sin clasificar si existe
+    if comparacion['sin_clasificar']['real'] > 0:
+        data_tabla.append({
+            'Categoría': '❓ Sin Clasificar',
+            'Proyectado': 'N/A',
+            'Real': formatear_moneda(comparacion['sin_clasificar']['real']),
+            'Desviación': 'N/A',
+            '% Desv': 'N/A',
+            '% Ejec': f"{comparacion['sin_clasificar']['pct_del_total']:.1f}% del total",
+            '_desv_num': 0
+        })
+    
+    # Agregar total
+    total_data = comparacion['total']
+    data_tabla.append({
+        'Categoría': '💰 **TOTAL**',
+        'Proyectado': f"**{formatear_moneda(total_data['proyectado'])}**",
+        'Real': f"**{formatear_moneda(total_data['real'])}**",
+        'Desviación': f"**{formatear_moneda(abs(total_data['desviacion']))}**",
+        '% Desv': f"**{total_data['pct_desviacion']:+.1f}%**",
+        '% Ejec': f"**{total_data['pct_ejecutado']:.1f}%**",
+        '_desv_num': total_data['pct_desviacion']
+    })
+    
+    # Crear DataFrame
+    df_tabla = pd.DataFrame(data_tabla)
+    
+    # Función para colorear celdas
+    def colorear_desviacion(row):
+        if row['_desv_num'] == 0:
+            return [''] * len(row)
+        
+        desv = row['_desv_num']
+        if desv > 10:
+            color = 'background-color: #ffcccc'  # Rojo suave
+        elif desv < -10:
+            color = 'background-color: #ccffcc'  # Verde suave
+        else:
+            color = ''
+        
+        return [color if col in ['% Desv', 'Desviación'] else '' for col in row.index]
+    
+    # Mostrar tabla sin índice y sin columna auxiliar
+    df_display = df_tabla.drop(columns=['_desv_num'])
+    st.dataframe(
+        df_display.style.apply(lambda row: colorear_desviacion(df_tabla.iloc[row.name]), axis=1),
+        use_container_width=True,
+        hide_index=True
+    )
+
+
+def render_alertas_egresos(alertas: List[Dict]):
+    """Renderiza alertas de egresos"""
+    
+    if not alertas:
+        st.success("✅ No hay alertas. Los egresos están dentro de los parámetros esperados.")
+        return
+    
+    st.subheader("🚨 Alertas de Egresos")
+    
+    # Agrupar por severidad
+    alertas_criticas = [a for a in alertas if a['severidad'] == 'CRÍTICA']
+    alertas_altas = [a for a in alertas if a['severidad'] == 'ALTA']
+    alertas_medias = [a for a in alertas if a['severidad'] == 'MEDIA']
+    alertas_bajas = [a for a in alertas if a['severidad'] == 'BAJA']
+    
+    # Mostrar alertas críticas
+    for alerta in alertas_criticas:
+        st.error(f"🔴 **{alerta['categoria']}**: {alerta['mensaje']}")
+    
+    # Mostrar alertas altas
+    for alerta in alertas_altas:
+        st.error(f"⚠️ **{alerta['categoria']}**: {alerta['mensaje']}")
+    
+    # Mostrar alertas medias
+    for alerta in alertas_medias:
+        st.warning(f"⚡ **{alerta['categoria']}**: {alerta['mensaje']}")
+    
+    # Mostrar alertas bajas
+    if alertas_bajas:
+        with st.expander(f"ℹ️ Alertas informativas ({len(alertas_bajas)})"):
+            for alerta in alertas_bajas:
+                st.info(f"**{alerta['categoria']}**: {alerta['mensaje']}")
+
+
+# ============================================================================
+# COMPONENTE PRINCIPAL - PASO 5
+# ============================================================================
+
 def render_paso_5_analisis_egresos():
     """Paso 5: Análisis de egresos reales vs proyectados"""
     
@@ -2243,64 +2684,211 @@ def render_paso_5_analisis_egresos():
             st.session_state.paso_ejecucion = 4
             st.rerun()
     
+    # Verificar datos necesarios
+    if 'proyeccion_cartera' not in st.session_state:
+        st.error("❌ No hay proyección cargada. Por favor carga una proyección primero.")
+        return
+    
+    if 'egresos_reales_input' not in st.session_state:
+        st.error("❌ No hay datos de egresos cargados. Por favor carga los egresos en el Paso 4.")
+        return
+    
+    proyeccion = st.session_state.proyeccion_cartera
+    egresos_data = st.session_state.egresos_reales_input
+    
+    # Calcular semana actual
+    fecha_inicio = proyeccion['proyecto']['fecha_inicio']
+    if isinstance(fecha_inicio, str):
+        fecha_inicio = datetime.fromisoformat(fecha_inicio).date()
+    
+    semana_actual = calcular_semana_desde_fecha(fecha_inicio, datetime.now().date())
+    
+    # Usar semana de egresos si es más reciente
+    semana_egresos = egresos_data.get('semana_ultima', semana_actual)
+    semana_actual = min(semana_actual, semana_egresos)
+    
+    # ========================================================================
+    # CALCULAR COMPARACIONES Y ALERTAS
+    # ========================================================================
+    
+    comparacion = calcular_comparacion_egresos(proyeccion, egresos_data, semana_actual)
+    comparacion['semana_actual'] = semana_actual
+    
+    alertas = generar_alertas_egresos(comparacion, umbral_alerta=10.0)
+    
+    # ========================================================================
+    # RENDERIZAR DASHBOARD
+    # ========================================================================
+    
+    # KPIs principales
+    st.markdown("### 📊 Indicadores Principales")
+    render_kpis_egresos(comparacion)
+    
     st.markdown("---")
     
-    # TODO: Implementar análisis completo de egresos
-    # Por ahora, mostrar placeholder
+    # Gráfica proyección vs real
+    st.markdown("### 📈 Evolución de Egresos: Proyectado vs Real")
+    proyeccion_df = pd.DataFrame(proyeccion['proyeccion_semanal'])
+    render_grafica_egresos_acumulados(proyeccion_df, egresos_data, semana_actual)
     
-    st.info("""
-    ### 🚧 En Desarrollo
+    st.markdown("---")
     
-    **Próximas funcionalidades (v1.1.0):**
+    # Comparación por categoría
+    render_comparacion_por_categoria(comparacion)
     
-    1. **KPIs de Egresos:**
-       - Total gastado vs presupuestado
-       - Desviación por categoría
-       - Estado de ejecución presupuestal
+    st.markdown("---")
     
-    2. **Gráfica Proyección vs Real:**
-       - Egresos proyectados acumulados
-       - Gastos reales acumulados
-       - Línea de semana actual
+    # Alertas
+    render_alertas_egresos(alertas)
     
-    3. **Comparación por Categoría:**
-       - Materiales: Proyectado vs Real
-       - Mano de Obra: Proyectado vs Real
-       - Variables: Proyectado vs Real
-       - Administración: Proyectado vs Real
+    st.markdown("---")
     
-    4. **Sistema de Alertas:**
-       - Sobrecostos por categoría
-       - Tendencias de gasto
-       - Proyecciones de déficit
+    # ========================================================================
+    # DETALLES ADICIONALES
+    # ========================================================================
     
-    5. **Exportación JSON v4.0:**
-       - Proyección + Cartera + Egresos
-    """)
-    
-    # Mostrar datos cargados (preview)
-    if 'egresos_reales_input' in st.session_state:
-        datos = st.session_state.egresos_reales_input
+    with st.expander("📋 Ver Detalles de Egresos Semanales"):
+        st.markdown("#### Egresos por Semana")
         
-        st.markdown("### 📊 Datos Cargados")
+        egresos_semanales = egresos_data.get('egresos_semanales', [])
         
+        if egresos_semanales:
+            df_semanal = pd.DataFrame(egresos_semanales)
+            
+            # Formatear montos
+            df_display = df_semanal.copy()
+            df_display['semana'] = df_display['semana'].astype(int)
+            df_display['materiales'] = df_display['materiales'].apply(lambda x: formatear_moneda(x))
+            df_display['mano_obra'] = df_display['mano_obra'].apply(lambda x: formatear_moneda(x))
+            df_display['variables'] = df_display['variables'].apply(lambda x: formatear_moneda(x))
+            df_display['admin'] = df_display['admin'].apply(lambda x: formatear_moneda(x))
+            
+            if 'sin_clasificar' in df_display.columns and df_display['sin_clasificar'].sum() > 0:
+                df_display['sin_clasificar'] = df_display['sin_clasificar'].apply(lambda x: formatear_moneda(x))
+            else:
+                df_display = df_display.drop(columns=['sin_clasificar'], errors='ignore')
+            
+            df_display['total'] = df_display['total'].apply(lambda x: formatear_moneda(x))
+            
+            # Renombrar columnas
+            df_display = df_display.rename(columns={
+                'semana': 'Semana',
+                'materiales': '💎 Materiales',
+                'mano_obra': '👷 Mano de Obra',
+                'variables': '📦 Variables',
+                'admin': '🏢 Admin',
+                'sin_clasificar': '❓ Sin Clasificar',
+                'total': '💰 Total'
+            })
+            
+            st.dataframe(df_display, use_container_width=True, hide_index=True)
+        else:
+            st.info("No hay datos de egresos semanales disponibles")
+    
+    with st.expander("ℹ️ Información de Datos Cargados"):
         col1, col2, col3 = st.columns(3)
         
         with col1:
-            st.metric("Total Gastado", formatear_moneda(datos['totales_acumulados']['total']))
+            st.markdown("**📁 Archivo(s):**")
+            st.caption(egresos_data.get('archivo', 'N/A'))
         
         with col2:
-            st.metric("Semanas", f"1 a {datos['semana_ultima']}")
+            st.markdown("**📅 Período:**")
+            st.caption(f"Semanas 1 a {egresos_data.get('semana_ultima', 0)}")
         
         with col3:
-            st.metric("Registros", f"{datos['registros_procesados']:,}")
+            st.markdown("**📊 Registros:**")
+            st.caption(f"{egresos_data.get('registros_procesados', 0):,} transacciones")
+        
+        if egresos_data.get('cuentas_sin_clasificar'):
+            st.markdown("**⚠️ Cuentas sin clasificar:**")
+            for cuenta in egresos_data['cuentas_sin_clasificar']:
+                st.caption(f"- {cuenta}")
     
-    # Botón temporal para regresar
+    # ========================================================================
+    # EXPORTACIÓN JSON v4.0
+    # ========================================================================
+    
     st.markdown("---")
+    st.subheader("💾 Exportar Análisis Completo")
     
-    if st.button("◀️ Volver a Cartera", use_container_width=True):
-        st.session_state.paso_ejecucion = 3
+    # Crear estructura completa con todos los datos
+    analisis_completo = proyeccion.copy()
+    analisis_completo['version'] = '4.0'
+    analisis_completo['tipo'] = 'analisis_completo'
+    analisis_completo['fecha_analisis'] = datetime.now().isoformat()
+    
+    # Agregar cartera si existe
+    if 'cartera' in proyeccion:
+        analisis_completo['cartera'] = proyeccion['cartera']
+    
+    # Agregar egresos
+    analisis_completo['egresos'] = {
+        'metadata': {
+            'archivo': egresos_data.get('archivo', ''),
+            'fecha_proceso': egresos_data.get('fecha_proceso', ''),
+            'semana_ultima': egresos_data.get('semana_ultima', 0),
+            'registros_procesados': egresos_data.get('registros_procesados', 0),
+            'cuentas_sin_clasificar': egresos_data.get('cuentas_sin_clasificar', [])
+        },
+        'egresos_semanales': egresos_data.get('egresos_semanales', []),
+        'totales_acumulados': egresos_data.get('totales_acumulados', {}),
+        'comparacion_con_proyeccion': {
+            'semana_corte': semana_actual,
+            'por_categoria': {
+                'materiales': comparacion['materiales'],
+                'mano_obra': comparacion['mano_obra'],
+                'variables': comparacion['variables'],
+                'admin': comparacion['admin'],
+                'sin_clasificar': comparacion['sin_clasificar'],
+                'total': comparacion['total']
+            },
+            'alertas': alertas
+        }
+    }
+    
+    json_str = json.dumps(analisis_completo, indent=2, default=str)
+    
+    nombre_archivo = f"SICONE_{proyeccion['proyecto']['nombre']}_Completo_{datetime.now().strftime('%Y%m%d')}.json"
+    
+    st.download_button(
+        label="📥 Descargar JSON Completo (v4.0)",
+        data=json_str,
+        file_name=nombre_archivo,
+        mime="application/json",
+        use_container_width=True
+    )
+    
+    st.success("""
+    **✅ JSON v4.0 incluye:**
+    - ✅ Proyección completa
+    - ✅ Datos de cartera (ingresos reales)
+    - ✅ Datos de egresos (gastos reales)
+    - ✅ Comparaciones proyección vs ejecución
+    - ✅ Alertas y análisis automático
+    - ✅ Historial completo del proyecto
+    """)
+    
+    # Botón para reiniciar análisis
+    st.markdown("---")
+    st.subheader("🔄 Reiniciar Análisis")
+    
+    if st.button("🆕 Analizar Otro Proyecto", type="secondary", use_container_width=True):
+        # Limpiar session_state
+        keys_to_clear = [
+            'proyeccion_cartera',
+            'contratos_cartera_input',
+            'pagos_por_hito',
+            'egresos_reales_input',
+            'paso_ejecucion'
+        ]
+        for key in keys_to_clear:
+            if key in st.session_state:
+                del st.session_state[key]
+        
+        st.session_state.paso_ejecucion = 1
         st.rerun()
+
 
 
 # ============================================================================
