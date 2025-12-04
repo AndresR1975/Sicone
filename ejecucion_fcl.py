@@ -2,7 +2,7 @@
 SICONE - Módulo de Ejecución Real FCL
 Análisis de FCL Real Ejecutado vs FCL Planeado
 
-Versión: 2.1.0
+Versión: 2.1.2
 Fecha: Diciembre 2024
 Autor: AI-MindNovation
 
@@ -2462,41 +2462,66 @@ def calcular_metricas_tesoreria(proyeccion: Dict, egresos_data: Dict, contratos_
             'max_margen': 0
         }
     
-    # Preparar datos de ingresos por semana (desde contratos de cartera)
-    ingresos_por_semana = {}
+    # Calcular TOTAL de ingresos reales ya cobrados (de todos los contratos)
+    total_ingresos_reales = 0
     fecha_inicio = proyeccion['proyecto']['fecha_inicio']
     if isinstance(fecha_inicio, str):
         fecha_inicio = datetime.fromisoformat(fecha_inicio).date()
     
+    # Preparar datos de ingresos por semana
+    ingresos_por_semana = {}
+    ingresos_sin_fecha = 0  # Para pagos sin fecha válida
+    
     for contrato in contratos_cartera:
         for hito in contrato.get('hitos', []):
             for pago in hito.get('pagos', []):
-                fecha_pago = pago.get('fecha_pago')
+                # CORRECCIÓN: El campo es 'monto' no 'monto_pago' en JSON de cartera
+                monto_pago = pago.get('monto', 0)
+                total_ingresos_reales += monto_pago  # Sumar TODOS los pagos
+                
+                # CORRECCIÓN: El campo es 'fecha' no 'fecha_pago' en JSON de cartera
+                fecha_pago = pago.get('fecha')
+                semana_asignada = None
+                
                 if fecha_pago:
                     if isinstance(fecha_pago, str):
                         try:
+                            # Intentar formato ISO (YYYY-MM-DD) primero - es el formato del JSON
                             fecha_pago = datetime.strptime(fecha_pago, '%Y-%m-%d').date()
+                            semana_asignada = calcular_semana_desde_fecha(fecha_inicio, fecha_pago)
                         except:
                             try:
+                                # Intentar formato Colombia (DD/MM/YYYY) como respaldo
                                 fecha_pago = datetime.strptime(fecha_pago, '%d/%m/%Y').date()
+                                semana_asignada = calcular_semana_desde_fecha(fecha_inicio, fecha_pago)
                             except:
-                                continue
-                    
-                    semana_pago = calcular_semana_desde_fecha(fecha_inicio, fecha_pago)
-                    monto = pago.get('monto_pago', 0)
-                    
-                    if semana_pago not in ingresos_por_semana:
-                        ingresos_por_semana[semana_pago] = 0
-                    ingresos_por_semana[semana_pago] += monto
+                                pass
+                    elif isinstance(fecha_pago, date):
+                        semana_asignada = calcular_semana_desde_fecha(fecha_inicio, fecha_pago)
+                
+                # Si no se pudo asignar a una semana, acumular para la semana 1
+                if semana_asignada is None:
+                    ingresos_sin_fecha += monto_pago
+                else:
+                    if semana_asignada not in ingresos_por_semana:
+                        ingresos_por_semana[semana_asignada] = 0
+                    ingresos_por_semana[semana_asignada] += monto_pago
+    
+    # Asignar ingresos sin fecha a la semana 1
+    if ingresos_sin_fecha > 0:
+        if 1 not in ingresos_por_semana:
+            ingresos_por_semana[1] = 0
+        ingresos_por_semana[1] += ingresos_sin_fecha
     
     # Calcular métricas semanales
     metricas_semanales = []
     ingresos_acum = 0
     egresos_acum = 0
     
-    # Obtener todas las semanas desde 1 hasta semana_actual
+    # Obtener todas las semanas desde 1 hasta la máxima
     semanas_total = max(semana_actual, max([e['semana'] for e in egresos_semanales] + [0]))
     
+    # Para cada semana, calcular métricas
     for semana in range(1, semanas_total + 1):
         # Acumular ingresos
         ingresos_acum += ingresos_por_semana.get(semana, 0)
@@ -2527,6 +2552,7 @@ def calcular_metricas_tesoreria(proyeccion: Dict, egresos_data: Dict, contratos_
             'margen_proteccion': margen_proteccion,
             'excedente_invertible': excedente_invertible
         })
+    
     
     # 5. Recomendación para Inversión Temporal (valor único)
     if metricas_semanales:
