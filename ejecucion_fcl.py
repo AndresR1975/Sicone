@@ -2,7 +2,7 @@
 SICONE - Módulo de Ejecución Real FCL
 Análisis de FCL Real Ejecutado vs FCL Planeado
 
-Versión: 2.0.1
+Versión: 2.0.2
 Fecha: Diciembre 2024
 Autor: AI-MindNovation
 
@@ -2509,7 +2509,7 @@ def render_grafica_egresos_acumulados(proyeccion_df: pd.DataFrame, egresos_data:
         legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
     )
     
-    fig.update_yaxis(tickformat="$,.0f")
+    fig.update_yaxes(tickformat="$,.0f")
     
     st.plotly_chart(fig, use_container_width=True)
 
