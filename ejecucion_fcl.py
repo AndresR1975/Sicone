@@ -912,36 +912,35 @@ def render_paso_1_cargar_proyeccion():
                         for hito in contrato.get('hitos', []):
                             hito_id = str(hito['numero'])
                             
-                            # Si es hito compartido, ya habrá pagos del primer contrato
+                            # Inicializar lista si no existe
                             if hito_id not in pagos_por_hito:
                                 pagos_por_hito[hito_id] = []
                             
-                            # Agregar pagos (solo si no es compartido o es la primera vez)
-                            if not hito.get('es_compartido', False) or hito_id not in pagos_por_hito or len(pagos_por_hito[hito_id]) == 0:
-                                for pago in hito.get('pagos', []):
-                                    # Convertir fecha string a date
-                                    fecha_pago = datetime.fromisoformat(pago['fecha']).date() if isinstance(pago['fecha'], str) else pago['fecha']
-                                    
-                                    # Para hitos compartidos, sumar los montos distribuidos
-                                    if hito.get('es_compartido', False):
-                                        # Buscar si ya existe este recibo
-                                        pago_existente = next((p for p in pagos_por_hito[hito_id] if p['recibo'] == pago['recibo']), None)
-                                        if pago_existente:
-                                            # Sumar monto (reconstruir monto original)
-                                            pago_existente['monto'] += pago['monto']
-                                        else:
-                                            pagos_por_hito[hito_id].append({
-                                                'fecha': fecha_pago,
-                                                'recibo': pago['recibo'],
-                                                'monto': pago['monto']
-                                            })
+                            # Procesar pagos según tipo de hito
+                            for pago in hito.get('pagos', []):
+                                # Convertir fecha string a date
+                                fecha_pago = datetime.fromisoformat(pago['fecha']).date() if isinstance(pago['fecha'], str) else pago['fecha']
+                                
+                                if hito.get('es_compartido', False):
+                                    # Hito compartido: SUMAR montos si el recibo ya existe
+                                    pago_existente = next((p for p in pagos_por_hito[hito_id] if p['recibo'] == pago['recibo']), None)
+                                    if pago_existente:
+                                        # Sumar monto (reconstruir monto original completo)
+                                        pago_existente['monto'] += pago['monto']
                                     else:
-                                        # Hito no compartido, agregar directamente
+                                        # Primera vez que aparece este recibo
                                         pagos_por_hito[hito_id].append({
                                             'fecha': fecha_pago,
                                             'recibo': pago['recibo'],
                                             'monto': pago['monto']
                                         })
+                                else:
+                                    # Hito NO compartido: agregar directamente (solo aparece una vez)
+                                    pagos_por_hito[hito_id].append({
+                                        'fecha': fecha_pago,
+                                        'recibo': pago['recibo'],
+                                        'monto': pago['monto']
+                                    })
                 
                 st.session_state.pagos_por_hito = pagos_por_hito
                 
@@ -1949,65 +1948,75 @@ def render_paso_4_ingresar_egresos():
         
         # Comparación rápida vs proyección (si existe)
         if 'proyeccion_semanal' in proyeccion:
-            st.markdown("### ⚡ Comparación Rápida vs Proyección")
+            try:
+                st.markdown("### ⚡ Comparación Rápida vs Proyección")
+                
+                df_proy = pd.DataFrame(proyeccion['proyeccion_semanal'])
+                
+                # Verificar que existen las columnas necesarias
+                if 'semana' not in df_proy.columns:
+                    st.warning("⚠️ No se puede mostrar comparación: estructura de proyección incompatible")
+                else:
+                    # Calcular totales proyectados por categoría (acumulado hasta semana última)
+                    semana_ultima = datos['semana_ultima']
+                    df_proy_filtrado = df_proy[df_proy['semana'] <= semana_ultima]
+                    
+                    # Obtener valores con .get() para evitar KeyError si no existen
+                    proy_materiales = df_proy_filtrado.get('materiales', pd.Series([0])).sum()
+                    proy_mano_obra = df_proy_filtrado.get('mano_obra', pd.Series([0])).sum()
+                    proy_equipos = df_proy_filtrado.get('equipos', pd.Series([0])).sum()
+                    proy_imprevistos = df_proy_filtrado.get('imprevistos', pd.Series([0])).sum()
+                    proy_logistica = df_proy_filtrado.get('logistica', pd.Series([0])).sum()
+                    proy_admin = df_proy_filtrado.get('admin', pd.Series([0])).sum()
+                    
+                    # Variables = Equipos + Imprevistos + Logística
+                    proy_variables = proy_equipos + proy_imprevistos + proy_logistica
+                    
+                    col1, col2, col3, col4 = st.columns(4)
+                    
+                    with col1:
+                        desv_mat = totales['materiales'] - proy_materiales
+                        pct_mat = calcular_porcentaje(desv_mat, proy_materiales) if proy_materiales > 0 else 0
+                        st.metric(
+                            "Materiales",
+                            f"{'+' if desv_mat > 0 else ''}{pct_mat:.1f}%",
+                            delta=formatear_moneda(desv_mat),
+                            delta_color="inverse"
+                        )
+                    
+                    with col2:
+                        desv_mo = totales['mano_obra'] - proy_mano_obra
+                        pct_mo = calcular_porcentaje(desv_mo, proy_mano_obra) if proy_mano_obra > 0 else 0
+                        st.metric(
+                            "Mano de Obra",
+                            f"{'+' if desv_mo > 0 else ''}{pct_mo:.1f}%",
+                            delta=formatear_moneda(desv_mo),
+                            delta_color="inverse"
+                        )
+                    
+                    with col3:
+                        desv_var = totales['variables'] - proy_variables
+                        pct_var = calcular_porcentaje(desv_var, proy_variables) if proy_variables > 0 else 0
+                        st.metric(
+                            "Variables",
+                            f"{'+' if desv_var > 0 else ''}{pct_var:.1f}%",
+                            delta=formatear_moneda(desv_var),
+                            delta_color="inverse"
+                        )
+                    
+                    with col4:
+                        desv_admin = totales['admin'] - proy_admin
+                        pct_admin = calcular_porcentaje(desv_admin, proy_admin) if proy_admin > 0 else 0
+                        st.metric(
+                            "Administración",
+                            f"{'+' if desv_admin > 0 else ''}{pct_admin:.1f}%",
+                            delta=formatear_moneda(desv_admin),
+                            delta_color="inverse"
+                        )
             
-            df_proy = pd.DataFrame(proyeccion['proyeccion_semanal'])
-            
-            # Calcular totales proyectados por categoría (acumulado hasta semana última)
-            semana_ultima = datos['semana_ultima']
-            df_proy_filtrado = df_proy[df_proy['semana'] <= semana_ultima]
-            
-            proy_materiales = df_proy_filtrado['materiales'].sum()
-            proy_mano_obra = df_proy_filtrado['mano_obra'].sum()
-            proy_equipos = df_proy_filtrado.get('equipos', pd.Series([0])).sum()
-            proy_imprevistos = df_proy_filtrado.get('imprevistos', pd.Series([0])).sum()
-            proy_logistica = df_proy_filtrado.get('logistica', pd.Series([0])).sum()
-            proy_admin = df_proy_filtrado.get('admin', pd.Series([0])).sum()
-            
-            # Variables = Equipos + Imprevistos + Logística
-            proy_variables = proy_equipos + proy_imprevistos + proy_logistica
-            
-            col1, col2, col3, col4 = st.columns(4)
-            
-            with col1:
-                desv_mat = totales['materiales'] - proy_materiales
-                pct_mat = calcular_porcentaje(desv_mat, proy_materiales)
-                st.metric(
-                    "Materiales",
-                    f"{'+' if desv_mat > 0 else ''}{pct_mat:.1f}%",
-                    delta=formatear_moneda(desv_mat),
-                    delta_color="inverse"
-                )
-            
-            with col2:
-                desv_mo = totales['mano_obra'] - proy_mano_obra
-                pct_mo = calcular_porcentaje(desv_mo, proy_mano_obra)
-                st.metric(
-                    "Mano de Obra",
-                    f"{'+' if desv_mo > 0 else ''}{pct_mo:.1f}%",
-                    delta=formatear_moneda(desv_mo),
-                    delta_color="inverse"
-                )
-            
-            with col3:
-                desv_var = totales['variables'] - proy_variables
-                pct_var = calcular_porcentaje(desv_var, proy_variables)
-                st.metric(
-                    "Variables",
-                    f"{'+' if desv_var > 0 else ''}{pct_var:.1f}%",
-                    delta=formatear_moneda(desv_var),
-                    delta_color="inverse"
-                )
-            
-            with col4:
-                desv_admin = totales['admin'] - proy_admin
-                pct_admin = calcular_porcentaje(desv_admin, proy_admin)
-                st.metric(
-                    "Administración",
-                    f"{'+' if desv_admin > 0 else ''}{pct_admin:.1f}%",
-                    delta=formatear_moneda(desv_admin),
-                    delta_color="inverse"
-                )
+            except Exception as e:
+                st.warning(f"⚠️ No se pudo generar comparación vs proyección: {str(e)}")
+                # Continuar sin mostrar la comparación
         
         # Botón generar análisis
         st.markdown("---")
