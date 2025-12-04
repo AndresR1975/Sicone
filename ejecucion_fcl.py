@@ -2,7 +2,7 @@
 SICONE - Módulo de Ejecución Real FCL
 Análisis de FCL Real Ejecutado vs FCL Planeado
 
-Versión: 2.0.2
+Versión: 2.1.0
 Fecha: Diciembre 2024
 Autor: AI-MindNovation
 
@@ -30,7 +30,13 @@ ESTRUCTURA MODULAR:
     │       ├── Gráfica proyectado vs real acumulado
     │       ├── Comparación por categoría
     │       ├── Sistema de alertas de sobrecostos
-    │       └── Exportación JSON v4.0
+    │       ├── Métricas de tesorería (v2.1.0) ✅
+    │       │   ├── Burn rate acumulado semanal
+    │       │   ├── Margen de protección (8 semanas)
+    │       │   ├── Saldo final real por semana
+    │       │   ├── Excedente invertible
+    │       │   └── Recomendación de inversión temporal
+    │       └── Exportación JSON v5.0
     │
     └── Módulo 3: ANÁLISIS FCL COMPLETO (Futuro - v3.0) 🔜
         ├── Dashboard consolidado (ingresos + egresos)
@@ -38,7 +44,7 @@ ESTRUCTURA MODULAR:
         ├── Proyecciones automáticas
         └── Alertas integradas
 
-FUNCIONALIDADES ACTUALES (v2.0.0):
+FUNCIONALIDADES ACTUALES (v2.1.0):
 
 **CARTERA (Ingresos):**
 - ✅ Carga de proyección desde JSON v2.0+
@@ -64,7 +70,14 @@ FUNCIONALIDADES ACTUALES (v2.0.0):
 - ✅ Gráfica de egresos acumulados (proyectado vs real)
 - ✅ Tabla de comparación por categoría
 - ✅ Sistema de alertas automáticas (sobrecostos, subejecución)
-- ✅ Exportación JSON v4.0 (proyección + cartera + egresos)
+- ✅ **Métricas de tesorería semanal** (v2.1.0)
+  - Burn rate acumulado por semana
+  - Margen de protección (8 semanas de burn rate)
+  - Saldo final real (ingresos - egresos acumulados)
+  - Excedente invertible (saldo - margen protección)
+  - Recomendación de inversión temporal
+- ✅ Gráfica de evolución de tesorería
+- ✅ Exportación JSON v5.0 (proyección + cartera + egresos + tesorería)
 
 CORRECCIONES CRÍTICAS (Diciembre 2024):
 - ✅ v1.1.2: Soporte multi-hojas consolidado
@@ -73,11 +86,15 @@ CORRECCIONES CRÍTICAS (Diciembre 2024):
 - ✅ v1.1.5: Registros sin clasificar descartados ($412M)
 - ✅ v1.1.6: Formato fechas DD/MM/YYYY (79.5% datos perdidos)
 - ✅ v2.0.0: Paso 5 completo (análisis de egresos)
+- ✅ v2.0.1: KeyError 'semana' en Paso 5 (normalización columnas)
+- ✅ v2.0.2: Error tabla comparación (simplificación estilo)
+- ✅ v2.1.0: Métricas de tesorería completas
 
 ROADMAP:
 - v1.0.0: Módulo Cartera (ingresos) ✅
 - v1.1.0: Módulo Egresos (ingreso/parser) ✅
 - v2.0.0: Análisis de Egresos completo (Paso 5) ✅
+- v2.1.0: Métricas de Tesorería (gestión de caja) ✅
 - v3.0.0: Análisis FCL completo (ingresos + egresos + flujo) 🔜
 - v4.0.0: Dashboard consolidado multiproyectos 🔜
 """
@@ -89,6 +106,7 @@ from datetime import datetime, timedelta, date
 from typing import Dict, List, Optional, Tuple
 import plotly.graph_objects as go
 import plotly.express as px
+from plotly.subplots import make_subplots
 
 # ============================================================================
 # CONFIGURACIÓN DE PÁGINA
@@ -2426,6 +2444,108 @@ def generar_alertas_egresos(comparacion: Dict, umbral_alerta: float = 10.0) -> L
     return alertas
 
 
+def calcular_metricas_tesoreria(proyeccion: Dict, egresos_data: Dict, contratos_cartera: List[Dict], semana_actual: int) -> Dict:
+    """
+    Calcula métricas de tesorería semanales para gestión de caja
+    
+    Returns:
+        Dict con métricas semanales y recomendación de inversión
+    """
+    # Obtener egresos semanales
+    egresos_semanales = egresos_data.get('egresos_semanales', [])
+    
+    if not egresos_semanales:
+        return {
+            'metricas_semanales': [],
+            'recomendacion_inversion': 0,
+            'min_excedente': 0,
+            'max_margen': 0
+        }
+    
+    # Preparar datos de ingresos por semana (desde contratos de cartera)
+    ingresos_por_semana = {}
+    fecha_inicio = proyeccion['proyecto']['fecha_inicio']
+    if isinstance(fecha_inicio, str):
+        fecha_inicio = datetime.fromisoformat(fecha_inicio).date()
+    
+    for contrato in contratos_cartera:
+        for hito in contrato.get('hitos', []):
+            for pago in hito.get('pagos', []):
+                fecha_pago = pago.get('fecha_pago')
+                if fecha_pago:
+                    if isinstance(fecha_pago, str):
+                        try:
+                            fecha_pago = datetime.strptime(fecha_pago, '%Y-%m-%d').date()
+                        except:
+                            try:
+                                fecha_pago = datetime.strptime(fecha_pago, '%d/%m/%Y').date()
+                            except:
+                                continue
+                    
+                    semana_pago = calcular_semana_desde_fecha(fecha_inicio, fecha_pago)
+                    monto = pago.get('monto_pago', 0)
+                    
+                    if semana_pago not in ingresos_por_semana:
+                        ingresos_por_semana[semana_pago] = 0
+                    ingresos_por_semana[semana_pago] += monto
+    
+    # Calcular métricas semanales
+    metricas_semanales = []
+    ingresos_acum = 0
+    egresos_acum = 0
+    
+    # Obtener todas las semanas desde 1 hasta semana_actual
+    semanas_total = max(semana_actual, max([e['semana'] for e in egresos_semanales] + [0]))
+    
+    for semana in range(1, semanas_total + 1):
+        # Acumular ingresos
+        ingresos_acum += ingresos_por_semana.get(semana, 0)
+        
+        # Acumular egresos
+        egreso_semana = next((e for e in egresos_semanales if e['semana'] == semana), None)
+        if egreso_semana:
+            egresos_acum += egreso_semana['total']
+        
+        # 1. Burn Rate Acumulado
+        burn_rate_acum = egresos_acum / semana if semana > 0 else 0
+        
+        # 2. Margen de Protección (8 semanas de burn rate)
+        margen_proteccion = burn_rate_acum * 8
+        
+        # 3. Saldo Final Real
+        saldo_final_real = ingresos_acum - egresos_acum
+        
+        # 4. Excedente Invertible
+        excedente_invertible = saldo_final_real - margen_proteccion
+        
+        metricas_semanales.append({
+            'semana': semana,
+            'ingresos_acum': ingresos_acum,
+            'egresos_acum': egresos_acum,
+            'saldo_final_real': saldo_final_real,
+            'burn_rate_acum': burn_rate_acum,
+            'margen_proteccion': margen_proteccion,
+            'excedente_invertible': excedente_invertible
+        })
+    
+    # 5. Recomendación para Inversión Temporal (valor único)
+    if metricas_semanales:
+        min_excedente = min(m['excedente_invertible'] for m in metricas_semanales)
+        max_margen = max(m['margen_proteccion'] for m in metricas_semanales)
+        recomendacion_inversion = min_excedente - max_margen
+    else:
+        min_excedente = 0
+        max_margen = 0
+        recomendacion_inversion = 0
+    
+    return {
+        'metricas_semanales': metricas_semanales,
+        'recomendacion_inversion': recomendacion_inversion,
+        'min_excedente': min_excedente,
+        'max_margen': max_margen
+    }
+
+
 def render_grafica_egresos_acumulados(proyeccion_df: pd.DataFrame, egresos_data: Dict, semana_actual: int):
     """Renderiza gráfica de egresos proyectados vs reales acumulados"""
     
@@ -2673,6 +2793,135 @@ def render_alertas_egresos(alertas: List[Dict]):
                 st.info(f"**{alerta['categoria']}**: {alerta['mensaje']}")
 
 
+def render_kpis_tesoreria(metricas_tesoreria: Dict):
+    """Renderiza KPIs de tesorería y gestión de caja"""
+    
+    st.subheader("💰 Métricas de Tesorería")
+    
+    metricas = metricas_tesoreria['metricas_semanales']
+    if not metricas:
+        st.warning("⚠️ No hay métricas de tesorería disponibles")
+        return
+    
+    # Última semana con datos
+    ultima_metrica = metricas[-1]
+    
+    col1, col2, col3, col4 = st.columns(4)
+    
+    with col1:
+        st.metric(
+            "💵 Saldo Actual",
+            formatear_moneda(ultima_metrica['saldo_final_real']),
+            help="Ingresos acumulados - Egresos acumulados"
+        )
+    
+    with col2:
+        st.metric(
+            "🔥 Burn Rate",
+            f"{formatear_moneda(ultima_metrica['burn_rate_acum'])}/sem",
+            help="Gasto promedio semanal acumulado"
+        )
+    
+    with col3:
+        st.metric(
+            "🛡️ Margen de Protección",
+            formatear_moneda(ultima_metrica['margen_proteccion']),
+            help="Reserva de seguridad (8 semanas de burn rate)"
+        )
+    
+    with col4:
+        excedente = ultima_metrica['excedente_invertible']
+        color_delta = "normal" if excedente >= 0 else "inverse"
+        st.metric(
+            "📈 Excedente Invertible",
+            formatear_moneda(excedente),
+            help="Saldo disponible para inversión temporal"
+        )
+    
+    # Recomendación de inversión
+    st.markdown("---")
+    recom = metricas_tesoreria['recomendacion_inversion']
+    
+    if recom > 0:
+        st.success(f"✅ **Recomendación de Inversión Temporal:** {formatear_moneda(recom)}")
+        st.caption("Monto seguro disponible para inversión a corto plazo basado en el mínimo excedente histórico.")
+    elif recom < 0:
+        st.error(f"⚠️ **Alerta de Liquidez:** Déficit proyectado de {formatear_moneda(abs(recom))}")
+        st.caption("Se recomienda gestionar cobros o ajustar egresos para mejorar la liquidez.")
+    else:
+        st.info("ℹ️ **Sin excedente disponible para inversión** en este momento.")
+
+
+def render_grafica_tesoreria(metricas_tesoreria: Dict):
+    """Renderiza gráfica de evolución de saldo y margen de protección"""
+    
+    metricas = metricas_tesoreria['metricas_semanales']
+    if not metricas:
+        return
+    
+    df_metricas = pd.DataFrame(metricas)
+    
+    # Crear gráfica con dos ejes Y
+    fig = make_subplots(
+        specs=[[{"secondary_y": False}]]
+    )
+    
+    # Línea de Saldo Final Real
+    fig.add_trace(
+        go.Scatter(
+            x=df_metricas['semana'],
+            y=df_metricas['saldo_final_real'],
+            name='Saldo Final Real',
+            mode='lines+markers',
+            line=dict(color='green', width=3),
+            hovertemplate='Semana %{x}<br>Saldo: $%{y:,.0f}<extra></extra>'
+        )
+    )
+    
+    # Línea de Margen de Protección
+    fig.add_trace(
+        go.Scatter(
+            x=df_metricas['semana'],
+            y=df_metricas['margen_proteccion'],
+            name='Margen de Protección',
+            mode='lines',
+            line=dict(color='orange', width=2, dash='dash'),
+            hovertemplate='Semana %{x}<br>Margen: $%{y:,.0f}<extra></extra>'
+        )
+    )
+    
+    # Línea de Excedente Invertible
+    fig.add_trace(
+        go.Scatter(
+            x=df_metricas['semana'],
+            y=df_metricas['excedente_invertible'],
+            name='Excedente Invertible',
+            mode='lines',
+            line=dict(color='blue', width=2),
+            fill='tozeroy',
+            fillcolor='rgba(0, 100, 255, 0.1)',
+            hovertemplate='Semana %{x}<br>Excedente: $%{y:,.0f}<extra></extra>'
+        )
+    )
+    
+    # Línea horizontal en cero
+    fig.add_hline(y=0, line_dash="dot", line_color="red", opacity=0.5)
+    
+    # Configuración
+    fig.update_layout(
+        title="Evolución de Tesorería: Saldo vs Margen de Protección",
+        xaxis_title="Semana del Proyecto",
+        yaxis_title="Monto (COP)",
+        hovermode='x unified',
+        height=500,
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
+    )
+    
+    fig.update_yaxes(tickformat="$,.0f")
+    
+    st.plotly_chart(fig, use_container_width=True)
+
+
 # ============================================================================
 # COMPONENTE PRINCIPAL - PASO 5
 # ============================================================================
@@ -2753,6 +3002,25 @@ def render_paso_5_analisis_egresos():
     st.markdown("---")
     
     # ========================================================================
+    # MÉTRICAS DE TESORERÍA
+    # ========================================================================
+    
+    # Calcular métricas de tesorería
+    contratos_cartera = st.session_state.get('contratos_cartera_input', [])
+    metricas_tesoreria = calcular_metricas_tesoreria(proyeccion, egresos_data, contratos_cartera, semana_actual)
+    
+    # Renderizar KPIs de tesorería
+    render_kpis_tesoreria(metricas_tesoreria)
+    
+    st.markdown("---")
+    
+    # Gráfica de tesorería
+    st.markdown("### 📊 Evolución de Tesorería")
+    render_grafica_tesoreria(metricas_tesoreria)
+    
+    st.markdown("---")
+    
+    # ========================================================================
     # DETALLES ADICIONALES
     # ========================================================================
     
@@ -2823,7 +3091,7 @@ def render_paso_5_analisis_egresos():
     
     # Crear estructura completa con todos los datos
     analisis_completo = proyeccion.copy()
-    analisis_completo['version'] = '4.0'
+    analisis_completo['version'] = '5.0'
     analisis_completo['tipo'] = 'analisis_completo'
     analisis_completo['fecha_analisis'] = datetime.now().isoformat()
     
@@ -2856,12 +3124,25 @@ def render_paso_5_analisis_egresos():
         }
     }
     
+    # Agregar métricas de tesorería (NUEVO en v5.0)
+    analisis_completo['tesoreria'] = {
+        'metricas_semanales': metricas_tesoreria['metricas_semanales'],
+        'recomendacion_inversion': metricas_tesoreria['recomendacion_inversion'],
+        'min_excedente_historico': metricas_tesoreria['min_excedente'],
+        'max_margen_historico': metricas_tesoreria['max_margen'],
+        'metadata': {
+            'fecha_calculo': datetime.now().isoformat(),
+            'semanas_analizadas': len(metricas_tesoreria['metricas_semanales']),
+            'periodo_margen_proteccion': 8  # semanas
+        }
+    }
+    
     json_str = json.dumps(analisis_completo, indent=2, default=str)
     
     nombre_archivo = f"SICONE_{proyeccion['proyecto']['nombre']}_Completo_{datetime.now().strftime('%Y%m%d')}.json"
     
     st.download_button(
-        label="📥 Descargar JSON Completo (v4.0)",
+        label="📥 Descargar JSON Completo (v5.0)",
         data=json_str,
         file_name=nombre_archivo,
         mime="application/json",
@@ -2869,12 +3150,18 @@ def render_paso_5_analisis_egresos():
     )
     
     st.success("""
-    **✅ JSON v4.0 incluye:**
+    **✅ JSON v5.0 incluye:**
     - ✅ Proyección completa
     - ✅ Datos de cartera (ingresos reales)
     - ✅ Datos de egresos (gastos reales)
     - ✅ Comparaciones proyección vs ejecución
     - ✅ Alertas y análisis automático
+    - ✅ **Métricas de tesorería** (Nuevo en v5.0)
+        - Burn rate acumulado semanal
+        - Margen de protección (8 semanas)
+        - Saldo final real por semana
+        - Excedente invertible
+        - Recomendación de inversión temporal
     - ✅ Historial completo del proyecto
     """)
     
