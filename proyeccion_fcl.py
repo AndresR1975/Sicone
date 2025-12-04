@@ -265,11 +265,17 @@ def extraer_conceptos_dinamico(cotizacion: dict) -> Dict:
         # Aplicar AIU de complementarios
         if 'aiu_complementarios' in cotizacion:
             aiu_comp = cotizacion['aiu_complementarios']
+            # Calcular comisión y AIU como porcentajes
             factor_aiu_comp = 1 + (
                 aiu_comp.get('pct_comision', 0) + 
                 aiu_comp.get('pct_aiu', 0)
             ) / 100
             total_complementarios *= factor_aiu_comp
+            
+            # CORRECCIÓN v2.1.4: Sumar logística como valor fijo
+            # Este campo representa "Logística de Cimentación" en la cotización
+            logistica = aiu_comp.get('logistica', 0)
+            total_complementarios += logistica
         
         # NO APLICAR discriminación hardcoded - dejar que usuario configure
         conceptos['Complementarios'] = {
@@ -2477,33 +2483,6 @@ def render_opciones_guardar(
             use_container_width=True
         )
         st.caption("📊 Solo datos semanales para análisis en Excel")
-    
-    # ========================================================================
-    # CONTINUAR A EJECUCIÓN REAL
-    # ========================================================================
-    
-    st.markdown("---")
-    st.subheader("🔜 Próximos Pasos")
-    
-    st.info("""
-    **¿Qué sigue?**
-    
-    Ahora que tienes tu proyección lista, puedes continuar al módulo de **Ejecución Real FCL** para:
-    - 📊 Ingresar cobros reales (cartera)
-    - 💰 Comparar ingresos proyectados vs reales
-    - ⚠️ Generar alertas de cartera
-    """)
-    
-    if st.button("▶️ Continuar a Ejecución Real FCL", type="primary", use_container_width=True):
-        # Guardar JSON en session_state para ejecución_fcl
-        st.session_state.proyeccion_cartera = proyeccion_completa
-        
-        # Cambiar a módulo de ejecución
-        st.session_state.submodulo_fcl = 'ejecucion'
-        st.session_state.paso_ejecucion = 1
-        
-        # Forzar rerun para cambiar módulo
-        st.rerun()
 
 
 # ============================================================================
