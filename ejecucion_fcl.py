@@ -458,64 +458,116 @@ def render_tabla_alertas(alertas: List[Dict]):
 def validar_excel_egresos(archivo) -> Tuple[bool, str]:
     """
     Valida estructura del archivo Excel de egresos
+    Detecta automáticamente hojas con nombre "AÑO XXXX"
     
     Returns:
         (es_valido, mensaje_error)
     """
     try:
-        # Intentar con diferentes filas de encabezado
-        encabezados_posibles = [7, 6, 8, 9]  # índices 0-based
-        df = None
-        header_usado = None
+        # Leer nombres de hojas
+        xls = pd.ExcelFile(archivo)
+        todas_las_hojas = xls.sheet_names
         
-        for header_row in encabezados_posibles:
-            try:
-                df_temp = pd.read_excel(archivo, sheet_name=0, header=header_row)
-                
-                # Verificar si tiene al menos algunas columnas esperadas
-                columnas_clave = ['Código contable', 'Cuenta contable', 'Débito']
-                coincidencias = sum(1 for col in columnas_clave if col in df_temp.columns)
-                
-                if coincidencias >= 2:  # Al menos 2 de 3 columnas
-                    df = df_temp
-                    header_usado = header_row
-                    break
-            except:
-                continue
+        # Detectar hojas de años (formato "AÑO 2024", "AÑO 2025", etc.)
+        hojas_anio = [h for h in todas_las_hojas if h.startswith('AÑO ')]
         
-        if df is None:
-            return False, "No se pudo detectar la estructura del archivo. Verifique que sea un archivo de ejecución contable válido."
-        
-        # Verificar columnas esenciales
-        columnas_requeridas = ['Código contable', 'Cuenta contable', 
-                              'Fecha elaboración', 'Débito']
-        columnas_encontradas = [col for col in columnas_requeridas if col in df.columns]
-        columnas_faltantes = [col for col in columnas_requeridas if col not in df.columns]
-        
-        if columnas_faltantes:
-            # Mostrar columnas disponibles para debugging
-            columnas_disponibles = list(df.columns[:10])  # Primeras 10 columnas
+        if not hojas_anio:
             return False, f"""
-            **Columnas faltantes:** {', '.join(columnas_faltantes)}
+            ❌ **No se encontraron hojas de ejecución válidas**
             
-            **Columnas encontradas:** {', '.join(columnas_encontradas)}
+            **Hojas detectadas en el archivo:**
+            {', '.join(todas_las_hojas)}
             
-            **Primeras 10 columnas del archivo:**
-            {', '.join(columnas_disponibles)}
+            **Formato esperado:** Las hojas deben nombrarse como "AÑO 2024", "AÑO 2025", etc.
             
-            **Fila de encabezado detectada:** {header_usado + 1}
-            
-            💡 **Sugerencia:** Verifique que el archivo tenga la estructura estándar de ejecución contable.
+            💡 **Sugerencia:** Verifique que las hojas de ejecución estén correctamente nombradas.
             """
         
-        # Verificar que hay datos
-        df_trans = df[df['Código contable'].notna()]
-        df_trans = df_trans[~df_trans['Código contable'].astype(str).str.startswith('Procesado')]
+        # Validar estructura de cada hoja
+        hojas_validas = []
+        hojas_invalidas = []
         
-        if len(df_trans) == 0:
-            return False, "El archivo no contiene registros transaccionales"
+        for hoja_nombre in hojas_anio:
+            # Intentar con diferentes filas de encabezado
+            encabezados_posibles = [7, 6, 8, 9]
+            df = None
+            header_usado = None
+            
+            for header_row in encabezados_posibles:
+                try:
+                    df_temp = pd.read_excel(archivo, sheet_name=hoja_nombre, header=header_row)
+                    
+                    # Verificar columnas clave
+                    columnas_clave = ['Código contable', 'Cuenta contable', 'Débito']
+                    coincidencias = sum(1 for col in columnas_clave if col in df_temp.columns)
+                    
+                    if coincidencias >= 2:  # Al menos 2 de 3
+                        df = df_temp
+                        header_usado = header_row
+                        break
+                except:
+                    continue
+            
+            if df is None:
+                hojas_invalidas.append(hoja_nombre)
+                continue
+            
+            # Verificar columnas esenciales
+            columnas_requeridas = ['Código contable', 'Cuenta contable', 
+                                  'Fecha elaboración', 'Débito']
+            columnas_encontradas = [col for col in columnas_requeridas if col in df.columns]
+            columnas_faltantes = [col for col in columnas_requeridas if col not in df.columns]
+            
+            if columnas_faltantes:
+                hojas_invalidas.append(f"{hoja_nombre} (faltan: {', '.join(columnas_faltantes)})")
+                continue
+            
+            # Verificar que hay datos
+            df_trans = df[df['Código contable'].notna()]
+            df_trans = df_trans[~df_trans['Código contable'].astype(str).str.startswith('Procesado')]
+            
+            if len(df_trans) == 0:
+                hojas_invalidas.append(f"{hoja_nombre} (sin registros)")
+                continue
+            
+            # Hoja válida
+            hojas_validas.append({
+                'nombre': hoja_nombre,
+                'header': header_usado,
+                'registros': len(df_trans)
+            })
         
-        mensaje_exito = f"Archivo válido (encabezados en fila {header_usado + 1}, {len(df_trans)} registros)"
+        if not hojas_validas:
+            detalles_invalidas = '\n            '.join([f"• {h}" for h in hojas_invalidas])
+            return False, f"""
+            ❌ **Ninguna hoja pasó la validación**
+            
+            **Hojas detectadas con problemas:**
+            {detalles_invalidas}
+            
+            💡 **Verifique que las hojas tengan la estructura correcta de ejecución contable.**
+            """
+        
+        # Mensaje de éxito
+        detalles_validas = '\n            '.join([
+            f"• {h['nombre']}: {h['registros']} registros (encabezados en fila {h['header'] + 1})"
+            for h in hojas_validas
+        ])
+        
+        mensaje_exito = f"""✅ **Archivo válido**
+            
+            **Hojas procesables ({len(hojas_validas)}):**
+            {detalles_validas}
+            """
+        
+        if hojas_invalidas:
+            detalles_invalidas = '\n            '.join([f"• {h}" for h in hojas_invalidas])
+            mensaje_exito += f"""
+            
+            ⚠️ **Hojas omitidas ({len(hojas_invalidas)}):**
+            {detalles_invalidas}
+            """
+        
         return True, mensaje_exito
         
     except Exception as e:
@@ -536,7 +588,8 @@ def parse_excel_egresos(
     nombre_centro_costo: str = None
 ) -> Dict:
     """
-    Parsea archivo Excel de ejecución contable y agrupa por semana/categoría
+    Parsea archivo Excel de ejecución contable con múltiples hojas (años)
+    Detecta automáticamente hojas "AÑO XXXX" y procesa todas
     
     Args:
         archivo: UploadedFile de Streamlit
@@ -546,134 +599,203 @@ def parse_excel_egresos(
     Returns:
         Dict con:
             - archivo: nombre del archivo
+            - hojas_procesadas: lista de hojas procesadas
             - fecha_proceso: fecha de procesamiento
             - semana_ultima: última semana con datos
             - periodo_covered: rango de fechas
-            - registros_procesados: cantidad de registros
-            - egresos_semanales: lista de dict por semana
+            - registros_procesados: cantidad total de registros
+            - egresos_semanales: lista de dict por semana (consolidado)
             - totales_acumulados: dict con totales por categoría
             - cuentas_sin_clasificar: lista de cuentas no mapeadas
     """
     try:
-        # Detectar fila de encabezado automáticamente
-        encabezados_posibles = [7, 6, 8, 9]
-        df = None
+        # Detectar hojas de años
+        xls = pd.ExcelFile(archivo)
+        todas_las_hojas = xls.sheet_names
+        hojas_anio = [h for h in todas_las_hojas if h.startswith('AÑO ')]
         
-        for header_row in encabezados_posibles:
-            try:
-                df_temp = pd.read_excel(archivo, sheet_name=0, header=header_row)
-                
-                # Verificar si tiene las columnas clave
-                columnas_clave = ['Código contable', 'Cuenta contable', 'Débito']
-                if all(col in df_temp.columns for col in columnas_clave):
-                    df = df_temp
-                    break
-            except:
-                continue
-        
-        if df is None:
-            st.error("No se pudo detectar la estructura del archivo Excel.")
+        if not hojas_anio:
+            st.error("❌ No se encontraron hojas con formato 'AÑO XXXX'")
             return None
         
-        # Filtrar datos transaccionales
-        df_trans = df[df['Código contable'].notna()].copy()
-        df_trans = df_trans[~df_trans['Código contable'].astype(str).str.startswith('Procesado')]
+        st.info(f"📊 Detectadas {len(hojas_anio)} hoja(s): {', '.join(hojas_anio)}")
         
-        # Filtrar por centro de costo si se especifica
-        if nombre_centro_costo and 'Centro de costo' in df_trans.columns:
-            df_trans = df_trans[
-                df_trans['Centro de costo'].str.contains(nombre_centro_costo, case=False, na=False)
-            ]
+        # Procesar cada hoja
+        todos_egresos_semanales = {}  # {semana: {materiales: X, mano_obra: Y, ...}}
+        todos_registros = 0
+        todas_cuentas_sin_clasificar = set()
+        primera_fecha_global = None
+        ultima_fecha_global = None
+        hojas_procesadas_info = []
         
-        # Mapear cuentas a categorías
-        df_trans['Categoria'] = df_trans['Cuenta contable'].map(TABLA_CLASIFICACION_CUENTAS)
+        for hoja_nombre in sorted(hojas_anio):
+            st.caption(f"   Procesando {hoja_nombre}...")
+            
+            # Detectar fila de encabezado para esta hoja
+            encabezados_posibles = [7, 6, 8, 9]
+            df = None
+            
+            for header_row in encabezados_posibles:
+                try:
+                    df_temp = pd.read_excel(archivo, sheet_name=hoja_nombre, header=header_row)
+                    
+                    # Verificar columnas clave
+                    columnas_clave = ['Código contable', 'Cuenta contable', 'Débito']
+                    if all(col in df_temp.columns for col in columnas_clave):
+                        df = df_temp
+                        break
+                except:
+                    continue
+            
+            if df is None:
+                st.warning(f"   ⚠️ No se pudo procesar {hoja_nombre}, se omite")
+                continue
+            
+            # Filtrar datos transaccionales
+            df_trans = df[df['Código contable'].notna()].copy()
+            df_trans = df_trans[~df_trans['Código contable'].astype(str).str.startswith('Procesado')]
+            
+            # Filtrar por centro de costo si se especifica
+            if nombre_centro_costo and 'Centro de costo' in df_trans.columns:
+                df_trans = df_trans[
+                    df_trans['Centro de costo'].str.contains(nombre_centro_costo, case=False, na=False)
+                ]
+            
+            if len(df_trans) == 0:
+                st.warning(f"   ⚠️ {hoja_nombre} no tiene registros válidos")
+                continue
+            
+            # Mapear cuentas a categorías
+            df_trans['Categoria'] = df_trans['Cuenta contable'].map(TABLA_CLASIFICACION_CUENTAS)
+            
+            # Acumular cuentas sin clasificar
+            cuentas_sin_clasificar_hoja = df_trans[df_trans['Categoria'].isna()]['Cuenta contable'].unique().tolist()
+            todas_cuentas_sin_clasificar.update(cuentas_sin_clasificar_hoja)
+            
+            # Filtrar solo registros clasificados
+            df_clasificado = df_trans[df_trans['Categoria'].notna()].copy()
+            
+            if len(df_clasificado) == 0:
+                st.warning(f"   ⚠️ {hoja_nombre}: todos los registros tienen cuentas sin clasificar")
+                continue
+            
+            # Convertir fecha a datetime
+            df_clasificado['Fecha elaboración'] = pd.to_datetime(
+                df_clasificado['Fecha elaboración'], 
+                errors='coerce'
+            )
+            
+            # Actualizar fechas globales
+            primera_fecha_hoja = df_clasificado['Fecha elaboración'].min()
+            ultima_fecha_hoja = df_clasificado['Fecha elaboración'].max()
+            
+            if primera_fecha_global is None or primera_fecha_hoja < primera_fecha_global:
+                primera_fecha_global = primera_fecha_hoja
+            if ultima_fecha_global is None or ultima_fecha_hoja > ultima_fecha_global:
+                ultima_fecha_global = ultima_fecha_hoja
+            
+            # Calcular semana del proyecto
+            df_clasificado['Semana'] = df_clasificado['Fecha elaboración'].apply(
+                lambda x: calcular_semana_desde_fecha(fecha_inicio_proyecto, x.date()) 
+                if pd.notna(x) else None
+            )
+            
+            # Agrupar por semana y categoría
+            df_agrupado = df_clasificado.groupby(['Semana', 'Categoria'])['Débito'].sum().reset_index()
+            
+            # Consolidar en diccionario global
+            for _, row in df_agrupado.iterrows():
+                semana = int(row['Semana'])
+                categoria = row['Categoria']
+                monto = float(row['Débito'])
+                
+                if semana not in todos_egresos_semanales:
+                    todos_egresos_semanales[semana] = {
+                        'semana': semana,
+                        'materiales': 0,
+                        'mano_obra': 0,
+                        'variables': 0,
+                        'admin': 0
+                    }
+                
+                # Mapear categoría
+                if categoria == 'Materiales':
+                    todos_egresos_semanales[semana]['materiales'] += monto
+                elif categoria == 'Mano de Obra':
+                    todos_egresos_semanales[semana]['mano_obra'] += monto
+                elif categoria == 'Variables':
+                    todos_egresos_semanales[semana]['variables'] += monto
+                elif categoria == 'Administracion':
+                    todos_egresos_semanales[semana]['admin'] += monto
+            
+            todos_registros += len(df_clasificado)
+            
+            # Info de hoja procesada
+            hojas_procesadas_info.append({
+                'nombre': hoja_nombre,
+                'registros': len(df_clasificado),
+                'periodo': f"{primera_fecha_hoja.strftime('%Y-%m-%d')} a {ultima_fecha_hoja.strftime('%Y-%m-%d')}"
+            })
+            
+            st.success(f"   ✅ {hoja_nombre}: {len(df_clasificado)} registros")
         
-        # Identificar cuentas sin clasificar
-        cuentas_sin_clasificar = df_trans[df_trans['Categoria'].isna()]['Cuenta contable'].unique().tolist()
+        if not todos_egresos_semanales:
+            st.error("❌ No se pudo procesar ninguna hoja con datos válidos")
+            return None
         
-        # Filtrar solo registros clasificados
-        df_clasificado = df_trans[df_trans['Categoria'].notna()].copy()
-        
-        # Convertir fecha a datetime
-        df_clasificado['Fecha elaboración'] = pd.to_datetime(
-            df_clasificado['Fecha elaboración'], 
-            errors='coerce'
-        )
-        
-        # Calcular semana del proyecto
-        df_clasificado['Semana'] = df_clasificado['Fecha elaboración'].apply(
-            lambda x: calcular_semana_desde_fecha(fecha_inicio_proyecto, x.date()) 
-            if pd.notna(x) else None
-        )
-        
-        # Agrupar por semana y categoría
-        df_agrupado = df_clasificado.groupby(['Semana', 'Categoria'])['Débito'].sum().reset_index()
-        
-        # Crear tabla pivote: semanas en filas, categorías en columnas
-        df_pivot = df_agrupado.pivot_table(
-            index='Semana',
-            columns='Categoria',
-            values='Débito',
-            fill_value=0
-        ).reset_index()
-        
-        # Asegurar que todas las categorías existen
-        for cat in ['Materiales', 'Mano de Obra', 'Variables', 'Administracion']:
-            if cat not in df_pivot.columns:
-                df_pivot[cat] = 0
-        
-        # Calcular total por semana
-        df_pivot['Total'] = (
-            df_pivot['Materiales'] + 
-            df_pivot['Mano de Obra'] + 
-            df_pivot['Variables'] + 
-            df_pivot['Administracion']
-        )
-        
-        # Convertir a lista de diccionarios
-        egresos_semanales = []
-        for _, row in df_pivot.iterrows():
-            semana = int(row['Semana'])
+        # Convertir a lista ordenada y calcular totales
+        egresos_semanales_final = []
+        for semana in sorted(todos_egresos_semanales.keys()):
+            datos_semana = todos_egresos_semanales[semana]
             fecha_inicio_semana = fecha_inicio_proyecto + timedelta(weeks=semana-1)
             
-            egresos_semanales.append({
+            total_semana = (
+                datos_semana['materiales'] + 
+                datos_semana['mano_obra'] + 
+                datos_semana['variables'] + 
+                datos_semana['admin']
+            )
+            
+            egresos_semanales_final.append({
                 'semana': semana,
                 'fecha_inicio': fecha_inicio_semana.isoformat(),
-                'materiales': float(row['Materiales']),
-                'mano_obra': float(row['Mano de Obra']),
-                'variables': float(row['Variables']),
-                'admin': float(row['Administracion']),
-                'total': float(row['Total'])
+                'materiales': datos_semana['materiales'],
+                'mano_obra': datos_semana['mano_obra'],
+                'variables': datos_semana['variables'],
+                'admin': datos_semana['admin'],
+                'total': total_semana
             })
         
         # Calcular totales acumulados
         totales_acumulados = {
-            'materiales': float(df_pivot['Materiales'].sum()),
-            'mano_obra': float(df_pivot['Mano de Obra'].sum()),
-            'variables': float(df_pivot['Variables'].sum()),
-            'admin': float(df_pivot['Administracion'].sum()),
-            'total': float(df_pivot['Total'].sum())
+            'materiales': sum([e['materiales'] for e in egresos_semanales_final]),
+            'mano_obra': sum([e['mano_obra'] for e in egresos_semanales_final]),
+            'variables': sum([e['variables'] for e in egresos_semanales_final]),
+            'admin': sum([e['admin'] for e in egresos_semanales_final]),
+            'total': sum([e['total'] for e in egresos_semanales_final])
         }
         
-        # Detectar última fecha y semana
-        ultima_fecha = df_clasificado['Fecha elaboración'].max()
-        semana_ultima = df_clasificado['Semana'].max() if not df_clasificado['Semana'].isna().all() else 0
-        primera_fecha = df_clasificado['Fecha elaboración'].min()
+        # Última semana
+        semana_ultima = max(todos_egresos_semanales.keys())
         
         return {
             'archivo': archivo.name,
+            'hojas_procesadas': [h['nombre'] for h in hojas_procesadas_info],
+            'hojas_procesadas_detalle': hojas_procesadas_info,
             'fecha_proceso': datetime.now().isoformat(),
-            'semana_ultima': int(semana_ultima) if pd.notna(semana_ultima) else 0,
-            'periodo_covered': f"{primera_fecha.strftime('%Y-%m-%d')} a {ultima_fecha.strftime('%Y-%m-%d')}" if pd.notna(primera_fecha) and pd.notna(ultima_fecha) else "N/A",
-            'registros_procesados': len(df_clasificado),
-            'registros_totales': len(df_trans),
-            'egresos_semanales': egresos_semanales,
+            'semana_ultima': int(semana_ultima),
+            'periodo_covered': f"{primera_fecha_global.strftime('%Y-%m-%d')} a {ultima_fecha_global.strftime('%Y-%m-%d')}" if primera_fecha_global and ultima_fecha_global else "N/A",
+            'registros_procesados': todos_registros,
+            'registros_totales': todos_registros,
+            'egresos_semanales': egresos_semanales_final,
             'totales_acumulados': totales_acumulados,
-            'cuentas_sin_clasificar': cuentas_sin_clasificar
+            'cuentas_sin_clasificar': list(todas_cuentas_sin_clasificar)
         }
         
     except Exception as e:
-        st.error(f"Error al procesar archivo: {str(e)}")
+        st.error(f"❌ Error al procesar archivo: {str(e)}")
+        import traceback
+        st.error(traceback.format_exc())
         return None
 
 
@@ -1649,119 +1771,98 @@ def render_paso_4_ingresar_egresos():
     st.info("""
     **📁 Instrucciones:**
     
-    Cargue el archivo Excel de ejecución contable (formato estándar):
-    - **Formato:** `AÑO_2025_OBRA_NOMBRE.xlsx`
+    Cargue el archivo Excel de ejecución contable:
+    - **Formato:** Un archivo con múltiples hojas, una por año
+    - **Hojas:** Nombradas como "AÑO 2024", "AÑO 2025", etc.
     - **Estructura:** Encabezados en fila 8, datos transaccionales desde fila 9
     - **Columnas requeridas:** Código contable, Cuenta contable, Fecha elaboración, Débito
-    - **Archivos:** Puede cargar 1 o 2 archivos (año actual + año anterior si aplica)
+    - **Ejemplo:** `OBRA_CARLOS_VELEZ.xlsx` con hojas "AÑO 2024" y "AÑO 2025"
     
-    El sistema clasificará automáticamente los gastos en:
-    - 💎 Materiales
-    - 👷 Mano de Obra  
-    - 📦 Variables (Equipos, Combustibles, Servicios, etc.)
-    - 🏢 Administración
+    El sistema:
+    - Detectará automáticamente todas las hojas "AÑO XXXX"
+    - Procesará cada año por separado
+    - Consolidará los datos automáticamente
+    - Clasificará gastos en: 💎 Materiales | 👷 Mano de Obra | 📦 Variables | 🏢 Administración
     """)
     
-    # Upload de archivo(s)
-    st.subheader("📁 Cargar Archivo(s) de Ejecución")
+    # Upload de archivo
+    st.subheader("📁 Cargar Archivo de Ejecución")
     
-    archivos_subidos = st.file_uploader(
-        "Seleccione uno o dos archivos Excel (.xlsx)",
+    archivo_subido = st.file_uploader(
+        "Seleccione el archivo Excel con ejecución contable",
         type=['xlsx'],
-        accept_multiple_files=True,
         key='upload_egresos',
-        help="Puede cargar hasta 2 archivos si el proyecto abarca 2 años"
+        help="Archivo con hojas 'AÑO 2024', 'AÑO 2025', etc."
     )
     
-    if not archivos_subidos:
-        st.warning("⚠️ Por favor cargue al menos un archivo Excel para continuar.")
+    if not archivo_subido:
+        st.warning("⚠️ Por favor cargue el archivo Excel para continuar.")
         return
     
-    # Validar archivos
+    # Validar archivo
     st.markdown("---")
-    st.subheader("✅ Validación de Archivos")
+    st.subheader("✅ Validación de Archivo")
     
-    archivos_validos = []
-    for archivo in archivos_subidos:
-        with st.expander(f"📄 {archivo.name}", expanded=True):
-            es_valido, mensaje = validar_excel_egresos(archivo)
-            
-            if es_valido:
-                st.success(f"✅ {mensaje}")
-                archivos_validos.append(archivo)
-                
-                # Mostrar preview
-                df_preview = pd.read_excel(archivo, sheet_name=0, header=7, nrows=5)
-                st.caption("Vista previa (primeras 5 filas):")
-                st.dataframe(df_preview[['Código contable', 'Cuenta contable', 
-                                        'Fecha elaboración', 'Débito']].head(), 
-                           use_container_width=True)
-            else:
-                st.error(f"❌ {mensaje}")
+    with st.expander(f"📄 {archivo_subido.name}", expanded=True):
+        es_valido, mensaje = validar_excel_egresos(archivo_subido)
+        
+        if es_valido:
+            st.success("✅ Validación exitosa")
+            st.markdown(mensaje)
+        else:
+            st.error("❌ Validación fallida")
+            st.markdown(mensaje)
+            return
     
-    if not archivos_validos:
-        st.error("❌ Ningún archivo pasó la validación. Por favor verifique los archivos.")
-        return
-    
-    # Procesar archivos
+    # Botón de procesamiento
     st.markdown("---")
     st.subheader("🔄 Procesamiento de Datos")
     
-    # Botón de procesamiento
-    if st.button("🚀 Procesar Archivos", type="primary", use_container_width=True):
+    if st.button("🚀 Procesar Archivo", type="primary", use_container_width=True):
         
-        # Procesar cada archivo
-        datos_egresos_todos = []
+        with st.spinner("Procesando hojas del archivo..."):
+            datos_egresos = parse_excel_egresos(
+                archivo=archivo_subido,
+                fecha_inicio_proyecto=fecha_inicio,
+                nombre_centro_costo=None
+            )
         
-        with st.spinner("Procesando archivos..."):
-            for archivo in archivos_validos:
-                st.info(f"📊 Procesando: {archivo.name}")
-                
-                datos_egresos = parse_excel_egresos(
-                    archivo=archivo,
-                    fecha_inicio_proyecto=fecha_inicio,
-                    nombre_centro_costo=None  # Procesar todos los centros de costo
-                )
-                
-                if datos_egresos:
-                    datos_egresos_todos.append(datos_egresos)
-                    
-                    # Mostrar resumen por archivo
-                    col1, col2, col3 = st.columns(3)
-                    with col1:
-                        st.metric("Registros procesados", 
-                                f"{datos_egresos['registros_procesados']:,}")
-                    with col2:
-                        st.metric("Semanas", 
-                                f"1 a {datos_egresos['semana_ultima']}")
-                    with col3:
-                        st.metric("Período", 
-                                datos_egresos['periodo_covered'])
-                    
-                    # Alertas de cuentas sin clasificar
-                    if datos_egresos['cuentas_sin_clasificar']:
-                        st.warning(f"⚠️ {len(datos_egresos['cuentas_sin_clasificar'])} cuenta(s) sin clasificar:")
-                        for cuenta in datos_egresos['cuentas_sin_clasificar'][:5]:
-                            st.write(f"   • {cuenta}")
-                        if len(datos_egresos['cuentas_sin_clasificar']) > 5:
-                            st.write(f"   • ... y {len(datos_egresos['cuentas_sin_clasificar'])-5} más")
-        
-        if not datos_egresos_todos:
-            st.error("❌ No se pudo procesar ningún archivo.")
+        if not datos_egresos:
+            st.error("❌ No se pudo procesar el archivo.")
             return
         
-        # Consolidar datos si hay múltiples archivos
-        if len(datos_egresos_todos) == 1:
-            datos_consolidados = datos_egresos_todos[0]
-        else:
-            # Consolidar múltiples archivos
-            st.info("🔄 Consolidando datos de múltiples archivos...")
-            datos_consolidados = consolidar_egresos_multiples_archivos(datos_egresos_todos)
-        
         # Guardar en session_state
-        st.session_state.egresos_reales_input = datos_consolidados
+        st.session_state.egresos_reales_input = datos_egresos
         
+        # Mostrar resumen consolidado
         st.success("✅ Datos procesados exitosamente")
+        
+        st.markdown("### 📊 Resumen del Procesamiento")
+        
+        col1, col2, col3 = st.columns(3)
+        
+        with col1:
+            st.metric("Hojas procesadas", len(datos_egresos['hojas_procesadas']))
+        
+        with col2:
+            st.metric("Total registros", f"{datos_egresos['registros_procesados']:,}")
+        
+        with col3:
+            st.metric("Período", datos_egresos['periodo_covered'])
+        
+        # Detalle por hoja
+        if 'hojas_procesadas_detalle' in datos_egresos:
+            st.markdown("#### 📑 Detalle por hoja:")
+            for hoja_info in datos_egresos['hojas_procesadas_detalle']:
+                st.write(f"• **{hoja_info['nombre']}**: {hoja_info['registros']:,} registros | {hoja_info['periodo']}")
+        
+        # Alertas de cuentas sin clasificar
+        if datos_egresos['cuentas_sin_clasificar']:
+            st.warning(f"⚠️ {len(datos_egresos['cuentas_sin_clasificar'])} cuenta(s) sin clasificar:")
+            for cuenta in datos_egresos['cuentas_sin_clasificar'][:5]:
+                st.write(f"   • {cuenta}")
+            if len(datos_egresos['cuentas_sin_clasificar']) > 5:
+                st.write(f"   • ... y {len(datos_egresos['cuentas_sin_clasificar'])-5} más")
     
     # Mostrar vista previa si ya hay datos procesados
     if 'egresos_reales_input' in st.session_state:
@@ -1792,9 +1893,10 @@ def render_paso_4_ingresar_egresos():
             )
         
         with col4:
+            hojas_procesadas = datos.get('hojas_procesadas', [])
             st.metric(
-                "Archivos",
-                len(datos_egresos_todos) if 'datos_egresos_todos' in locals() else 1
+                "Hojas procesadas",
+                len(hojas_procesadas) if hojas_procesadas else 1
             )
         
         # Totales por categoría
