@@ -2,7 +2,7 @@
 SICONE - Módulo de Ejecución Real FCL
 Análisis de FCL Real Ejecutado vs FCL Planeado
 
-Versión: 2.1.2
+Versión: 2.1.3
 Fecha: Diciembre 2024
 Autor: AI-MindNovation
 
@@ -2463,6 +2463,8 @@ def calcular_metricas_tesoreria(proyeccion: Dict, egresos_data: Dict, contratos_
         }
     
     # Calcular TOTAL de ingresos reales ya cobrados (de todos los contratos)
+    # IMPORTANTE: Se incluyen TODOS los pagos registrados, incluso con fechas futuras
+    # porque pueden ser pagos ya recibidos pero registrados con fecha estimada futura
     total_ingresos_reales = 0
     fecha_inicio = proyeccion['proyecto']['fecha_inicio']
     if isinstance(fecha_inicio, str):
@@ -2470,7 +2472,6 @@ def calcular_metricas_tesoreria(proyeccion: Dict, egresos_data: Dict, contratos_
     
     # Preparar datos de ingresos por semana
     ingresos_por_semana = {}
-    ingresos_sin_fecha = 0  # Para pagos sin fecha válida
     
     for contrato in contratos_cartera:
         for hito in contrato.get('hitos', []):
@@ -2495,23 +2496,18 @@ def calcular_metricas_tesoreria(proyeccion: Dict, egresos_data: Dict, contratos_
                                 fecha_pago = datetime.strptime(fecha_pago, '%d/%m/%Y').date()
                                 semana_asignada = calcular_semana_desde_fecha(fecha_inicio, fecha_pago)
                             except:
-                                pass
+                                # Si falla el parseo, asignar a semana 1
+                                semana_asignada = 1
                     elif isinstance(fecha_pago, date):
                         semana_asignada = calcular_semana_desde_fecha(fecha_inicio, fecha_pago)
-                
-                # Si no se pudo asignar a una semana, acumular para la semana 1
-                if semana_asignada is None:
-                    ingresos_sin_fecha += monto_pago
                 else:
-                    if semana_asignada not in ingresos_por_semana:
-                        ingresos_por_semana[semana_asignada] = 0
-                    ingresos_por_semana[semana_asignada] += monto_pago
-    
-    # Asignar ingresos sin fecha a la semana 1
-    if ingresos_sin_fecha > 0:
-        if 1 not in ingresos_por_semana:
-            ingresos_por_semana[1] = 0
-        ingresos_por_semana[1] += ingresos_sin_fecha
+                    # Sin fecha, asignar a semana 1
+                    semana_asignada = 1
+                
+                # Asignar a la semana correspondiente
+                if semana_asignada not in ingresos_por_semana:
+                    ingresos_por_semana[semana_asignada] = 0
+                ingresos_por_semana[semana_asignada] += monto_pago
     
     # Calcular métricas semanales
     metricas_semanales = []
@@ -2519,7 +2515,10 @@ def calcular_metricas_tesoreria(proyeccion: Dict, egresos_data: Dict, contratos_
     egresos_acum = 0
     
     # Obtener todas las semanas desde 1 hasta la máxima
-    semanas_total = max(semana_actual, max([e['semana'] for e in egresos_semanales] + [0]))
+    # Incluir semanas con egresos, ingresos, y semana_actual
+    max_semana_egresos = max([e['semana'] for e in egresos_semanales] + [0])
+    max_semana_ingresos = max(ingresos_por_semana.keys()) if ingresos_por_semana else 0
+    semanas_total = max(semana_actual, max_semana_egresos, max_semana_ingresos)
     
     # Para cada semana, calcular métricas
     for semana in range(1, semanas_total + 1):
@@ -2856,26 +2855,26 @@ def render_kpis_tesoreria(metricas_tesoreria: Dict):
         )
     
     with col4:
-        excedente = ultima_metrica['excedente_invertible']
-        color_delta = "normal" if excedente >= 0 else "inverse"
+        recom = metricas_tesoreria['recomendacion_inversion']
+        color_delta = "normal" if recom >= 0 else "inverse"
         st.metric(
-            "📈 Excedente Invertible",
-            formatear_moneda(excedente),
-            help="Saldo disponible para inversión temporal"
+            "💎 Recomendación de Inversión",
+            formatear_moneda(recom),
+            help="Monto seguro para inversión temporal (MIN(Excedente) - MAX(Margen))"
         )
     
-    # Recomendación de inversión
+    # Nota informativa sobre la recomendación
     st.markdown("---")
-    recom = metricas_tesoreria['recomendacion_inversion']
     
     if recom > 0:
-        st.success(f"✅ **Recomendación de Inversión Temporal:** {formatear_moneda(recom)}")
-        st.caption("Monto seguro disponible para inversión a corto plazo basado en el mínimo excedente histórico.")
+        st.success(f"✅ **Monto disponible para inversión:** {formatear_moneda(recom)}")
+        st.caption("Este valor se calcula como el mínimo excedente histórico menos el máximo margen de protección, garantizando liquidez en el peor escenario.")
     elif recom < 0:
         st.error(f"⚠️ **Alerta de Liquidez:** Déficit proyectado de {formatear_moneda(abs(recom))}")
         st.caption("Se recomienda gestionar cobros o ajustar egresos para mejorar la liquidez.")
     else:
         st.info("ℹ️ **Sin excedente disponible para inversión** en este momento.")
+        st.caption("El proyecto mantiene los fondos necesarios para operación pero sin margen para inversiones temporales.")
 
 
 def render_grafica_tesoreria(metricas_tesoreria: Dict):
