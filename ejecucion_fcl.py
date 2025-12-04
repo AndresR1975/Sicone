@@ -2576,65 +2576,67 @@ def render_comparacion_por_categoria(comparacion: Dict):
     for cat_key, cat_nombre in categorias.items():
         cat_data = comparacion[cat_key]
         
+        # Determinar estado basado en desviación
+        pct_desv = cat_data['pct_desviacion']
+        if abs(pct_desv) <= 10:
+            estado = "🟢"
+        elif pct_desv > 10:
+            estado = "🔴"
+        else:
+            estado = "🟡"
+        
         data_tabla.append({
+            'Estado': estado,
             'Categoría': cat_nombre,
             'Proyectado': formatear_moneda(cat_data['proyectado']),
             'Real': formatear_moneda(cat_data['real']),
             'Desviación': formatear_moneda(abs(cat_data['desviacion'])),
             '% Desv': f"{cat_data['pct_desviacion']:+.1f}%",
-            '% Ejec': f"{cat_data['pct_ejecutado']:.1f}%",
-            '_desv_num': cat_data['pct_desviacion']  # Para colorear
+            '% Ejec': f"{cat_data['pct_ejecutado']:.1f}%"
         })
     
     # Agregar sin clasificar si existe
     if comparacion['sin_clasificar']['real'] > 0:
         data_tabla.append({
+            'Estado': "⚠️",
             'Categoría': '❓ Sin Clasificar',
             'Proyectado': 'N/A',
             'Real': formatear_moneda(comparacion['sin_clasificar']['real']),
             'Desviación': 'N/A',
             '% Desv': 'N/A',
-            '% Ejec': f"{comparacion['sin_clasificar']['pct_del_total']:.1f}% del total",
-            '_desv_num': 0
+            '% Ejec': f"{comparacion['sin_clasificar']['pct_del_total']:.1f}% del total"
         })
     
     # Agregar total
     total_data = comparacion['total']
+    if abs(total_data['pct_desviacion']) <= 10:
+        estado_total = "🟢"
+    elif total_data['pct_desviacion'] > 10:
+        estado_total = "🔴"
+    else:
+        estado_total = "🟡"
+    
     data_tabla.append({
+        'Estado': estado_total,
         'Categoría': '💰 **TOTAL**',
         'Proyectado': f"**{formatear_moneda(total_data['proyectado'])}**",
         'Real': f"**{formatear_moneda(total_data['real'])}**",
         'Desviación': f"**{formatear_moneda(abs(total_data['desviacion']))}**",
         '% Desv': f"**{total_data['pct_desviacion']:+.1f}%**",
-        '% Ejec': f"**{total_data['pct_ejecutado']:.1f}%**",
-        '_desv_num': total_data['pct_desviacion']
+        '% Ejec': f"**{total_data['pct_ejecutado']:.1f}%**"
     })
     
-    # Crear DataFrame
+    # Crear DataFrame y mostrar
     df_tabla = pd.DataFrame(data_tabla)
     
-    # Función para colorear celdas
-    def colorear_desviacion(row):
-        if row['_desv_num'] == 0:
-            return [''] * len(row)
-        
-        desv = row['_desv_num']
-        if desv > 10:
-            color = 'background-color: #ffcccc'  # Rojo suave
-        elif desv < -10:
-            color = 'background-color: #ccffcc'  # Verde suave
-        else:
-            color = ''
-        
-        return [color if col in ['% Desv', 'Desviación'] else '' for col in row.index]
-    
-    # Mostrar tabla sin índice y sin columna auxiliar
-    df_display = df_tabla.drop(columns=['_desv_num'])
     st.dataframe(
-        df_display.style.apply(lambda row: colorear_desviacion(df_tabla.iloc[row.name]), axis=1),
+        df_tabla,
         use_container_width=True,
         hide_index=True
     )
+    
+    # Leyenda
+    st.caption("🟢 Normal (±10%) | 🔴 Sobrecosto (>10%) | 🟡 Subejecución (<-10%)")
 
 
 def render_alertas_egresos(alertas: List[Dict]):
