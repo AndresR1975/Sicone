@@ -2,7 +2,7 @@
 SICONE - Módulo de Ejecución Real FCL
 Análisis de FCL Real Ejecutado vs FCL Planeado
 
-Versión: 2.2.1
+Versión: 2.2.2
 Fecha: Diciembre 2024
 Autor: AI-MindNovation
 
@@ -1481,7 +1481,9 @@ def render_paso_2_ingresar_cartera():
             indices_eliminar = []
             
             for idx, pago in enumerate(pagos_hito):
-                pago_key = f"pago_{hito_id}_{idx}"
+                # CORRECCIÓN v2.2.2: Usar timestamp en key para forzar actualización después de redistribuir
+                timestamp_key = st.session_state.get(f"timestamp_{hito_id}", "0")
+                pago_key = f"pago_{hito_id}_{idx}_{timestamp_key}"
                 cols = st.columns([2, 2, 3, 1])
                 
                 with cols[0]:
@@ -1525,7 +1527,13 @@ def render_paso_2_ingresar_cartera():
                     })
             
             # Actualizar lista de pagos
-            st.session_state.pagos_por_hito[hito_id] = pagos_actualizados
+            # CORRECCIÓN v2.2.2: No sobrescribir si acabamos de redistribuir
+            skip_update_key = f"skip_update_{hito_id}"
+            if not st.session_state.get(skip_update_key, False):
+                st.session_state.pagos_por_hito[hito_id] = pagos_actualizados
+            else:
+                # Limpiar la bandera después de usarla
+                st.session_state[skip_update_key] = False
             
             # Botón agregar pago
             if st.button(f"➕ Agregar Pago", key=f"add_pago_{hito_id}"):
@@ -1622,19 +1630,21 @@ def render_paso_2_ingresar_cartera():
                                         with col_btn1:
                                             redistribuir_key = f"redistribuir_{hito_id}"
                                             if st.button("✅ Aplicar Redistribución", key=redistribuir_key, type="primary", use_container_width=True):
-                                                # CORRECCIÓN v2.2.1: Mantener pagos anteriores
-                                                # Solo ajustar el excedente del pago actual
+                                                # CORRECCIÓN v2.2.2: Usar session_state directamente
+                                                # No confiar en pagos_actualizados que puede tener valores incorrectos
                                                 
-                                                # Calcular cuánto del último pago debe quedarse en este hito
-                                                pagos_previos = pagos_actualizados[:-1] if len(pagos_actualizados) > 1 else []
-                                                ultimo_pago = pagos_actualizados[-1] if pagos_actualizados else None
+                                                pagos_actuales = st.session_state.pagos_por_hito[hito_id].copy()
                                                 
-                                                if ultimo_pago:
+                                                if len(pagos_actuales) > 0:
+                                                    # Calcular cuánto del último pago debe quedarse en este hito
+                                                    pagos_previos = pagos_actuales[:-1] if len(pagos_actuales) > 1 else []
+                                                    ultimo_pago = pagos_actuales[-1]
+                                                    
                                                     # Sumar pagos previos
                                                     suma_previos = sum([p['monto'] for p in pagos_previos])
                                                     monto_restante_hito = hito['monto'] - suma_previos
                                                     
-                                                    # Ajustar último pago al monto que falta
+                                                    # Ajustar último pago al monto que falta (o cero si ya está cubierto)
                                                     if monto_restante_hito > 0:
                                                         ultimo_pago_ajustado = {
                                                             'fecha': ultimo_pago['fecha'],
@@ -1646,15 +1656,17 @@ def render_paso_2_ingresar_cartera():
                                                     else:
                                                         # Si con pagos previos ya se cubrió, solo mantenerlos
                                                         st.session_state.pagos_por_hito[hito_id] = pagos_previos
-                                                
-                                                # Luego, distribuir excedente
-                                                for idx, item in enumerate(preview_distribución):
-                                                    h_id = item['hito_id']
-                                                    if h_id not in st.session_state.pagos_por_hito:
-                                                        st.session_state.pagos_por_hito[h_id] = []
                                                     
-                                                    # Agregar pago con sufijo
-                                                    if ultimo_pago:
+                                                    # Calcular excedente real basado en el último pago
+                                                    excedente_real = ultimo_pago['monto'] - max(0, monto_restante_hito)
+                                                    
+                                                    # Distribuir excedente a hitos siguientes
+                                                    for idx, item in enumerate(preview_distribución):
+                                                        h_id = item['hito_id']
+                                                        if h_id not in st.session_state.pagos_por_hito:
+                                                            st.session_state.pagos_por_hito[h_id] = []
+                                                        
+                                                        # Agregar pago con sufijo
                                                         recibo_base = ultimo_pago['recibo']
                                                         recibo_sufijo = f"{recibo_base}-H{idx+2}"  # H2, H3, etc.
                                                         
@@ -1665,6 +1677,12 @@ def render_paso_2_ingresar_cartera():
                                                         })
                                                 
                                                 st.success("✅ Redistribución aplicada correctamente")
+                                                # CORRECCIÓN v2.2.2: Actualizar timestamp para forzar refresh de inputs
+                                                import time
+                                                st.session_state[f"timestamp_{hito_id}"] = str(int(time.time() * 1000))
+                                                # Marcar que no se debe sobrescribir en próximo render
+                                                st.session_state[f"skip_update_{hito_id}"] = True
+                                                # Rerun inmediato para actualizar la interfaz
                                                 st.rerun()
                                         
                                         with col_btn2:
