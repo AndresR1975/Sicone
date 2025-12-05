@@ -2,7 +2,7 @@
 SICONE - Módulo de Ejecución Real FCL
 Análisis de FCL Real Ejecutado vs FCL Planeado
 
-Versión: 2.2.2
+Versión: 2.2.3
 Fecha: Diciembre 2024
 Autor: AI-MindNovation
 
@@ -2788,12 +2788,26 @@ def calcular_metricas_tesoreria(proyeccion: Dict, egresos_data: Dict, contratos_
         })
     
     
-    # 5. Recomendación para Inversión Temporal (valor único)
+    # 5. Recomendación para Inversión Temporal (valor actual, no histórico)
+    # CORRECCIÓN v2.2.3: Usar valores ACTUALES en lugar de min/max históricos
     if metricas_semanales:
+        # Tomar la última semana (situación actual)
+        ultima_semana = metricas_semanales[-1]
+        saldo_actual = ultima_semana['saldo_final_real']
+        margen_actual = ultima_semana['margen_proteccion']
+        excedente_actual = ultima_semana['excedente_invertible']
+        
+        # Recomendación = max(0, Excedente Actual)
+        # Nunca puede ser negativa
+        recomendacion_inversion = max(0, excedente_actual)
+        
+        # Guardar también valores históricos para referencia
         min_excedente = min(m['excedente_invertible'] for m in metricas_semanales)
         max_margen = max(m['margen_proteccion'] for m in metricas_semanales)
-        recomendacion_inversion = min_excedente - max_margen
     else:
+        saldo_actual = 0
+        margen_actual = 0
+        excedente_actual = 0
         min_excedente = 0
         max_margen = 0
         recomendacion_inversion = 0
@@ -2801,6 +2815,9 @@ def calcular_metricas_tesoreria(proyeccion: Dict, egresos_data: Dict, contratos_
     return {
         'metricas_semanales': metricas_semanales,
         'recomendacion_inversion': recomendacion_inversion,
+        'saldo_actual': saldo_actual,
+        'margen_actual': margen_actual,
+        'excedente_actual': excedente_actual,
         'min_excedente': min_excedente,
         'max_margen': max_margen
     }
@@ -3095,7 +3112,7 @@ def render_kpis_tesoreria(metricas_tesoreria: Dict):
         st.metric(
             "💎 Recomendación de Inversión",
             formatear_moneda(recom),
-            help="Monto seguro para inversión temporal (MIN(Excedente) - MAX(Margen))"
+            help="Monto seguro para inversión temporal (Saldo Actual - Margen de Protección, nunca negativo)"
         )
     
     # Nota informativa sobre la recomendación
