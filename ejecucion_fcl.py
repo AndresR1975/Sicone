@@ -2,7 +2,7 @@
 SICONE - Módulo de Ejecución Real FCL
 Análisis de FCL Real Ejecutado vs FCL Planeado
 
-Versión: 2.2.0
+Versión: 2.2.1
 Fecha: Diciembre 2024
 Autor: AI-MindNovation
 
@@ -1568,18 +1568,15 @@ def render_paso_2_ingresar_cartera():
                         
                         excedente = total_pagado_hito - hito['monto']
                         
-                        # Buscar siguientes hitos del mismo contrato
-                        contrato_actual = hito.get('contrato', '1')
+                        # CORRECCIÓN v2.2.1: Buscar SIGUIENTE hito en orden secuencial
+                        # Sin filtrar por contrato (los pagos siguen el orden de las obras)
                         hito_actual_idx = next((i for i, h in enumerate(hitos_proyeccion) if str(h['id']) == hito_id), -1)
                         
                         if hito_actual_idx >= 0:
-                            # Obtener hitos siguientes del mismo contrato
+                            # Obtener hitos siguientes en orden (sin filtrar por contrato)
                             hitos_siguientes = []
                             for h in hitos_proyeccion[hito_actual_idx + 1:]:
-                                h_contrato = h.get('contrato', '1')
-                                # Incluir hitos del mismo contrato o compartidos
-                                if h_contrato == contrato_actual or h_contrato == 'ambos':
-                                    hitos_siguientes.append(h)
+                                hitos_siguientes.append(h)
                             
                             if hitos_siguientes:
                                 # Mostrar opción de redistribución
@@ -1625,30 +1622,47 @@ def render_paso_2_ingresar_cartera():
                                         with col_btn1:
                                             redistribuir_key = f"redistribuir_{hito_id}"
                                             if st.button("✅ Aplicar Redistribución", key=redistribuir_key, type="primary", use_container_width=True):
-                                                # Aplicar redistribución
-                                                # Primero, ajustar el hito actual al monto esperado
-                                                st.session_state.pagos_por_hito[hito_id] = [{
-                                                    'fecha': pagos_actualizados[0]['fecha'] if pagos_actualizados else datetime.now().date(),
-                                                    'recibo': pagos_actualizados[0]['recibo'] if pagos_actualizados else '',
-                                                    'monto': hito['monto']
-                                                }]
+                                                # CORRECCIÓN v2.2.1: Mantener pagos anteriores
+                                                # Solo ajustar el excedente del pago actual
+                                                
+                                                # Calcular cuánto del último pago debe quedarse en este hito
+                                                pagos_previos = pagos_actualizados[:-1] if len(pagos_actualizados) > 1 else []
+                                                ultimo_pago = pagos_actualizados[-1] if pagos_actualizados else None
+                                                
+                                                if ultimo_pago:
+                                                    # Sumar pagos previos
+                                                    suma_previos = sum([p['monto'] for p in pagos_previos])
+                                                    monto_restante_hito = hito['monto'] - suma_previos
+                                                    
+                                                    # Ajustar último pago al monto que falta
+                                                    if monto_restante_hito > 0:
+                                                        ultimo_pago_ajustado = {
+                                                            'fecha': ultimo_pago['fecha'],
+                                                            'recibo': ultimo_pago['recibo'],
+                                                            'monto': monto_restante_hito
+                                                        }
+                                                        # Mantener pagos previos + último ajustado
+                                                        st.session_state.pagos_por_hito[hito_id] = pagos_previos + [ultimo_pago_ajustado]
+                                                    else:
+                                                        # Si con pagos previos ya se cubrió, solo mantenerlos
+                                                        st.session_state.pagos_por_hito[hito_id] = pagos_previos
                                                 
                                                 # Luego, distribuir excedente
-                                                for item in preview_distribución:
+                                                for idx, item in enumerate(preview_distribución):
                                                     h_id = item['hito_id']
                                                     if h_id not in st.session_state.pagos_por_hito:
                                                         st.session_state.pagos_por_hito[h_id] = []
                                                     
                                                     # Agregar pago con sufijo
-                                                    recibo_base = pagos_actualizados[0]['recibo'] if pagos_actualizados else 'AUTO'
-                                                    num_hito = len([x for x in preview_distribución if x['hito_id'] <= h_id])
-                                                    recibo_sufijo = f"{recibo_base}-H{num_hito + 1}" if num_hito > 0 else recibo_base
-                                                    
-                                                    st.session_state.pagos_por_hito[h_id].append({
-                                                        'fecha': pagos_actualizados[0]['fecha'] if pagos_actualizados else datetime.now().date(),
-                                                        'recibo': recibo_sufijo,
-                                                        'monto': item['monto']
-                                                    })
+                                                    if ultimo_pago:
+                                                        recibo_base = ultimo_pago['recibo']
+                                                        recibo_sufijo = f"{recibo_base}-H{idx+2}"  # H2, H3, etc.
+                                                        
+                                                        st.session_state.pagos_por_hito[h_id].append({
+                                                            'fecha': ultimo_pago['fecha'],
+                                                            'recibo': recibo_sufijo,
+                                                            'monto': item['monto']
+                                                        })
                                                 
                                                 st.success("✅ Redistribución aplicada correctamente")
                                                 st.rerun()
