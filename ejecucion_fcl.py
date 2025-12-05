@@ -2,7 +2,7 @@
 SICONE - Módulo de Ejecución Real FCL
 Análisis de FCL Real Ejecutado vs FCL Planeado
 
-Versión: 2.1.3
+Versión: 2.2.0
 Fecha: Diciembre 2024
 Autor: AI-MindNovation
 
@@ -289,6 +289,101 @@ def conciliar_hito(hito: Dict) -> Dict:
     }
 
 
+def redistribuir_pago_cascada(pago: Dict, hitos_ordenados: List[Dict], contrato_numero: int) -> Tuple[List[Dict], Dict]:
+    """
+    Distribuye automáticamente un pago en cascada entre hitos consecutivos
+    
+    Lógica v2.2.0:
+    1. Asignar al primer hito hasta completarlo
+    2. Si hay excedente, pasar al siguiente hito
+    3. Repetir hasta agotar el monto del pago
+    4. Retornar distribución detallada
+    
+    Args:
+        pago: Dict con {'recibo': str, 'fecha': str, 'monto': float}
+        hitos_ordenados: Lista de hitos del contrato en orden secuencial
+        contrato_numero: Número del contrato (para logging)
+        
+    Returns:
+        Tuple[List[Dict], Dict]:
+            - Lista de pagos distribuidos por hito
+            - Resumen de la distribución
+    """
+    recibo_base = pago['recibo']
+    fecha = pago['fecha']
+    monto_total = pago['monto']
+    monto_disponible = monto_total
+    
+    pagos_distribuidos = []
+    resumen = {
+        'recibo_original': recibo_base,
+        'monto_total': monto_total,
+        'hitos_afectados': [],
+        'monto_distribuido': 0,
+        'monto_excedente': 0
+    }
+    
+    for idx, hito in enumerate(hitos_ordenados):
+        if monto_disponible <= 0:
+            break
+        
+        # Calcular cuánto falta por pagar en este hito
+        monto_esperado = hito.get('monto_esperado', 0)
+        pagos_actuales = hito.get('pagos', [])
+        monto_ya_pagado = sum([p.get('monto', 0) for p in pagos_actuales])
+        monto_faltante = max(0, monto_esperado - monto_ya_pagado)
+        
+        if monto_faltante > 0:
+            # Asignar lo que se pueda de este pago
+            monto_asignado = min(monto_disponible, monto_faltante)
+            porcentaje_cubierto = (monto_asignado / monto_esperado) * 100 if monto_esperado > 0 else 0
+            porcentaje_hito = ((monto_ya_pagado + monto_asignado) / monto_esperado) * 100 if monto_esperado > 0 else 0
+            
+            # Generar sufijo para el recibo si cubre múltiples hitos
+            if len(pagos_distribuidos) == 0:
+                recibo_distribuido = recibo_base
+            else:
+                recibo_distribuido = f"{recibo_base}-H{idx+1}"
+            
+            # Crear entrada de pago para este hito
+            pago_hito = {
+                'recibo': recibo_distribuido,
+                'fecha': fecha,
+                'monto': monto_asignado,
+                'recibo_original': recibo_base,
+                'distribucion_automatica': True,
+                'orden_distribucion': len(pagos_distribuidos) + 1
+            }
+            
+            pagos_distribuidos.append({
+                'hito_id': hito.get('id'),
+                'hito_nombre': hito.get('descripcion', hito.get('nombre', f'Hito {idx+1}')),
+                'hito_obj': hito,
+                'pago': pago_hito,
+                'monto_esperado': monto_esperado,
+                'monto_asignado': monto_asignado,
+                'porcentaje_cubierto': porcentaje_cubierto,
+                'porcentaje_hito_total': porcentaje_hito,
+                'estado': 'completo' if porcentaje_hito >= 99.9 else 'parcial'
+            })
+            
+            # Actualizar resumen
+            resumen['hitos_afectados'].append({
+                'nombre': hito.get('descripcion', hito.get('nombre', f'Hito {idx+1}')),
+                'monto': monto_asignado,
+                'porcentaje': porcentaje_cubierto
+            })
+            resumen['monto_distribuido'] += monto_asignado
+            
+            # Reducir monto disponible
+            monto_disponible -= monto_asignado
+    
+    # Si queda excedente, registrarlo
+    resumen['monto_excedente'] = monto_disponible
+    
+    return pagos_distribuidos, resumen
+
+
 def generar_alertas_cartera(contratos_cartera: List[Dict], proyeccion_df: pd.DataFrame, 
                             fecha_corte: date, semana_actual: int) -> List[Dict]:
     """
@@ -330,18 +425,25 @@ def generar_alertas_cartera(contratos_cartera: List[Dict], proyeccion_df: pd.Dat
                     'contrato': contrato.get('numero')
                 })
             
-            # Alerta de hito pendiente en etapa pasada
+            # Alerta de hito pendiente o parcial en etapa pasada
+            # CORRECCIÓN v2.2.0: Solo alertar si NO está pagado completo
             semana_esperada = hito.get('semana_esperada', 0)
-            if semana_esperada < semana_actual and conciliacion['estado'] == 'pendiente':
-                alertas.append({
-                    'tipo': 'hito_atrasado',
-                    'severidad': 'alta',
-                    'emoji': '🔶',
-                    'descripcion': f"Hito '{hito.get('descripcion')}' sin cobrar (sem {semana_esperada}, actual {semana_actual})",
-                    'monto': conciliacion['monto_esperado'],
-                    'semanas_atraso': semana_actual - semana_esperada,
-                    'contrato': contrato.get('numero')
-                })
+            if semana_esperada < semana_actual:
+                # Solo alertar si está pendiente o con pago parcial (NO si está completo)
+                if conciliacion['estado'] in ['pendiente', 'pago_parcial']:
+                    # Calcular monto pendiente real
+                    monto_pendiente = conciliacion['monto_esperado'] - conciliacion['monto_pagado']
+                    
+                    alertas.append({
+                        'tipo': 'hito_atrasado',
+                        'severidad': 'alta' if conciliacion['estado'] == 'pendiente' else 'media',
+                        'emoji': '🔶' if conciliacion['estado'] == 'pendiente' else '⚠️',
+                        'descripcion': f"Hito '{hito.get('descripcion')}' sin cobrar (sem {semana_esperada}, actual {semana_actual})",
+                        'monto': monto_pendiente,
+                        'semanas_atraso': semana_actual - semana_esperada,
+                        'contrato': contrato.get('numero'),
+                        'pct_pagado': conciliacion.get('pct_desviacion', 0) + 100  # Ajuste para mostrar % pagado
+                    })
     
     return alertas
 
@@ -1459,6 +1561,107 @@ def render_paso_2_ingresar_cartera():
                         st.success(f"✅ Completo ({pct:+.1f}%)")
                     elif pct > 1:
                         st.warning(f"⚠️ Sobrepago (+{pct:.1f}%)")
+                        
+                        # ============================================================
+                        # REDISTRIBUCIÓN AUTOMÁTICA v2.2.0
+                        # ============================================================
+                        
+                        excedente = total_pagado_hito - hito['monto']
+                        
+                        # Buscar siguientes hitos del mismo contrato
+                        contrato_actual = hito.get('contrato', '1')
+                        hito_actual_idx = next((i for i, h in enumerate(hitos_proyeccion) if str(h['id']) == hito_id), -1)
+                        
+                        if hito_actual_idx >= 0:
+                            # Obtener hitos siguientes del mismo contrato
+                            hitos_siguientes = []
+                            for h in hitos_proyeccion[hito_actual_idx + 1:]:
+                                h_contrato = h.get('contrato', '1')
+                                # Incluir hitos del mismo contrato o compartidos
+                                if h_contrato == contrato_actual or h_contrato == 'ambos':
+                                    hitos_siguientes.append(h)
+                            
+                            if hitos_siguientes:
+                                # Mostrar opción de redistribución
+                                st.info(f"💡 **Excedente:** {formatear_moneda(excedente)}")
+                                
+                                with st.expander("🔄 Redistribuir excedente automáticamente", expanded=False):
+                                    st.write("**¿Deseas redistribuir el excedente a los siguientes hitos?**")
+                                    
+                                    # Simular redistribución para preview
+                                    monto_disponible = excedente
+                                    preview_distribución = []
+                                    
+                                    for h_sig in hitos_siguientes[:3]:  # Máximo 3 hitos en preview
+                                        if monto_disponible <= 0:
+                                            break
+                                        
+                                        h_sig_id = str(h_sig['id'])
+                                        pagos_existentes_sig = st.session_state.pagos_por_hito.get(h_sig_id, [])
+                                        ya_pagado_sig = sum([p['monto'] for p in pagos_existentes_sig])
+                                        faltante_sig = max(0, h_sig['monto'] - ya_pagado_sig)
+                                        
+                                        if faltante_sig > 0:
+                                            asignar = min(monto_disponible, faltante_sig)
+                                            pct_cubre = (asignar / h_sig['monto']) * 100 if h_sig['monto'] > 0 else 0
+                                            preview_distribución.append({
+                                                'hito': h_sig['nombre'],
+                                                'hito_id': h_sig_id,
+                                                'monto': asignar,
+                                                'porcentaje': pct_cubre
+                                            })
+                                            monto_disponible -= asignar
+                                    
+                                    if preview_distribución:
+                                        st.write("**Preview de distribución:**")
+                                        for item in preview_distribución:
+                                            st.write(f"  • {item['hito']}: {formatear_moneda(item['monto'])} ({item['porcentaje']:.1f}%)")
+                                        
+                                        if monto_disponible > 0:
+                                            st.caption(f"⚠️ Excedente restante: {formatear_moneda(monto_disponible)}")
+                                        
+                                        col_btn1, col_btn2 = st.columns(2)
+                                        
+                                        with col_btn1:
+                                            redistribuir_key = f"redistribuir_{hito_id}"
+                                            if st.button("✅ Aplicar Redistribución", key=redistribuir_key, type="primary", use_container_width=True):
+                                                # Aplicar redistribución
+                                                # Primero, ajustar el hito actual al monto esperado
+                                                st.session_state.pagos_por_hito[hito_id] = [{
+                                                    'fecha': pagos_actualizados[0]['fecha'] if pagos_actualizados else datetime.now().date(),
+                                                    'recibo': pagos_actualizados[0]['recibo'] if pagos_actualizados else '',
+                                                    'monto': hito['monto']
+                                                }]
+                                                
+                                                # Luego, distribuir excedente
+                                                for item in preview_distribución:
+                                                    h_id = item['hito_id']
+                                                    if h_id not in st.session_state.pagos_por_hito:
+                                                        st.session_state.pagos_por_hito[h_id] = []
+                                                    
+                                                    # Agregar pago con sufijo
+                                                    recibo_base = pagos_actualizados[0]['recibo'] if pagos_actualizados else 'AUTO'
+                                                    num_hito = len([x for x in preview_distribución if x['hito_id'] <= h_id])
+                                                    recibo_sufijo = f"{recibo_base}-H{num_hito + 1}" if num_hito > 0 else recibo_base
+                                                    
+                                                    st.session_state.pagos_por_hito[h_id].append({
+                                                        'fecha': pagos_actualizados[0]['fecha'] if pagos_actualizados else datetime.now().date(),
+                                                        'recibo': recibo_sufijo,
+                                                        'monto': item['monto']
+                                                    })
+                                                
+                                                st.success("✅ Redistribución aplicada correctamente")
+                                                st.rerun()
+                                        
+                                        with col_btn2:
+                                            st.button("❌ Mantener como está", key=f"no_redistribuir_{hito_id}", use_container_width=True)
+                                    else:
+                                        st.info("ℹ️ No hay hitos siguientes disponibles para redistribución")
+                            else:
+                                st.caption(f"💡 Excedente: {formatear_moneda(excedente)} (no hay hitos siguientes)")
+                        
+                        # ============================================================
+                        
                     elif total_pagado_hito == 0:
                         st.error(f"🔴 Pendiente")
                     else:
