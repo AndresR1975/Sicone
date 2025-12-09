@@ -2,7 +2,7 @@
 SICONE - Módulo de Ejecución Real FCL
 Análisis de FCL Real Ejecutado vs FCL Planeado
 
-Versión: 2.3.1
+Versión: 2.2.2
 Fecha: Diciembre 2024
 Autor: AI-MindNovation
 
@@ -176,212 +176,6 @@ def mostrar_boton_cargar_otra_proyeccion():
                 st.rerun()
 
 
-def exportar_analisis_excel(
-    proyeccion_df: pd.DataFrame,
-    contratos_cartera: List[Dict],
-    metricas_tesoreria: Dict,
-    egresos_data: Dict,
-    nombre_proyecto: str
-) -> bytes:
-    """
-    Exporta análisis completo a Excel
-    v2.3.1: Nueva funcionalidad de exportación
-    
-    Args:
-        proyeccion_df: DataFrame con proyección de egresos
-        contratos_cartera: Lista de contratos con hitos
-        metricas_tesoreria: Métricas calculadas
-        egresos_data: Datos de egresos reales
-        nombre_proyecto: Nombre del proyecto
-    
-    Returns:
-        bytes del archivo Excel
-    """
-    from io import BytesIO
-    
-    output = BytesIO()
-    
-    with pd.ExcelWriter(output, engine='openpyxl') as writer:
-        # Hoja 1: Resumen Ejecutivo
-        total_ingresos = sum([h.get('monto_esperado', 0) for c in contratos_cartera for h in c.get('hitos', [])])
-        total_egresos = proyeccion_df['total_acum'].iloc[-1] if len(proyeccion_df) > 0 else 0
-        
-        hitos_completos = sum([
-            1 for c in contratos_cartera 
-            for h in c.get('hitos', []) 
-            if sum([p.get('monto', 0) for p in h.get('pagos', [])]) >= h.get('monto_esperado', 0) * 0.99
-        ])
-        
-        hitos_totales = sum([len(c.get('hitos', [])) for c in contratos_cartera])
-        
-        df_resumen = pd.DataFrame({
-            'Métrica': [
-                'Proyecto',
-                'Fecha de Reporte',
-                '',
-                'Total Ingresos Cartera',
-                'Total Egresos Proyectados',
-                'Saldo Actual',
-                'Burn Rate Semanal',
-                'Margen de Protección',
-                'Recomendación de Inversión',
-                '',
-                'Hitos Totales',
-                'Hitos Completos',
-                'Hitos Pendientes',
-                '% Completado',
-                '',
-                'Registros de Egresos',
-                'Semanas con Datos'
-            ],
-            'Valor': [
-                nombre_proyecto,
-                pd.Timestamp.now().strftime('%Y-%m-%d %H:%M'),
-                '',
-                total_ingresos,
-                total_egresos,
-                metricas_tesoreria.get('saldo_actual', 0),
-                metricas_tesoreria['metricas_semanales'][-1]['burn_rate_acum'] if metricas_tesoreria.get('metricas_semanales') else 0,
-                metricas_tesoreria.get('margen_actual', 0),
-                metricas_tesoreria.get('recomendacion_inversion', 0),
-                '',
-                hitos_totales,
-                hitos_completos,
-                hitos_totales - hitos_completos,
-                (hitos_completos / hitos_totales * 100) if hitos_totales > 0 else 0,
-                '',
-                egresos_data.get('total_registros', 0) if egresos_data else 0,
-                len(egresos_data.get('egresos_semanales', [])) if egresos_data else 0
-            ]
-        })
-        df_resumen.to_excel(writer, sheet_name='Resumen Ejecutivo', index=False)
-        
-        # Hoja 2: Cartera de Hitos Detallada
-        hitos_list = []
-        for contrato in contratos_cartera:
-            for hito in contrato.get('hitos', []):
-                monto_esperado = hito.get('monto_esperado', 0)
-                pagos = hito.get('pagos', [])
-                monto_pagado = sum([p.get('monto', 0) for p in pagos])
-                pct_pagado = (monto_pagado / monto_esperado * 100) if monto_esperado > 0 else 0
-                
-                if pct_pagado >= 99:
-                    estado = 'Completo'
-                elif pct_pagado > 0:
-                    estado = 'Parcial'
-                else:
-                    estado = 'Pendiente'
-                
-                # Crear lista de recibos
-                recibos = ', '.join([p.get('recibo', 'N/A') for p in pagos]) if pagos else 'N/A'
-                
-                hitos_list.append({
-                    'Contrato': contrato.get('numero'),
-                    'ID Hito': hito.get('id'),
-                    'Descripción': hito.get('descripcion'),
-                    'Fase': hito.get('fase_vinculada'),
-                    'Momento': hito.get('momento'),
-                    'Monto Esperado': monto_esperado,
-                    'Monto Pagado': monto_pagado,
-                    'Diferencia': monto_pagado - monto_esperado,
-                    '% Pagado': pct_pagado,
-                    'Estado': estado,
-                    'Num Pagos': len(pagos),
-                    'Recibos': recibos
-                })
-        
-        df_hitos = pd.DataFrame(hitos_list)
-        df_hitos.to_excel(writer, sheet_name='Cartera de Hitos', index=False)
-        
-        # Hoja 3: Detalle de Pagos
-        pagos_list = []
-        for contrato in contratos_cartera:
-            for hito in contrato.get('hitos', []):
-                for pago in hito.get('pagos', []):
-                    pagos_list.append({
-                        'Contrato': contrato.get('numero'),
-                        'Hito ID': hito.get('id'),
-                        'Hito': hito.get('descripcion'),
-                        'Fecha': pago.get('fecha'),
-                        'Recibo': pago.get('recibo'),
-                        'Monto': pago.get('monto')
-                    })
-        
-        if pagos_list:
-            df_pagos = pd.DataFrame(pagos_list)
-            df_pagos.to_excel(writer, sheet_name='Detalle de Pagos', index=False)
-        
-        # Hoja 4: Proyección de Egresos
-        if not proyeccion_df.empty:
-            proyeccion_df.to_excel(writer, sheet_name='Proyección Egresos', index=False)
-        
-        # Hoja 5: Métricas de Tesorería
-        if metricas_tesoreria.get('metricas_semanales'):
-            df_metricas = pd.DataFrame(metricas_tesoreria['metricas_semanales'])
-            df_metricas.to_excel(writer, sheet_name='Métricas Tesorería', index=False)
-        
-        # Hoja 6: Egresos por Semana
-        if egresos_data and 'egresos_semanales' in egresos_data:
-            df_egresos = pd.DataFrame(egresos_data['egresos_semanales'])
-            df_egresos.to_excel(writer, sheet_name='Egresos Semanales', index=False)
-    
-    output.seek(0)
-    return output.getvalue()
-
-
-def registrar_redistribucion(hito_origen: Dict, hito_destino: Dict, recibo: str, monto: float):
-    """
-    Registra una redistribución en el histórico
-    v2.3.1: Nueva funcionalidad
-    """
-    if 'historico_redistribuciones' not in st.session_state:
-        st.session_state.historico_redistribuciones = []
-    
-    registro = {
-        'timestamp': datetime.now().isoformat(),
-        'hito_origen_id': hito_origen.get('id'),
-        'hito_origen_nombre': hito_origen.get('nombre'),
-        'hito_destino_id': hito_destino.get('id'),
-        'hito_destino_nombre': hito_destino.get('nombre'),
-        'recibo_original': recibo,
-        'monto_redistribuido': monto
-    }
-    
-    st.session_state.historico_redistribuciones.append(registro)
-
-
-def mostrar_historico_redistribuciones():
-    """
-    Muestra el histórico de redistribuciones realizadas
-    v2.3.1: Nueva funcionalidad
-    """
-    if 'historico_redistribuciones' not in st.session_state or not st.session_state.historico_redistribuciones:
-        return
-    
-    with st.expander("📋 Histórico de Redistribuciones", expanded=False):
-        st.markdown("""
-        **Registro de todas las redistribuciones automáticas aplicadas:**
-        """)
-        
-        for idx, registro in enumerate(reversed(st.session_state.historico_redistribuciones)):
-            col1, col2 = st.columns([3, 1])
-            
-            with col1:
-                timestamp_str = pd.to_datetime(registro['timestamp']).strftime('%Y-%m-%d %H:%M:%S')
-                st.write(f"**{idx+1}.** {timestamp_str}")
-                st.write(f"   🔵 Origen: Hito {registro['hito_origen_id']} - {registro['hito_origen_nombre']}")
-                st.write(f"   🟢 Destino: Hito {registro['hito_destino_id']} - {registro['hito_destino_nombre']}")
-                st.write(f"   💵 Monto: {formatear_moneda(registro['monto_redistribuido'])}")
-                st.write(f"   📄 Recibo: {registro['recibo_original']}")
-            
-            with col2:
-                if st.button("🗑️ Revertir", key=f"revert_{idx}", help="Esta función estará disponible próximamente"):
-                    st.warning("⚠️ Función de reversión en desarrollo")
-            
-            if idx < len(st.session_state.historico_redistribuciones) - 1:
-                st.markdown("---")
-
-
 # ============================================================================
 # TABLA DE CLASIFICACIÓN DE CUENTAS CONTABLES
 # ============================================================================
@@ -463,14 +257,11 @@ def conciliar_hito(hito: Dict) -> Dict:
         estado = 'sobrepago'
         severidad = 'media'
         emoji = '⚠️'
-    # CORRECCIÓN v2.2.4: Mejorar detección de retención
-    # - Retención típica: -5% a -20% (se retiene un porcentaje hasta el final)
-    # - Pago parcial: < -20% (avance de obra, no retención)
-    elif -20 <= pct_desviacion < -5:  # Posible retención contractual
+    elif pct_desviacion < -15:  # Retención significativa
         estado = 'retencion'
         severidad = 'media'
         emoji = '⚠️'
-    else:  # Pago parcial (avance de obra)
+    else:  # Pago parcial
         estado = 'pago_parcial'
         severidad = 'alta'
         emoji = '🔶'
@@ -1025,15 +816,7 @@ def parse_excel_egresos(
                 continue
             
             # Mapear cuentas a categorías
-            # PASO 1: Mapeo automático con tabla predefinida
             df_trans['Categoria'] = df_trans['Cuenta contable'].map(TABLA_CLASIFICACION_CUENTAS)
-            
-            # PASO 2: Aplicar clasificaciones manuales (v2.3.0)
-            # Tiene prioridad sobre mapeo automático
-            if 'clasificaciones_manuales' in st.session_state and st.session_state.clasificaciones_manuales:
-                for cuenta, categoria in st.session_state.clasificaciones_manuales.items():
-                    # Aplicar clasificación manual donde coincida la cuenta
-                    df_trans.loc[df_trans['Cuenta contable'] == cuenta, 'Categoria'] = categoria
             
             # Acumular cuentas sin clasificar (para reportarlas)
             cuentas_sin_clasificar_hoja = df_trans[df_trans['Categoria'].isna()]['Cuenta contable'].unique().tolist()
@@ -1781,18 +1564,11 @@ def render_paso_2_ingresar_cartera():
                 with col_r3:
                     desv = total_pagado_hito - hito['monto']
                     pct = calcular_porcentaje(desv, hito['monto'])
-                    pct_pagado = calcular_porcentaje(total_pagado_hito, hito['monto'])
                     
                     if abs(pct) <= 1:
                         st.success(f"✅ Completo ({pct:+.1f}%)")
                     elif pct > 1:
                         st.warning(f"⚠️ Sobrepago (+{pct:.1f}%)")
-                    elif total_pagado_hito == 0:
-                        st.error(f"🔴 Pendiente (0%)")
-                    else:
-                        # Pago parcial - mensaje más descriptivo
-                        faltante = hito['monto'] - total_pagado_hito
-                        st.info(f"🔶 Parcial ({pct_pagado:.1f}%)\n\nFalta: {formatear_moneda(faltante)}")
                         
                         # ============================================================
                         # REDISTRIBUCIÓN AUTOMÁTICA v2.2.0
@@ -1899,17 +1675,6 @@ def render_paso_2_ingresar_cartera():
                                                             'recibo': recibo_sufijo,
                                                             'monto': item['monto']
                                                         })
-                                                        
-                                                        # NUEVO v2.3.1: Registrar en histórico
-                                                        # Buscar hito destino completo
-                                                        hito_destino = next((h for h in hitos_proyeccion if str(h['id']) == h_id), None)
-                                                        if hito_destino:
-                                                            registrar_redistribucion(
-                                                                hito_origen=hito,
-                                                                hito_destino=hito_destino,
-                                                                recibo=recibo_sufijo,
-                                                                monto=item['monto']
-                                                            )
                                                 
                                                 st.success("✅ Redistribución aplicada correctamente")
                                                 # CORRECCIÓN v2.2.2: Actualizar timestamp para forzar refresh de inputs
@@ -1928,9 +1693,11 @@ def render_paso_2_ingresar_cartera():
                                 st.caption(f"💡 Excedente: {formatear_moneda(excedente)} (no hay hitos siguientes)")
                         
                         # ============================================================
-    
-    # Mostrar histórico de redistribuciones (v2.3.1)
-    mostrar_historico_redistribuciones()
+                        
+                    elif total_pagado_hito == 0:
+                        st.error(f"🔴 Pendiente")
+                    else:
+                        st.info(f"🔶 Parcial ({calcular_porcentaje(total_pagado_hito, hito['monto']):.1f}%)")
     
     # Botón generar análisis
     st.markdown("---")
@@ -2249,71 +2016,6 @@ def render_paso_3_analisis():
     - ✅ Alertas generadas
     """)
     
-    # Sección de Exportación (v2.3.1)
-    st.markdown("---")
-    st.subheader("📥 Exportar Análisis")
-    
-    col_exp1, col_exp2 = st.columns(2)
-    
-    with col_exp1:
-        # Botón exportar a Excel
-        if st.button("📊 Exportar a Excel", use_container_width=True, help="Exporta el análisis completo a un archivo Excel con múltiples hojas"):
-            with st.spinner("Generando archivo Excel..."):
-                try:
-                    nombre_proyecto = proyeccion['proyecto'].get('nombre', 'Proyecto')
-                    
-                    # Obtener datos de egresos si existen
-                    egresos_data = st.session_state.get('egresos_reales_input', {})
-                    
-                    # Obtener métricas de tesorería (calculadas si hay egresos)
-                    metricas_tesoreria = {}
-                    if egresos_data:
-                        metricas_tesoreria = calcular_metricas_tesoreria(
-                            egresos_data,
-                            contratos_cartera,
-                            semana_actual,
-                            fecha_corte
-                        )
-                    
-                    # Generar Excel
-                    excel_data = exportar_analisis_excel(
-                        proyeccion_df=proyeccion_df,
-                        contratos_cartera=contratos_cartera,
-                        metricas_tesoreria=metricas_tesoreria,
-                        egresos_data=egresos_data,
-                        nombre_proyecto=nombre_proyecto
-                    )
-                    
-                    # Generar nombre de archivo
-                    timestamp = datetime.now().strftime('%Y%m%d_%H%M')
-                    filename = f"Analisis_{nombre_proyecto.replace(' ', '_')}_{timestamp}.xlsx"
-                    
-                    st.download_button(
-                        label="⬇️ Descargar Excel",
-                        data=excel_data,
-                        file_name=filename,
-                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                        use_container_width=True
-                    )
-                    
-                    st.success("✅ Archivo Excel generado correctamente")
-                    st.caption(f"📁 Archivo: {filename}")
-                    
-                except Exception as e:
-                    st.error(f"❌ Error al generar Excel: {str(e)}")
-    
-    with col_exp2:
-        # Espacio para futuras opciones de exportación (PDF, etc.)
-        st.info("""
-        **Contenido del Excel:**
-        - Resumen Ejecutivo
-        - Cartera de Hitos
-        - Detalle de Pagos
-        - Proyección de Egresos
-        - Métricas de Tesorería
-        - Egresos Semanales
-        """)
-    
     # Botón para continuar a Egresos
     st.markdown("---")
     st.subheader("➡️ Siguiente Paso: Análisis de Egresos")
@@ -2322,7 +2024,6 @@ def render_paso_3_analisis():
     if st.button("▶️ Continuar a Egresos Reales", type="primary", use_container_width=True):
         st.session_state.paso_ejecucion = 4
         st.rerun()
-
 
 
 # ============================================================================
@@ -2452,116 +2153,6 @@ def render_paso_4_ingresar_egresos():
                 st.write(f"   • {cuenta}")
             if len(datos_egresos['cuentas_sin_clasificar']) > 5:
                 st.write(f"   • ... y {len(datos_egresos['cuentas_sin_clasificar'])-5} más")
-            
-            # ============================================================
-            # CLASIFICACIÓN MANUAL v2.3.0
-            # ============================================================
-            
-            st.markdown("---")
-            
-            with st.expander("🔧 Clasificar Cuentas Manualmente", expanded=False):
-                st.markdown("""
-                **Asigna categorías a las cuentas sin clasificar:**
-                
-                Las clasificaciones se guardarán y se aplicarán automáticamente en futuros análisis.
-                """)
-                
-                # Inicializar clasificaciones manuales en session_state
-                if 'clasificaciones_manuales' not in st.session_state:
-                    st.session_state.clasificaciones_manuales = {}
-                
-                # Cargar clasificaciones guardadas desde archivo (si existe)
-                import json
-                import os
-                clasificaciones_file = '/mnt/user-data/outputs/clasificaciones_manuales.json'
-                
-                if os.path.exists(clasificaciones_file) and not st.session_state.clasificaciones_manuales:
-                    try:
-                        with open(clasificaciones_file, 'r', encoding='utf-8') as f:
-                            st.session_state.clasificaciones_manuales = json.load(f)
-                        st.info(f"✅ Cargadas {len(st.session_state.clasificaciones_manuales)} clasificaciones previas")
-                    except:
-                        pass
-                
-                # Categorías disponibles
-                categorias_disponibles = ["Materiales", "Mano de Obra", "Variables", "Administracion"]
-                
-                # Mostrar cada cuenta sin clasificar con selector
-                clasificaciones_nuevas = {}
-                
-                for idx, cuenta in enumerate(datos_egresos['cuentas_sin_clasificar']):
-                    col1, col2, col3 = st.columns([3, 2, 1])
-                    
-                    with col1:
-                        st.text(cuenta)
-                    
-                    with col2:
-                        # Valor por defecto: clasificación previa o "Seleccionar..."
-                        default_idx = 0
-                        if cuenta in st.session_state.clasificaciones_manuales:
-                            categoria_previa = st.session_state.clasificaciones_manuales[cuenta]
-                            if categoria_previa in categorias_disponibles:
-                                default_idx = categorias_disponibles.index(categoria_previa) + 1
-                        
-                        opciones = ["Seleccionar..."] + categorias_disponibles
-                        categoria_seleccionada = st.selectbox(
-                            "Categoría",
-                            options=opciones,
-                            index=default_idx,
-                            key=f"clasificar_{idx}",
-                            label_visibility="collapsed"
-                        )
-                        
-                        if categoria_seleccionada != "Seleccionar...":
-                            clasificaciones_nuevas[cuenta] = categoria_seleccionada
-                    
-                    with col3:
-                        # Botón para eliminar clasificación previa
-                        if cuenta in st.session_state.clasificaciones_manuales:
-                            if st.button("🗑️", key=f"delete_clasif_{idx}", help="Eliminar clasificación"):
-                                del st.session_state.clasificaciones_manuales[cuenta]
-                                # Guardar en archivo
-                                with open(clasificaciones_file, 'w', encoding='utf-8') as f:
-                                    json.dump(st.session_state.clasificaciones_manuales, f, indent=2, ensure_ascii=False)
-                                st.success("Clasificación eliminada")
-                                st.rerun()
-                
-                st.markdown("---")
-                
-                # Botones de acción
-                col_btn1, col_btn2, col_btn3 = st.columns(3)
-                
-                with col_btn1:
-                    if st.button("💾 Guardar Clasificaciones", type="primary", use_container_width=True, disabled=len(clasificaciones_nuevas)==0):
-                        # Actualizar session_state
-                        st.session_state.clasificaciones_manuales.update(clasificaciones_nuevas)
-                        
-                        # Guardar en archivo JSON
-                        os.makedirs('/mnt/user-data/outputs', exist_ok=True)
-                        with open(clasificaciones_file, 'w', encoding='utf-8') as f:
-                            json.dump(st.session_state.clasificaciones_manuales, f, indent=2, ensure_ascii=False)
-                        
-                        st.success(f"✅ {len(clasificaciones_nuevas)} clasificación(es) guardada(s)")
-                        st.info("🔄 Reprocesa los egresos para aplicar las clasificaciones")
-                
-                with col_btn2:
-                    if st.button("🔄 Reprocesar con Clasificaciones", use_container_width=True):
-                        # Forzar reprocesamiento aplicando clasificaciones manuales
-                        if 'egresos_reales_input' in st.session_state:
-                            st.session_state.forzar_reprocesar = True
-                            st.rerun()
-                
-                with col_btn3:
-                    if st.button("📋 Ver Todas las Clasificaciones", use_container_width=True):
-                        if st.session_state.clasificaciones_manuales:
-                            st.markdown("**Clasificaciones guardadas:**")
-                            for cuenta, categoria in sorted(st.session_state.clasificaciones_manuales.items()):
-                                st.write(f"• {cuenta} → **{categoria}**")
-                        else:
-                            st.info("No hay clasificaciones guardadas")
-            
-            # ============================================================
-
     
     # Mostrar vista previa si ya hay datos procesados
     if 'egresos_reales_input' in st.session_state:
@@ -3197,26 +2788,12 @@ def calcular_metricas_tesoreria(proyeccion: Dict, egresos_data: Dict, contratos_
         })
     
     
-    # 5. Recomendación para Inversión Temporal (valor actual, no histórico)
-    # CORRECCIÓN v2.2.3: Usar valores ACTUALES en lugar de min/max históricos
+    # 5. Recomendación para Inversión Temporal (valor único)
     if metricas_semanales:
-        # Tomar la última semana (situación actual)
-        ultima_semana = metricas_semanales[-1]
-        saldo_actual = ultima_semana['saldo_final_real']
-        margen_actual = ultima_semana['margen_proteccion']
-        excedente_actual = ultima_semana['excedente_invertible']
-        
-        # Recomendación = max(0, Excedente Actual)
-        # Nunca puede ser negativa
-        recomendacion_inversion = max(0, excedente_actual)
-        
-        # Guardar también valores históricos para referencia
         min_excedente = min(m['excedente_invertible'] for m in metricas_semanales)
         max_margen = max(m['margen_proteccion'] for m in metricas_semanales)
+        recomendacion_inversion = min_excedente - max_margen
     else:
-        saldo_actual = 0
-        margen_actual = 0
-        excedente_actual = 0
         min_excedente = 0
         max_margen = 0
         recomendacion_inversion = 0
@@ -3224,9 +2801,6 @@ def calcular_metricas_tesoreria(proyeccion: Dict, egresos_data: Dict, contratos_
     return {
         'metricas_semanales': metricas_semanales,
         'recomendacion_inversion': recomendacion_inversion,
-        'saldo_actual': saldo_actual,
-        'margen_actual': margen_actual,
-        'excedente_actual': excedente_actual,
         'min_excedente': min_excedente,
         'max_margen': max_margen
     }
@@ -3521,7 +3095,7 @@ def render_kpis_tesoreria(metricas_tesoreria: Dict):
         st.metric(
             "💎 Recomendación de Inversión",
             formatear_moneda(recom),
-            help="Monto seguro para inversión temporal (Saldo Actual - Margen de Protección, nunca negativo)"
+            help="Monto seguro para inversión temporal (MIN(Excedente) - MAX(Margen))"
         )
     
     # Nota informativa sobre la recomendación
