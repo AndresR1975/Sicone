@@ -186,16 +186,6 @@ def exportar_analisis_excel(
     """
     Exporta análisis completo a Excel
     v2.3.1: Nueva funcionalidad de exportación
-    
-    Args:
-        proyeccion_df: DataFrame con proyección de egresos
-        contratos_cartera: Lista de contratos con hitos
-        metricas_tesoreria: Métricas calculadas
-        egresos_data: Datos de egresos reales
-        nombre_proyecto: Nombre del proyecto
-    
-    Returns:
-        bytes del archivo Excel
     """
     from io import BytesIO
     
@@ -224,7 +214,7 @@ def exportar_analisis_excel(
                 'Saldo Actual',
                 'Burn Rate Semanal',
                 'Margen de Protección',
-                'Recomendación de Inversión',
+                'Recomendación Inversión',
                 '',
                 'Hitos Totales',
                 'Hitos Completos',
@@ -256,7 +246,7 @@ def exportar_analisis_excel(
         })
         df_resumen.to_excel(writer, sheet_name='Resumen Ejecutivo', index=False)
         
-        # Hoja 2: Cartera de Hitos Detallada
+        # Hoja 2: Cartera de Hitos
         hitos_list = []
         for contrato in contratos_cartera:
             for hito in contrato.get('hitos', []):
@@ -272,7 +262,6 @@ def exportar_analisis_excel(
                 else:
                     estado = 'Pendiente'
                 
-                # Crear lista de recibos
                 recibos = ', '.join([p.get('recibo', 'N/A') for p in pagos]) if pagos else 'N/A'
                 
                 hitos_list.append({
@@ -1790,9 +1779,12 @@ def render_paso_2_ingresar_cartera():
                     elif total_pagado_hito == 0:
                         st.error(f"🔴 Pendiente (0%)")
                     else:
-                        # Pago parcial - mensaje más descriptivo
+                        # MEJORA v2.3.0: Pago parcial - mensaje más descriptivo
                         faltante = hito['monto'] - total_pagado_hito
                         st.info(f"🔶 Parcial ({pct_pagado:.1f}%)\n\nFalta: {formatear_moneda(faltante)}")
+                    
+                    # Solo mostrar redistribución si hay sobrepago
+                    if pct > 1:
                         
                         # ============================================================
                         # REDISTRIBUCIÓN AUTOMÁTICA v2.2.0
@@ -2324,7 +2316,6 @@ def render_paso_3_analisis():
         st.rerun()
 
 
-
 # ============================================================================
 # COMPONENTES DE INTERFAZ - PASO 4: INGRESAR EGRESOS REALES
 # ============================================================================
@@ -2561,7 +2552,6 @@ def render_paso_4_ingresar_egresos():
                             st.info("No hay clasificaciones guardadas")
             
             # ============================================================
-
     
     # Mostrar vista previa si ya hay datos procesados
     if 'egresos_reales_input' in st.session_state:
@@ -3521,7 +3511,7 @@ def render_kpis_tesoreria(metricas_tesoreria: Dict):
         st.metric(
             "💎 Recomendación de Inversión",
             formatear_moneda(recom),
-            help="Monto seguro para inversión temporal (Saldo Actual - Margen de Protección, nunca negativo)"
+            help="Monto seguro para inversión temporal (MIN(Excedente) - MAX(Margen))"
         )
     
     # Nota informativa sobre la recomendación
