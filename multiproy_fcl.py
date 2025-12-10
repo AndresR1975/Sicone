@@ -169,12 +169,28 @@ class ConsolidadorMultiproyecto:
         df_consolidado = self._calcular_metricas_consolidadas(df_consolidado)
         
         # Debug: Mostrar resumen de datos consolidados
-        st.caption(f"📊 **Debug Consolidación:**")
+        st.caption(f"📊 **Debug Consolidación Final:**")
         st.caption(f"   • Semanas totales: {len(df_consolidado)}")
         st.caption(f"   • Semana actual: {self.semana_actual_consolidada}")
-        st.caption(f"   • Saldo proy total (primera semana): ${df_consolidado['saldo_proy_total'].iloc[0]:,.0f}")
-        st.caption(f"   • Saldo real total (primera semana): ${df_consolidado['saldo_real_total'].iloc[0]:,.0f}")
-        st.caption(f"   • Saldo consolidado (primera semana): ${df_consolidado['saldo_consolidado'].iloc[0]:,.0f}")
+        
+        if len(df_consolidado) > 0:
+            primera_semana_valida = None
+            for idx in range(min(5, len(df_consolidado))):
+                if df_consolidado['saldo_proy_total'].iloc[idx] > 0:
+                    primera_semana_valida = idx
+                    break
+            
+            if primera_semana_valida is not None:
+                st.caption(f"   • Primera semana con datos (idx {primera_semana_valida}):")
+                st.caption(f"      - Saldo proy total: ${df_consolidado['saldo_proy_total'].iloc[primera_semana_valida]:,.0f}")
+                st.caption(f"      - Saldo real total: ${df_consolidado['saldo_real_total'].iloc[primera_semana_valida]:,.0f}")
+                st.caption(f"      - Saldo consolidado: ${df_consolidado['saldo_consolidado'].iloc[primera_semana_valida]:,.0f}")
+                st.caption(f"      - Egresos proy total: ${df_consolidado['egresos_proy_total'].iloc[primera_semana_valida]:,.0f}")
+            else:
+                st.warning("⚠️ No se encontraron semanas con saldo_proy_total > 0")
+                st.caption(f"   Primeras 3 semanas saldo_proy_total:")
+                for idx in range(min(3, len(df_consolidado))):
+                    st.caption(f"      - Semana {idx+1}: ${df_consolidado['saldo_proy_total'].iloc[idx]:,.0f}")
         
         self.df_consolidado = df_consolidado
     
@@ -252,6 +268,11 @@ class ConsolidadorMultiproyecto:
         
         # Mapear proyección semanal
         proyeccion = data.get('proyeccion_semanal', [])
+        
+        # DEBUG
+        st.caption(f"   🔍 Mapeando {nombre}: {len(proyeccion)} semanas de proyección")
+        
+        semanas_mapeadas = 0
         for sem_data in proyeccion:
             semana_proy = sem_data.get('Semana')
             if semana_proy:
@@ -263,6 +284,14 @@ class ConsolidadorMultiproyecto:
                     df.at[idx_row, col_saldo_proy] = sem_data.get('Saldo_Acumulado', 0)
                     df.at[idx_row, col_ingresos_proy] = sem_data.get('Ingresos_Proyectados', 0)
                     df.at[idx_row, col_egresos_proy] = sem_data.get('Total_Egresos', 0)
+                    semanas_mapeadas += 1
+        
+        # DEBUG
+        st.caption(f"      ✓ {semanas_mapeadas} semanas mapeadas correctamente")
+        if semanas_mapeadas > 0 and semana_inicio_rel <= len(df):
+            idx_primera = semana_inicio_rel - 1
+            if idx_primera >= 0 and idx_primera < len(df):
+                st.caption(f"      Ejemplo semana 1: Saldo=${df.at[idx_primera, col_saldo_proy]:,.0f}")
         
         # Mapear datos reales (si existen)
         if proyecto['estado'] == 'ACTIVO':
@@ -302,12 +331,27 @@ class ConsolidadorMultiproyecto:
         cols_egresos_proy = [c for c in df.columns if c.startswith('egresos_proy_')]
         cols_egresos_real = [c for c in df.columns if c.startswith('egresos_real_')]
         
+        # DEBUG: Mostrar columnas encontradas
+        st.caption(f"🔍 **Debug Columnas:**")
+        st.caption(f"   • Saldo proy: {len(cols_saldo_proy)} columnas")
+        st.caption(f"   • Egresos proy: {len(cols_egresos_proy)} columnas")
+        st.caption(f"   • Egresos real: {len(cols_egresos_real)} columnas")
+        
         # Sumar por tipo
         df['saldo_proy_total'] = df[cols_saldo_proy].sum(axis=1)
         df['saldo_real_total'] = df[cols_saldo_real].sum(axis=1)
         df['ingresos_proy_total'] = df[cols_ingresos_proy].sum(axis=1)
         df['egresos_proy_total'] = df[cols_egresos_proy].sum(axis=1)
         df['egresos_real_total'] = df[cols_egresos_real].sum(axis=1)
+        
+        # DEBUG: Mostrar valores de primera fila de cada proyecto
+        st.caption(f"🔍 **Debug Primera Semana (valores individuales):**")
+        for col in cols_saldo_proy:
+            valor = df[col].iloc[0]
+            st.caption(f"   • {col}: ${valor:,.0f}")
+        
+        # DEBUG: Mostrar suma
+        st.caption(f"   • SUMA saldo_proy_total: ${df['saldo_proy_total'].iloc[0]:,.0f}")
         
         # Saldo consolidado: SIEMPRE usa proyectado como base
         # Solo en semanas históricas con datos reales, calcular saldo basado en flujo real
@@ -568,8 +612,10 @@ def render_timeline_consolidado(consolidador: ConsolidadorMultiproyecto):
     # Marcar semana actual
     semana_actual_data = df[df['semana_consolidada'] == consolidador.semana_actual_consolidada]
     if len(semana_actual_data) > 0:
+        # Convertir Timestamp a datetime de Python para evitar errores
+        fecha_actual = pd.to_datetime(semana_actual_data['fecha'].iloc[0]).to_pydatetime()
         fig.add_vline(
-            x=semana_actual_data['fecha'].iloc[0],
+            x=fecha_actual,
             line_dash="dot",
             line_color="gray",
             annotation_text="Hoy",
@@ -577,8 +623,10 @@ def render_timeline_consolidado(consolidador: ConsolidadorMultiproyecto):
         )
     
     # Sombrear zona de riesgo (debajo del margen)
+    # Convertir fechas a lista de datetime de Python
+    fechas_list = [pd.to_datetime(f).to_pydatetime() for f in df['fecha']]
     fig.add_trace(go.Scatter(
-        x=df['fecha'].tolist() + df['fecha'].tolist()[::-1],
+        x=fechas_list + fechas_list[::-1],
         y=[0]*len(df) + df['margen_proteccion'].tolist()[::-1],
         fill='toself',
         fillcolor='rgba(214, 39, 40, 0.1)',
