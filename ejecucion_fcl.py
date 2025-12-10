@@ -2,39 +2,49 @@
 SICONE - Módulo de Ejecución Real FCL
 Análisis de FCL Real Ejecutado vs FCL Planeado
 
-Versión: 2.3.4
+Versión: 2.3.5
 Fecha: Diciembre 10, 2024
 Autor: AI-MindNovation
 
-CORRECCIONES DEFINITIVAS v2.3.4: ✅✅✅
+CORRECCIONES DEFINITIVAS v2.3.5: ✅✅✅
 
-**PROBLEMAS RESUELTOS:**
+**PROBLEMA CRÍTICO RESUELTO:**
 
-1. **Hitos al 100% generando alertas:**
-   - ❌ ANTES: umbral ±1% muy estricto → hitos al 99% generaban alerta
-   - ✅ AHORA: >= 98% pagado = completo (sin alerta)
-   - ✅ Verificación adicional: no alertar si pct_pagado >= 98%
+**CLASIFICACIÓN MANUAL - SOLUCIÓN DEFINITIVA:**
+- ❌ ANTES: st.expander con `expanded` NO respeta el estado después de st.rerun()
+- ✅ AHORA: Container con checkbox manual - control total del estado
+- ✅ El checkbox mantiene su valor en session_state después de guardar
+- ✅ La sección permanece VISIBLE después de "Guardar y Reprocesar"
 
-2. **Clasificación manual se cierra al guardar:**
-   - ❌ ANTES: `expanded=True` solo funcionaba en primera renderización
-   - ✅ AHORA: Controlado con `st.session_state.clasificacion_expander_abierto`
-   - ✅ Permanece abierto después de "Guardar y Reprocesar"
+**IMPLEMENTACIÓN v2.3.5:**
+```python
+# Checkbox para mostrar/ocultar (mantiene estado)
+mostrar = st.checkbox("Mostrar", value=st.session_state.mostrar_clasificacion_manual)
 
-3. **Semanas de retraso correctas (de v2.3.3):**
-   - ✅ Lee semana_esperada del JSON (no hardcoded)
-   - ✅ Cálculo simple: semana_actual - semana_esperada
-   - ✅ Compatible con proyeccion_fcl v2.3.2
+# Container visible/oculto según checkbox
+if st.session_state.mostrar_clasificacion_manual:
+    # Contenido de clasificación
+    
+# Al guardar:
+st.session_state.mostrar_clasificacion_manual = True  # Mantener visible
+st.rerun()
+```
 
-**LÓGICA DE ALERTAS v2.3.4:**
-- Hito con pago >= 98%: SIN ALERTA ✅ (considerado completo)
-- Hito con pago < 98% y atrasado: ALERTA con semanas correctas
-- Hito pendiente (0%) y atrasado: ALERTA con alta severidad
+**OTRAS CORRECCIONES (de v2.3.4):**
 
-**RESULTADO ESPERADO (Semana actual 62):**
-- Hito 1 (sem 1): 100% pagado → SIN ALERTA ✅
-- Hito 2 (sem 17): 100% pagado → SIN ALERTA ✅  
-- Hito 3 (sem 27): <98% pagado → ALERTA: 35 semanas (62-27) ✅
-- Hito 4 (sem 48): Pendiente → ALERTA: 14 semanas (62-48) ✅
+1. **Hitos al 100% NO generan alertas:**
+   - >= 98% pagado = completo (sin alerta)
+   - Doble verificación en conciliar_hito() y generar_alertas_cartera()
+
+2. **Semanas de retraso correctas:**
+   - Lee semana_esperada del JSON (no hardcoded)
+   - Cálculo: semana_actual - semana_esperada
+
+**RESULTADO ESPERADO:**
+- Hito 1 (100%): SIN ALERTA ✅
+- Hito 2 (100%): SIN ALERTA ✅  
+- Hito 3 (<98%): ALERTA con semanas correctas ✅
+- Clasificación: Permanece visible después de guardar ✅
 
 ESTRUCTURA MODULAR:
 └── ejecucion_fcl.py
@@ -2515,12 +2525,30 @@ def render_paso_4_ingresar_egresos():
             
             st.markdown("---")
             
-            # CORRECCIÓN v2.3.4: Controlar expander con session_state
-            # para mantenerlo abierto después de "Guardar y Reprocesar"
-            if 'clasificacion_expander_abierto' not in st.session_state:
-                st.session_state.clasificacion_expander_abierto = True
+            # CORRECCIÓN v2.3.5: SOLUCIÓN DEFINITIVA para mantener abierta la clasificación
+            # Usar container + checkbox en lugar de expander (que no respeta expanded después de rerun)
             
-            with st.expander("🔧 Clasificar Cuentas Manualmente", expanded=st.session_state.clasificacion_expander_abierto):
+            # Inicializar estado (siempre visible por defecto)
+            if 'mostrar_clasificacion_manual' not in st.session_state:
+                st.session_state.mostrar_clasificacion_manual = True
+            
+            # Encabezado con checkbox para mostrar/ocultar
+            col_header1, col_header2 = st.columns([0.1, 0.9])
+            with col_header1:
+                # Checkbox para controlar visibilidad
+                mostrar = st.checkbox(
+                    "Mostrar",
+                    value=st.session_state.mostrar_clasificacion_manual,
+                    key="toggle_clasificacion",
+                    label_visibility="collapsed"
+                )
+                st.session_state.mostrar_clasificacion_manual = mostrar
+            
+            with col_header2:
+                st.markdown("### 🔧 Clasificar Cuentas Manualmente")
+            
+            # Container que se muestra/oculta según el checkbox
+            if st.session_state.mostrar_clasificacion_manual:
                 st.markdown("""
                 **Asigna categorías a las cuentas sin clasificar:**
                 
@@ -2665,8 +2693,8 @@ def render_paso_4_ingresar_egresos():
                                 # Forzar reprocesamiento aplicando las nuevas clasificaciones
                                 st.session_state.forzar_reprocesar = True
                                 
-                                # CORRECCIÓN v2.3.4: Mantener expander abierto después de guardar
-                                st.session_state.clasificacion_expander_abierto = True
+                                # CORRECCIÓN v2.3.5: Mantener visible después de guardar
+                                st.session_state.mostrar_clasificacion_manual = True
                                 
                                 st.success(f"✅ {len(nuevas_clasificaciones)} clasificación(es) guardada(s). Reprocesando datos...")
                                 
@@ -2675,6 +2703,9 @@ def render_paso_4_ingresar_egresos():
                                 
                             except Exception as e:
                                 st.error(f"❌ Error al guardar clasificaciones: {str(e)}")
+            else:
+                # Sección oculta - mostrar mensaje breve
+                st.info("💡 Marca el checkbox arriba para ver las opciones de clasificación manual")
             
             # ============================================================
     
