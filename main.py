@@ -160,6 +160,13 @@ MODULOS_DISPONIBLES = {
         'estado': 'activo',
         'version': 'v1.0'
     },
+    'multiproyecto': {
+        'nombre': 'Análisis Multiproyecto',
+        'icono': '🏢',
+        'descripcion': 'Dashboard ejecutivo consolidado de múltiples proyectos',
+        'estado': 'activo',
+        'version': 'v1.0'
+    },
     'reportes': {
         'nombre': 'Reportes',
         'icono': '📈',
@@ -273,7 +280,7 @@ def render_home():
         st.markdown("""
         <div class="metric-card">
             <h3 style="margin: 0; color: #8b5cf6;">📈 Módulos</h3>
-            <p style="font-size: 2rem; font-weight: bold; margin: 10px 0;">1</p>
+            <p style="font-size: 2rem; font-weight: bold; margin: 10px 0;">3</p>
             <p style="color: #6b7280; margin: 0;">Disponibles</p>
         </div>
         """, unsafe_allow_html=True)
@@ -394,6 +401,45 @@ def render_modulo_flujo_caja():
             st.error(f"❌ Error inesperado: {e}")
             st.exception(e)
 
+def render_modulo_multiproyecto():
+    """Renderiza el módulo de Análisis Multiproyecto"""
+    # Botón de regreso
+    with st.sidebar:
+        if st.button("◄ Volver al Inicio", use_container_width=True):
+            st.session_state.modulo_actual = None
+            st.rerun()
+        st.markdown("---")
+        st.markdown(f"👤 **Usuario:** {st.session_state.usuario_actual['nombre_completo']}")
+        st.caption(f"Rol: {st.session_state.usuario_actual['rol']}")
+    
+    # Importar y ejecutar el módulo de análisis multiproyecto
+    try:
+        import importlib
+        import sys
+        
+        # Recargar módulo para usar versión más reciente
+        if 'multiproy_fcl' in sys.modules:
+            import multiproy_fcl
+            importlib.reload(multiproy_fcl)
+        else:
+            import multiproy_fcl
+        
+        # Ejecutar
+        if hasattr(multiproy_fcl, 'main'):
+            multiproy_fcl.main()
+        else:
+            st.error("❌ Error: multiproy_fcl.py no tiene función main()")
+    
+    except ImportError as e:
+        st.error(f"❌ Error al importar el módulo de análisis multiproyecto: {e}")
+        st.info("**Solución:** Asegúrese de que `multiproy_fcl.py` esté en el mismo directorio que `main.py`")
+    except AttributeError:
+        st.error("❌ Error: El módulo `multiproy_fcl.py` no tiene una función `main()`")
+        st.info("**Solución:** Verifique que el archivo tiene la estructura correcta")
+    except Exception as e:
+        st.error(f"❌ Error inesperado: {e}")
+        st.exception(e)
+
 # ============================================================================
 # MAIN - PUNTO DE ENTRADA
 # ============================================================================
@@ -413,6 +459,8 @@ def main():
         render_modulo_cotizaciones()
     elif st.session_state.modulo_actual == 'flujo_caja':
         render_modulo_flujo_caja()
+    elif st.session_state.modulo_actual == 'multiproyecto':
+        render_modulo_multiproyecto()
     else:
         st.error(f"Módulo '{st.session_state.modulo_actual}' no reconocido")
         if st.button("Volver al inicio"):
