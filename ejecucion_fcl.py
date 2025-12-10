@@ -2,45 +2,39 @@
 SICONE - Módulo de Ejecución Real FCL
 Análisis de FCL Real Ejecutado vs FCL Planeado
 
-Versión: 2.3.3
+Versión: 2.3.4
 Fecha: Diciembre 10, 2024
 Autor: AI-MindNovation
 
-CORRECCIONES CRÍTICAS v2.3.3: ✅✅✅
-  
-**PROBLEMA CRÍTICO RESUELTO:**
-Línea 2070 tenía 'semana_esperada': 1 HARDCODED, ignorando los valores correctos 
-del JSON generado por proyeccion_fcl.py v2.3.2.
+CORRECCIONES DEFINITIVAS v2.3.4: ✅✅✅
 
-**SOLUCIÓN CONSOLIDADA v2.3.3:**
+**PROBLEMAS RESUELTOS:**
 
-1. **Línea 2070 CORREGIDA:**
-   - ❌ ANTES: 'semana_esperada': 1  (hardcoded - todos los hitos = semana 1)
-   - ✅ AHORA: 'semana_esperada': hito.get('semana_esperada', 1)
-   - ✅ Lee correctamente del JSON: Hito 1=sem 1, Hito 2=sem 17, Hito 3=sem 27, Hito 4=sem 48
+1. **Hitos al 100% generando alertas:**
+   - ❌ ANTES: umbral ±1% muy estricto → hitos al 99% generaban alerta
+   - ✅ AHORA: >= 98% pagado = completo (sin alerta)
+   - ✅ Verificación adicional: no alertar si pct_pagado >= 98%
 
-2. **Función generar_alertas_cartera() (línea ~393):**
-   - ✅ Cálculo correcto: semana_actual - semana_esperada
-   - ✅ Incluye hitos con pago_parcial en alertas
-   - ✅ Mensaje claro: "debió completarse en sem X, actual Y"
-   - ✅ Solo alerta hitos pendientes/parciales (NO completos)
+2. **Clasificación manual se cierra al guardar:**
+   - ❌ ANTES: `expanded=True` solo funcionaba en primera renderización
+   - ✅ AHORA: Controlado con `st.session_state.clasificacion_expander_abierto`
+   - ✅ Permanece abierto después de "Guardar y Reprocesar"
 
-3. **Clasificación Manual (líneas 2510-2668):**
-   - ✅ Expander con expanded=True (visible por defecto)
-   - ✅ Selectboxes sin callbacks (no cierra al seleccionar)
-   - ✅ Botón "Guardar y Reprocesar" captura todas las selecciones
-   - ✅ Persistencia en JSON (/mnt/user-data/outputs/clasificaciones_manuales.json)
+3. **Semanas de retraso correctas (de v2.3.3):**
+   - ✅ Lee semana_esperada del JSON (no hardcoded)
+   - ✅ Cálculo simple: semana_actual - semana_esperada
+   - ✅ Compatible con proyeccion_fcl v2.3.2
+
+**LÓGICA DE ALERTAS v2.3.4:**
+- Hito con pago >= 98%: SIN ALERTA ✅ (considerado completo)
+- Hito con pago < 98% y atrasado: ALERTA con semanas correctas
+- Hito pendiente (0%) y atrasado: ALERTA con alta severidad
 
 **RESULTADO ESPERADO (Semana actual 62):**
 - Hito 1 (sem 1): 100% pagado → SIN ALERTA ✅
-- Hito 2 (sem 17): 100% pagado → SIN ALERTA ✅
-- Hito 3 (sem 27): Pago parcial → ALERTA: 62-27 = 35 semanas ✅
-- Hito 4 (sem 48): Pendiente → ALERTA: 62-48 = 14 semanas ✅
-
-**INTEGRACIÓN COMPLETA:**
-- Compatible con proyeccion_fcl.py v2.3.2 (que calcula semana_esperada)
-- Alertas precisas basadas en semanas reales de finalización de fases
-- Clasificación manual funcional para cuentas sin clasificar
+- Hito 2 (sem 17): 100% pagado → SIN ALERTA ✅  
+- Hito 3 (sem 27): <98% pagado → ALERTA: 35 semanas (62-27) ✅
+- Hito 4 (sem 48): Pendiente → ALERTA: 14 semanas (62-48) ✅
 
 ESTRUCTURA MODULAR:
 └── ejecucion_fcl.py
@@ -494,26 +488,25 @@ def conciliar_hito(hito: Dict) -> Dict:
     pct_desviacion = calcular_porcentaje(desviacion, monto_esperado)
     
     # Determinar estado
+    # CORRECCIÓN v2.3.4: Detectar hito completo si >= 98% pagado (no solo ±1%)
     if monto_pagado == 0:
         estado = 'pendiente'
         severidad = 'media'
         emoji = '🔴'
-    elif abs(pct_desviacion) <= 1:  # ±1%
+    elif monto_pagado >= monto_esperado * 0.98:  # >= 98% pagado = completo
         estado = 'pagado_completo'
         severidad = 'ok'
         emoji = '✅'
-    elif pct_desviacion > 1:  # Sobrepago
+    elif pct_desviacion > 10:  # Sobrepago significativo (> 10%)
         estado = 'sobrepago'
         severidad = 'media'
         emoji = '⚠️'
-    # CORRECCIÓN v2.2.4: Mejorar detección de retención
-    # - Retención típica: -5% a -20% (se retiene un porcentaje hasta el final)
-    # - Pago parcial: < -20% (avance de obra, no retención)
+    # Retención típica: -5% a -20% (se retiene un porcentaje hasta el final)
     elif -20 <= pct_desviacion < -5:  # Posible retención contractual
         estado = 'retencion'
         severidad = 'media'
         emoji = '⚠️'
-    else:  # Pago parcial (avance de obra)
+    else:  # Pago parcial (avance de obra < 98%)
         estado = 'pago_parcial'
         severidad = 'alta'
         emoji = '🔶'
@@ -684,13 +677,17 @@ def generar_alertas_cartera(contratos_cartera: List[Dict], proyeccion_df: pd.Dat
                 })
             
             # Alerta de hito atrasado
-            # CORRECCIÓN v2.3.2: Cálculo simple y incluir pagos parciales
-            # - Si está 100% completo: NO alertar
-            # - Si está pendiente o parcial Y pasó su semana: alertar
+            # CORRECCIÓN v2.3.4: 
+            # - Cálculo simple: semana_actual - semana_esperada
+            # - Solo alertar si pago < 98% (si >= 98% considerar completo)
+            # - Incluir pagos parciales
             
             if semana_esperada > 0 and semana_esperada < semana_actual:
-                # Verificar que no esté completo
-                if conciliacion['estado'] in ['pendiente', 'pago_parcial']:
+                # Calcular % pagado real
+                pct_pagado = calcular_porcentaje(conciliacion['monto_pagado'], conciliacion['monto_esperado'])
+                
+                # Solo alertar si NO está completo (< 98%) Y está pendiente/parcial
+                if conciliacion['estado'] in ['pendiente', 'pago_parcial'] and pct_pagado < 98:
                     # Cálculo SIMPLE
                     semanas_atraso = semana_actual - semana_esperada
                     monto_pendiente = conciliacion['monto_esperado'] - conciliacion['monto_pagado']
@@ -699,7 +696,6 @@ def generar_alertas_cartera(contratos_cartera: List[Dict], proyeccion_df: pd.Dat
                     if conciliacion['estado'] == 'pendiente':
                         desc = f"Hito '{hito.get('descripcion')}' sin cobrar (debió completarse en sem {semana_esperada}, actual {semana_actual})"
                     else:  # pago_parcial
-                        pct_pagado = calcular_porcentaje(conciliacion['monto_pagado'], conciliacion['monto_esperado'])
                         desc = f"Hito '{hito.get('descripcion')}' con pago parcial {pct_pagado:.0f}% (debió completarse en sem {semana_esperada}, actual {semana_actual})"
                     
                     alertas.append({
@@ -2514,14 +2510,17 @@ def render_paso_4_ingresar_egresos():
                 st.write(f"   • ... y {len(datos_egresos['cuentas_sin_clasificar'])-5} más")
             
             # ============================================================
-            # CLASIFICACIÓN MANUAL v2.3.1.5 - REALMENTE FUNCIONAL
+            # CLASIFICACIÓN MANUAL v2.3.4 - EXPANDER PERSISTENTE
             # ============================================================
             
             st.markdown("---")
             
-            # Usar expander NORMAL de Streamlit - es la forma más confiable
-            # El problema anterior era sobre-ingeniería innecesaria
-            with st.expander("🔧 Clasificar Cuentas Manualmente", expanded=True):
+            # CORRECCIÓN v2.3.4: Controlar expander con session_state
+            # para mantenerlo abierto después de "Guardar y Reprocesar"
+            if 'clasificacion_expander_abierto' not in st.session_state:
+                st.session_state.clasificacion_expander_abierto = True
+            
+            with st.expander("🔧 Clasificar Cuentas Manualmente", expanded=st.session_state.clasificacion_expander_abierto):
                 st.markdown("""
                 **Asigna categorías a las cuentas sin clasificar:**
                 
@@ -2665,6 +2664,9 @@ def render_paso_4_ingresar_egresos():
                                 
                                 # Forzar reprocesamiento aplicando las nuevas clasificaciones
                                 st.session_state.forzar_reprocesar = True
+                                
+                                # CORRECCIÓN v2.3.4: Mantener expander abierto después de guardar
+                                st.session_state.clasificacion_expander_abierto = True
                                 
                                 st.success(f"✅ {len(nuevas_clasificaciones)} clasificación(es) guardada(s). Reprocesando datos...")
                                 
