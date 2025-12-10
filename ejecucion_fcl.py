@@ -2832,6 +2832,7 @@ def main():
     # Paso 2: Ingresar Cartera (ingresos reales)
     # Paso 3: Análisis Cartera
     # Paso 4: Ingresar Egresos (gastos reales)
+    # Paso 4.5: Clasificar Cuentas (si hay cuentas sin clasificar) ✅ v2.3.7
     # Paso 5: Análisis Egresos
     # Paso 6: Análisis FCL Completo (ingresos + egresos)
     # =======================================================================
@@ -2844,6 +2845,7 @@ def main():
         2: "💰 Ingresar Cartera",
         3: "📊 Análisis Cartera",
         4: "💰 Ingresar Egresos",
+        4.5: "🔧 Clasificar Cuentas",
         5: "📊 Análisis Egresos"
     }
     
@@ -2881,6 +2883,14 @@ def main():
             st.rerun()
         else:
             render_paso_4_ingresar_egresos()
+    
+    elif paso == 4.5:
+        if 'egresos_reales_input' not in st.session_state:
+            st.error("❌ No se han ingresado datos de egresos. Regresando al paso 4...")
+            st.session_state.paso_ejecucion = 4
+            st.rerun()
+        else:
+            render_paso_4_5_clasificar_cuentas()
     
     elif paso == 5:
         if 'egresos_reales_input' not in st.session_state:
