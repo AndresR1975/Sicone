@@ -2430,6 +2430,62 @@ def render_paso_4_ingresar_egresos():
     fecha_inicio = datetime.fromisoformat(proyeccion['proyecto']['fecha_inicio']).date()
     nombre_proyecto = proyeccion['proyecto']['nombre']
     
+    # =========================================================================
+    # CASO 1: YA HAY DATOS PROCESADOS (después del primer procesamiento)
+    # =========================================================================
+    if 'egresos_reales_input' in st.session_state:
+        datos_egresos = st.session_state.egresos_reales_input
+        
+        st.success("✅ Datos de egresos ya cargados")
+        
+        # Mostrar resumen compacto
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            st.metric("Total Registros", f"{datos_egresos['registros_procesados']:,}")
+        with col2:
+            st.metric("Hojas Procesadas", len(datos_egresos.get('hojas_procesadas', [])))
+        with col3:
+            cuentas_sin_clasificar = len(datos_egresos.get('cuentas_sin_clasificar', []))
+            st.metric("Cuentas sin Clasificar", cuentas_sin_clasificar)
+        
+        st.markdown("---")
+        
+        # Verificar si hay cuentas sin clasificar
+        if datos_egresos.get('cuentas_sin_clasificar'):
+            st.warning(f"⚠️ {len(datos_egresos['cuentas_sin_clasificar'])} cuenta(s) sin clasificar")
+            
+            st.info("""
+            **Siguiente paso:** Clasificar cuentas manualmente
+            
+            Las cuentas sin clasificar deben asignarse a una categoría antes del análisis.
+            Haz clic en "Continuar" para clasificarlas.
+            """)
+            
+            if st.button("➡️ Continuar a Clasificación", type="primary", use_container_width=True):
+                st.session_state.paso_ejecucion = 4.5
+                st.rerun()
+        else:
+            st.success("✅ Todas las cuentas están clasificadas")
+            if st.button("➡️ Continuar al Análisis", type="primary", use_container_width=True):
+                st.session_state.paso_ejecucion = 5
+                st.rerun()
+        
+        # Opción para cargar otro archivo (colapsada)
+        st.markdown("---")
+        with st.expander("🔄 Cargar otro archivo"):
+            st.warning("⚠️ Al cargar un nuevo archivo, se reemplazarán los datos actuales.")
+            if st.button("🗑️ Limpiar y Cargar Otro Archivo"):
+                # Limpiar datos existentes
+                if 'egresos_reales_input' in st.session_state:
+                    del st.session_state.egresos_reales_input
+                st.rerun()
+        
+        return  # Salir de la función, no mostrar file uploader
+    
+    # =========================================================================
+    # CASO 2: NO HAY DATOS PROCESADOS (primera vez o después de limpiar)
+    # =========================================================================
+    
     # Instrucciones
     st.info("""
     **📁 Instrucciones:**
