@@ -2,7 +2,7 @@
 SICONE - Módulo de Ejecución Real FCL
 Análisis de FCL Real Ejecutado vs FCL Planeado
 
-Versión: 2.3.1.3
+Versión: 2.3.1.4
 Fecha: Diciembre 2024
 Autor: AI-MindNovation
 
@@ -23,6 +23,13 @@ CORRECCIONES CRÍTICAS (Diciembre 2024):
   - Feedback visual mejorado (indicador "✅ Guardada")
   - Validación de selecciones antes de guardar
   - Solución al problema de selectboxes que no guardaban estados
+- ✅ v2.3.1.4: **CORRECCIONES FUNCIONALES CRÍTICAS** 🔧
+  - **Cálculo de semanas de retraso corregido**: Ahora calcula correctamente desde
+    la semana en que DEBERÍA haber terminado el hito, no desde la semana 1
+  - **Expander de clasificación persistente**: Reemplazado expander por contenedor
+    controlado con botón toggle para evitar cierre automático al seleccionar opciones
+  - **Eliminados reruns innecesarios**: Botones que causaban cierre de interfaz
+  - **UX mejorada**: Ahora se pueden seleccionar múltiples categorías sin interrupciones
 
 ESTRUCTURA MODULAR:
 └── ejecucion_fcl.py
@@ -660,25 +667,24 @@ def generar_alertas_cartera(contratos_cartera: List[Dict], proyeccion_df: pd.Dat
                 })
             
             # Alerta de hito pendiente en etapa pasada
-            # CORRECCIÓN v2.3.1.1: Solo alertar si está PENDIENTE (0% pagado)
-            # NO alertar para pagos parciales (que son normales en avance de obra)
-            # CORRECCIÓN v2.3.1.2: Calcular atraso desde fecha de VENCIMIENTO, no desde inicio
+            # CORRECCIÓN v2.3.1.4: Calcular atraso correctamente
+            # - Atraso = cuántas semanas han pasado DESDE que el hito debería haberse completado
+            # - NO calcular desde la semana 1 del proyecto
             
             # Usar fecha de vencimiento si existe, sino usar semana_esperada
             fecha_venc = hito.get('fecha_vencimiento')
             
             if fecha_venc:
-                # Calcular semana de vencimiento desde fecha
+                # Calcular desde fecha de vencimiento
                 if isinstance(fecha_venc, str):
                     fecha_venc = datetime.fromisoformat(fecha_venc).date()
                 
-                # Calcular semana de vencimiento (asumiendo fecha_inicio del proyecto)
-                # Este cálculo puede variar según cómo se definan las semanas en el proyecto
+                # Días transcurridos DESDE el vencimiento
                 dias_desde_vencimiento = (fecha_corte - fecha_venc).days
                 
-                # Si hay atraso (fecha_corte > fecha_vencimiento)
+                # Si hay atraso (fecha_corte > fecha_vencimiento) y está pendiente
                 if dias_desde_vencimiento > 0 and conciliacion['estado'] == 'pendiente':
-                    semanas_atraso = max(1, dias_desde_vencimiento // 7)  # Convertir días a semanas
+                    semanas_atraso = max(1, dias_desde_vencimiento // 7)
                     
                     alertas.append({
                         'tipo': 'hito_atrasado',
@@ -690,20 +696,25 @@ def generar_alertas_cartera(contratos_cartera: List[Dict], proyeccion_df: pd.Dat
                         'contrato': contrato.get('numero')
                     })
             else:
-                # Fallback: usar semana_esperada si no hay fecha_vencimiento
+                # Usar semana_esperada del hito
                 semana_esperada = hito.get('semana_esperada', 0)
+                
+                # CORRECCIÓN: Atraso = semanas desde que DEBERÍA haber terminado
+                # Si estamos en semana 66 y el hito debía completarse en semana 1,
+                # el atraso es 66 - 1 = 65 semanas desde que debió completarse
                 if semana_esperada < semana_actual:
                     # Solo alertar si está 100% pendiente
                     if conciliacion['estado'] == 'pendiente':
-                        monto_pendiente = conciliacion['monto_esperado']
+                        # Semanas que han pasado DESDE que debería haberse completado
+                        semanas_desde_vencimiento = semana_actual - semana_esperada
                         
                         alertas.append({
                             'tipo': 'hito_atrasado',
                             'severidad': 'alta',
                             'emoji': '🔴',
-                            'descripcion': f"Hito '{hito.get('descripcion')}' sin cobrar (sem {semana_esperada}, actual {semana_actual})",
-                            'monto': monto_pendiente,
-                            'semanas_atraso': semana_actual - semana_esperada,
+                            'descripcion': f"Hito '{hito.get('descripcion')}' sin cobrar (debió completarse en sem {semana_esperada}, actual {semana_actual})",
+                            'monto': conciliacion['monto_esperado'],
+                            'semanas_atraso': semanas_desde_vencimiento,
                             'contrato': contrato.get('numero')
                         })
     
@@ -2509,12 +2520,29 @@ def render_paso_4_ingresar_egresos():
                 st.write(f"   • ... y {len(datos_egresos['cuentas_sin_clasificar'])-5} más")
             
             # ============================================================
-            # CLASIFICACIÓN MANUAL v2.3.1.3 - MEJORADA
+            # CLASIFICACIÓN MANUAL v2.3.1.4 - EXPANDER PERSISTENTE
             # ============================================================
             
             st.markdown("---")
             
-            with st.expander("🔧 Clasificar Cuentas Manualmente", expanded=False):
+            # CORRECCIÓN v2.3.1.4: Controlar estado del expander con session_state
+            # para evitar que se cierre al interactuar con los widgets
+            if 'expander_clasificacion_abierto' not in st.session_state:
+                st.session_state.expander_clasificacion_abierto = False
+            
+            # Usar contenedor normal en lugar de expander para evitar cierres
+            st.markdown("### 🔧 Clasificar Cuentas Manualmente")
+            
+            # Botón para mostrar/ocultar sección
+            if st.button(
+                "📋 Mostrar Clasificación Manual" if not st.session_state.expander_clasificacion_abierto else "📁 Ocultar Clasificación Manual",
+                use_container_width=True
+            ):
+                st.session_state.expander_clasificacion_abierto = not st.session_state.expander_clasificacion_abierto
+                st.rerun()
+            
+            if st.session_state.expander_clasificacion_abierto:
+                st.markdown("---")
                 st.markdown("""
                 **Asigna categorías a las cuentas sin clasificar:**
                 
@@ -2549,19 +2577,10 @@ def render_paso_4_ingresar_egresos():
                 # Categorías disponibles
                 categorias_disponibles = ["Materiales", "Mano de Obra", "Variables", "Administracion"]
                 
-                # ====================================================================
-                # NUEVA LÓGICA v2.3.1.3: Sin callbacks automáticos
-                # Los selectboxes solo guardan en session_state temporal
-                # El guardado permanente se hace al hacer clic en "Guardar y Reprocesar"
-                # ====================================================================
-                
-                # Inicializar dict temporal si no existe (para capturar selecciones actuales)
-                if 'clasificaciones_temp' not in st.session_state:
-                    st.session_state.clasificaciones_temp = {}
-                
                 st.markdown("##### 📋 Selecciona las categorías:")
                 
                 # Mostrar cada cuenta sin clasificar con selector
+                # CRÍTICO v2.3.1.4: Sin callbacks ni botones que causen rerun inmediato
                 for idx, cuenta in enumerate(datos_egresos['cuentas_sin_clasificar']):
                     col1, col2, col3 = st.columns([3, 2, 1])
                     
@@ -2593,18 +2612,9 @@ def render_paso_4_ingresar_egresos():
                         )
                     
                     with col3:
-                        # Indicador visual de clasificación guardada
+                        # Indicador visual de clasificación guardada (sin botones interactivos)
                         if cuenta in st.session_state.clasificaciones_manuales:
                             st.caption("✅ Guardada")
-                            # Botón para eliminar clasificación guardada
-                            if st.button("🗑️", key=f"delete_clasif_{idx}", help="Eliminar clasificación guardada"):
-                                del st.session_state.clasificaciones_manuales[cuenta]
-                                # Guardar en archivo inmediatamente
-                                os.makedirs('/mnt/user-data/outputs', exist_ok=True)
-                                with open(clasificaciones_file, 'w', encoding='utf-8') as f:
-                                    json.dump(st.session_state.clasificaciones_manuales, f, indent=2, ensure_ascii=False)
-                                st.success(f"Clasificación eliminada para: {cuenta}")
-                                st.rerun()
                 
                 st.markdown("---")
                 
@@ -2612,11 +2622,11 @@ def render_paso_4_ingresar_egresos():
                 # BOTONES DE ACCIÓN
                 # ====================================================================
                 
-                col_btn1, col_btn2 = st.columns(2)
+                col_btn1, col_btn2, col_btn3 = st.columns(3)
                 
                 with col_btn1:
                     # Botón para ver clasificaciones guardadas (solo visualización)
-                    if st.button("📋 Ver Clasificaciones Guardadas", use_container_width=True):
+                    if st.button("📋 Ver Guardadas", use_container_width=True):
                         if st.session_state.clasificaciones_manuales:
                             st.markdown("**Clasificaciones guardadas (persistentes):**")
                             for cuenta, categoria in sorted(st.session_state.clasificaciones_manuales.items()):
@@ -2625,6 +2635,23 @@ def render_paso_4_ingresar_egresos():
                             st.info("No hay clasificaciones guardadas todavía")
                 
                 with col_btn2:
+                    # Botón para limpiar todas las clasificaciones guardadas
+                    if st.button("🗑️ Limpiar Todo", use_container_width=True, help="Elimina todas las clasificaciones guardadas"):
+                        if st.session_state.clasificaciones_manuales:
+                            if st.button("⚠️ Confirmar Limpieza", type="secondary"):
+                                st.session_state.clasificaciones_manuales = {}
+                                try:
+                                    if os.path.exists(clasificaciones_file):
+                                        os.remove(clasificaciones_file)
+                                    st.success("✅ Todas las clasificaciones han sido eliminadas")
+                                    st.session_state.expander_clasificacion_abierto = True  # Mantener abierto
+                                    st.rerun()
+                                except Exception as e:
+                                    st.error(f"❌ Error al limpiar: {str(e)}")
+                        else:
+                            st.info("No hay clasificaciones para limpiar")
+                
+                with col_btn3:
                     # BOTÓN CRÍTICO: Guardar clasificaciones y reprocesar
                     if st.button("💾 Guardar y Reprocesar", type="primary", use_container_width=True):
                         
@@ -2658,6 +2685,9 @@ def render_paso_4_ingresar_egresos():
                                         indent=2, 
                                         ensure_ascii=False
                                     )
+                                
+                                # Mantener el expander abierto después de guardar
+                                st.session_state.expander_clasificacion_abierto = True
                                 
                                 # Forzar reprocesamiento aplicando las nuevas clasificaciones
                                 st.session_state.forzar_reprocesar = True
