@@ -2,54 +2,57 @@
 SICONE - Módulo de Ejecución Real FCL
 Análisis de FCL Real Ejecutado vs FCL Planeado
 
-Versión: 2.3.6
+Versión: 2.3.7
 Fecha: Diciembre 10, 2024
 Autor: AI-MindNovation
 
-CORRECCIONES DEFINITIVAS v2.3.6: ✅✅✅
+SOLUCIÓN DEFINITIVA v2.3.7: ✅✅✅
 
-**SOLUCIÓN FINAL - CLASIFICACIÓN MANUAL SIEMPRE VISIBLE:**
+**ARQUITECTURA CORREGIDA - PASOS SEPARADOS:**
 
-El problema no era el código, sino la arquitectura de Streamlit:
-- st.expander → se cierra después de rerun
-- st.checkbox → dispara rerun al cambiar selectboxes
-- session_state → Streamlit lo ignora para estos widgets
+El problema fundamental era que clasificación y procesamiento estaban en el mismo paso,
+causando conflictos de rerun. La solución es SEPARAR en pasos independientes.
 
-**SOLUCIÓN v2.3.6:**
-```python
-# ELIMINADO: Cualquier control colapsable (expander, checkbox, toggle)
-# IMPLEMENTADO: Sección SIEMPRE VISIBLE sin opción de ocultar
+**NUEVO FLUJO v2.3.7:**
 
-st.markdown("### 🔧 Clasificar Cuentas Manualmente")
-# Contenido directo sin wrappers
+```
+Paso 4: Cargar Excel → Procesar datos → Si hay cuentas sin clasificar → Ir a Paso 4.5
+                                      → Si todas clasificadas → Ir a Paso 5
+
+Paso 4.5 (NUEVO): Solo clasificación manual
+  - UI dedicada sin procesamiento
+  - Los selectboxes NO causan conflictos
+  - Botón "Guardar" NO hace rerun (permite clasificar múltiples cuentas)
+  - Botón "Continuar" → Reprocesar datos → Ir a Paso 5
+
+Paso 5: Mostrar análisis con clasificaciones aplicadas
 ```
 
-**Por qué funciona:**
-- Sin controles colapsables → sin cambios de estado
-- Los selectboxes cambian valores sin afectar visibilidad
-- Al guardar, la sección permanece visible porque nunca se oculta
+**POR QUÉ FUNCIONA:**
 
-**OTRAS CORRECCIONES (VERIFICADAS FUNCIONANDO):**
+1. **Paso 4.5 es independiente:** Solo UI de clasificación, sin procesamiento
+2. **Sin conflictos de rerun:** El procesamiento ocurre DESPUÉS de clasificar
+3. **Botón "Guardar" no cierra nada:** Permite clasificar todas las cuentas
+4. **Botón "Continuar":** Aplica clasificaciones y procesa una sola vez
 
-1. ✅ **Alertas correctas:**
-   - Hito 1 (100%): Sin alerta ✅
-   - Hito 2 (100%): Sin alerta ✅
-   - Hito 3 (63%): Alerta 35 semanas ✅
-   - Hito 4 (0%): Alerta 14 semanas ✅
+**INTEGRACIÓN CON MAIN.PY:**
 
-2. ✅ **Semanas de retraso correctas:**
-   - Lee semana_esperada del JSON
-   - Cálculo: semana_actual - semana_esperada
-   - Compatible con proyeccion_fcl v2.3.2
+El archivo main.py debe incluir la lógica de ruteo para el paso 4.5:
 
-3. ✅ **Detección de hitos completos:**
-   - >= 98% pagado = completo (sin alerta)
-   - Doble verificación en conciliar_hito() y generar_alertas_cartera()
+```python
+if paso_ejecucion == 4:
+    ejecucion_fcl.render_paso_4_ingresar_egresos()
+elif paso_ejecucion == 4.5:
+    ejecucion_fcl.render_paso_4_5_clasificar_cuentas()
+elif paso_ejecucion == 5:
+    ejecucion_fcl.render_paso_5_analisis_egresos()
+```
 
-**RESULTADO FINAL:**
-- Alertas: Funcionando correctamente ✅
-- Semanas: Cálculo correcto ✅
-- Clasificación: Siempre visible, nunca se cierra ✅
+**OTRAS CORRECCIONES (MANTIENEN):**
+
+✅ Alertas correctas (solo hitos <98%)
+✅ Semanas correctas (35 y 14)
+✅ Compatible con proyeccion_fcl v2.3.2
 
 ESTRUCTURA MODULAR:
 └── ejecucion_fcl.py
@@ -2518,181 +2521,23 @@ def render_paso_4_ingresar_egresos():
         
         # Alertas de cuentas sin clasificar
         if datos_egresos['cuentas_sin_clasificar']:
-            st.warning(f"⚠️ {len(datos_egresos['cuentas_sin_clasificar'])} cuenta(s) sin clasificar:")
-            for cuenta in datos_egresos['cuentas_sin_clasificar'][:5]:
-                st.write(f"   • {cuenta}")
-            if len(datos_egresos['cuentas_sin_clasificar']) > 5:
-                st.write(f"   • ... y {len(datos_egresos['cuentas_sin_clasificar'])-5} más")
+            st.warning(f"⚠️ {len(datos_egresos['cuentas_sin_clasificar'])} cuenta(s) sin clasificar")
+            st.info("""
+            **Siguiente paso:** Clasificar cuentas manualmente
             
-            # ============================================================
-            # CLASIFICACIÓN MANUAL v2.3.4 - EXPANDER PERSISTENTE
-            # ============================================================
-            
-            st.markdown("---")
-            
-            # ============================================================
-            # CLASIFICACIÓN MANUAL v2.3.6 - SIEMPRE VISIBLE (SIN TOGGLES)
-            # ============================================================
-            # SOLUCIÓN DEFINITIVA: Cualquier control (expander, checkbox) causa
-            # rerun al seleccionar en los selectboxes, cerrando la sección.
-            # La única solución robusta es mantenerla SIEMPRE VISIBLE.
-            
-            st.markdown("### 🔧 Clasificar Cuentas Manualmente")
-            
-            # Container siempre visible (sin controles que puedan colapsarla)
-            st.markdown("""
-            **Asigna categorías a las cuentas sin clasificar:**
-            
-            1. ✅ Selecciona la categoría para cada cuenta en los menús desplegables
-            2. ✅ Haz clic en "💾 Guardar y Reprocesar" para aplicar las clasificaciones
-            
-            Las clasificaciones se guardarán permanentemente y se aplicarán en futuros análisis.
+            Las cuentas sin clasificar deben asignarse a una categoría antes del análisis.
+            Haz clic en "Continuar" para clasificarlas.
             """)
             
-            # Inicializar clasificaciones manuales en session_state
-            if 'clasificaciones_manuales' not in st.session_state:
-                st.session_state.clasificaciones_manuales = {}
+            if st.button("➡️ Continuar a Clasificación", type="primary", use_container_width=True):
+                st.session_state.paso_ejecucion = 4.5  # Nuevo paso intermedio
+                st.rerun()
+        else:
+            st.success("✅ Todas las cuentas están clasificadas")
+            if st.button("➡️ Continuar al Análisis", type="primary", use_container_width=True):
+                st.session_state.paso_ejecucion = 5
+                st.rerun()
             
-            # Cargar clasificaciones guardadas desde archivo (si existe)
-            import json
-            import os
-            clasificaciones_file = '/mnt/user-data/outputs/clasificaciones_manuales.json'
-            
-            if os.path.exists(clasificaciones_file):
-                try:
-                    with open(clasificaciones_file, 'r', encoding='utf-8') as f:
-                        clasificaciones_cargadas = json.load(f)
-                        # Actualizar solo si hay clasificaciones nuevas
-                        for k, v in clasificaciones_cargadas.items():
-                            if k not in st.session_state.clasificaciones_manuales:
-                                st.session_state.clasificaciones_manuales[k] = v
-                    if clasificaciones_cargadas:
-                        st.info(f"✅ Cargadas {len(clasificaciones_cargadas)} clasificaciones previas del archivo")
-                except Exception as e:
-                    st.warning(f"⚠️ No se pudieron cargar clasificaciones previas: {str(e)}")
-            
-            # Categorías disponibles
-            categorias_disponibles = ["Materiales", "Mano de Obra", "Variables", "Administracion"]
-            
-            st.markdown("##### 📋 Selecciona las categorías:")
-            
-            # Mostrar cada cuenta sin clasificar con selector
-            for idx, cuenta in enumerate(datos_egresos['cuentas_sin_clasificar']):
-                col1, col2, col3 = st.columns([3, 2, 1])
-                
-                with col1:
-                    # Mostrar nombre de cuenta
-                    st.text(cuenta)
-                
-                with col2:
-                    # Determinar valor por defecto
-                    default_idx = 0
-                    
-                    # Prioridad: clasificación guardada
-                    if cuenta in st.session_state.clasificaciones_manuales:
-                        categoria_previa = st.session_state.clasificaciones_manuales[cuenta]
-                        if categoria_previa in categorias_disponibles:
-                            default_idx = categorias_disponibles.index(categoria_previa) + 1
-                    
-                    opciones = ["Seleccionar..."] + categorias_disponibles
-                    
-                    # CRÍTICO: Selectbox SIN callback on_change
-                    # La selección se guardará cuando se haga clic en "Guardar y Reprocesar"
-                    st.selectbox(
-                        "Categoría",
-                        options=opciones,
-                        index=default_idx,
-                        key=f"clasificar_{idx}",
-                        label_visibility="collapsed",
-                        help=f"Selecciona la categoría para la cuenta {cuenta}"
-                    )
-                
-                with col3:
-                    # Indicador visual de clasificación guardada (sin botones interactivos)
-                    if cuenta in st.session_state.clasificaciones_manuales:
-                        st.caption("✅ Guardada")
-            
-            st.markdown("---")
-            
-            # ====================================================================
-            # BOTONES DE ACCIÓN
-            # ====================================================================
-            
-            col_btn1, col_btn2, col_btn3 = st.columns(3)
-            
-            with col_btn1:
-                # Botón para ver clasificaciones guardadas (solo visualización)
-                if st.button("📋 Ver Guardadas", use_container_width=True):
-                    if st.session_state.clasificaciones_manuales:
-                        st.markdown("**Clasificaciones guardadas (persistentes):**")
-                        for cuenta, categoria in sorted(st.session_state.clasificaciones_manuales.items()):
-                            st.write(f"• {cuenta} → **{categoria}**")
-                    else:
-                        st.info("No hay clasificaciones guardadas todavía")
-            
-            with col_btn2:
-                # Botón para limpiar todas las clasificaciones guardadas
-                if st.button("🗑️ Limpiar Todo", use_container_width=True, help="Elimina todas las clasificaciones guardadas"):
-                    if st.session_state.clasificaciones_manuales:
-                        if st.button("⚠️ Confirmar Limpieza", type="secondary"):
-                            st.session_state.clasificaciones_manuales = {}
-                            try:
-                                if os.path.exists(clasificaciones_file):
-                                    os.remove(clasificaciones_file)
-                                st.success("✅ Todas las clasificaciones han sido eliminadas")
-                                st.rerun()
-                            except Exception as e:
-                                st.error(f"❌ Error al limpiar: {str(e)}")
-                    else:
-                        st.info("No hay clasificaciones para limpiar")
-            
-            with col_btn3:
-                # BOTÓN CRÍTICO: Guardar clasificaciones y reprocesar
-                if st.button("💾 Guardar y Reprocesar", type="primary", use_container_width=True):
-                    
-                    # Capturar todas las selecciones actuales de los selectboxes
-                    nuevas_clasificaciones = {}
-                    
-                    for idx, cuenta in enumerate(datos_egresos['cuentas_sin_clasificar']):
-                        # Leer valor actual del selectbox
-                        key = f"clasificar_{idx}"
-                        if key in st.session_state:
-                            categoria_seleccionada = st.session_state[key]
-                            
-                            # Solo guardar si no es "Seleccionar..."
-                            if categoria_seleccionada != "Seleccionar...":
-                                nuevas_clasificaciones[cuenta] = categoria_seleccionada
-                    
-                    # Validar que hay al menos una selección nueva
-                    if not nuevas_clasificaciones:
-                        st.warning("⚠️ No hay selecciones nuevas. Selecciona al menos una categoría antes de guardar.")
-                    else:
-                        # Actualizar clasificaciones permanentes
-                        st.session_state.clasificaciones_manuales.update(nuevas_clasificaciones)
-                        
-                        # Guardar en archivo JSON
-                        try:
-                            os.makedirs('/mnt/user-data/outputs', exist_ok=True)
-                            with open(clasificaciones_file, 'w', encoding='utf-8') as f:
-                                json.dump(
-                                    st.session_state.clasificaciones_manuales, 
-                                    f, 
-                                    indent=2, 
-                                    ensure_ascii=False
-                                )
-                            
-                            # Forzar reprocesamiento aplicando las nuevas clasificaciones
-                            st.session_state.forzar_reprocesar = True
-                            
-                            st.success(f"✅ {len(nuevas_clasificaciones)} clasificación(es) guardada(s). Reprocesando datos...")
-                            
-                            # Rerun para aplicar cambios
-                            st.rerun()
-                            
-                        except Exception as e:
-                            st.error(f"❌ Error al guardar clasificaciones: {str(e)}")
-            
-            # ============================================================
     
     # Mostrar vista previa si ya hay datos procesados
     if 'egresos_reales_input' in st.session_state:
@@ -3737,6 +3582,180 @@ def render_grafica_tesoreria(metricas_tesoreria: Dict):
     fig.update_yaxes(tickformat="$,.0f")
     
     st.plotly_chart(fig, use_container_width=True)
+
+
+# ============================================================================
+# COMPONENTE PRINCIPAL - PASO 4.5 (NUEVO)
+# ============================================================================
+
+def render_paso_4_5_clasificar_cuentas():
+    """Paso 4.5: Clasificar cuentas sin clasificar ANTES de procesar análisis"""
+    
+    st.header("🔧 Paso 4.5: Clasificar Cuentas Manualmente")
+    st.caption("📍 Módulo 2: EGRESOS | Clasificación de cuentas contables")
+    
+    # Botón volver
+    col_v1, col_v2 = st.columns([1, 4])
+    with col_v1:
+        if st.button("◀️ Volver"):
+            st.session_state.paso_ejecucion = 4
+            st.rerun()
+    
+    st.markdown("---")
+    
+    # Verificar que existan datos de egresos
+    if 'egresos_reales_input' not in st.session_state:
+        st.error("⚠️ No hay datos de egresos cargados. Por favor regrese al Paso 4.")
+        return
+    
+    datos_egresos = st.session_state.egresos_reales_input
+    
+    if not datos_egresos.get('cuentas_sin_clasificar'):
+        st.success("✅ Todas las cuentas están clasificadas")
+        if st.button("➡️ Continuar al Análisis", type="primary", use_container_width=True):
+            st.session_state.paso_ejecucion = 5
+            st.rerun()
+        return
+    
+    # Mostrar resumen
+    st.info(f"""
+    **{len(datos_egresos['cuentas_sin_clasificar'])} cuenta(s) sin clasificar**
+    
+    Asigna cada cuenta a una categoría antes de continuar al análisis:
+    - 💎 **Materiales**: Insumos, materiales de construcción
+    - 👷 **Mano de Obra**: Salarios, prestaciones, contratistas
+    - 📦 **Variables**: Servicios, transporte, arrendamientos
+    - 🏢 **Administración**: Gastos administrativos, impuestos
+    """)
+    
+    st.markdown("---")
+    st.markdown("### 📋 Clasificar Cuentas")
+    
+    # Inicializar clasificaciones manuales en session_state
+    if 'clasificaciones_manuales' not in st.session_state:
+        st.session_state.clasificaciones_manuales = {}
+    
+    # Cargar clasificaciones guardadas desde archivo (si existe)
+    import json
+    import os
+    clasificaciones_file = '/mnt/user-data/outputs/clasificaciones_manuales.json'
+    
+    if os.path.exists(clasificaciones_file):
+        try:
+            with open(clasificaciones_file, 'r', encoding='utf-8') as f:
+                clasificaciones_cargadas = json.load(f)
+                # Actualizar solo si hay clasificaciones nuevas
+                for k, v in clasificaciones_cargadas.items():
+                    if k not in st.session_state.clasificaciones_manuales:
+                        st.session_state.clasificaciones_manuales[k] = v
+            if clasificaciones_cargadas:
+                st.success(f"✅ Cargadas {len(clasificaciones_cargadas)} clasificaciones previas")
+        except Exception as e:
+            st.warning(f"⚠️ No se pudieron cargar clasificaciones previas: {str(e)}")
+    
+    # Categorías disponibles
+    categorias_disponibles = ["Materiales", "Mano de Obra", "Variables", "Administracion"]
+    
+    # Mostrar cada cuenta sin clasificar con selector
+    for idx, cuenta in enumerate(datos_egresos['cuentas_sin_clasificar']):
+        col1, col2, col3 = st.columns([3, 2, 1])
+        
+        with col1:
+            # Mostrar nombre de cuenta
+            st.text(cuenta)
+        
+        with col2:
+            # Determinar valor por defecto
+            default_idx = 0
+            
+            # Prioridad: clasificación guardada
+            if cuenta in st.session_state.clasificaciones_manuales:
+                categoria_previa = st.session_state.clasificaciones_manuales[cuenta]
+                if categoria_previa in categorias_disponibles:
+                    default_idx = categorias_disponibles.index(categoria_previa) + 1
+            
+            opciones = ["Seleccionar..."] + categorias_disponibles
+            
+            # Selectbox simple - la clave es que está en un paso dedicado
+            st.selectbox(
+                "Categoría",
+                options=opciones,
+                index=default_idx,
+                key=f"clasificar_{idx}",
+                label_visibility="collapsed",
+                help=f"Selecciona la categoría para {cuenta}"
+            )
+        
+        with col3:
+            # Indicador visual de clasificación guardada
+            if cuenta in st.session_state.clasificaciones_manuales:
+                st.caption("✅ Guardada")
+    
+    st.markdown("---")
+    
+    # BOTONES DE ACCIÓN
+    col_btn1, col_btn2, col_btn3 = st.columns(3)
+    
+    with col_btn1:
+        # Botón para ver clasificaciones guardadas
+        if st.button("📋 Ver Guardadas", use_container_width=True):
+            if st.session_state.clasificaciones_manuales:
+                st.markdown("**Clasificaciones guardadas:**")
+                for cuenta, categoria in sorted(st.session_state.clasificaciones_manuales.items()):
+                    st.write(f"• {cuenta} → **{categoria}**")
+            else:
+                st.info("No hay clasificaciones guardadas todavía")
+    
+    with col_btn2:
+        # Botón para guardar clasificaciones
+        if st.button("💾 Guardar Clasificaciones", type="primary", use_container_width=True):
+            
+            # Capturar todas las selecciones actuales de los selectboxes
+            nuevas_clasificaciones = {}
+            
+            for idx, cuenta in enumerate(datos_egresos['cuentas_sin_clasificar']):
+                # Leer valor actual del selectbox
+                key = f"clasificar_{idx}"
+                if key in st.session_state:
+                    categoria_seleccionada = st.session_state[key]
+                    
+                    # Solo guardar si no es "Seleccionar..."
+                    if categoria_seleccionada != "Seleccionar...":
+                        nuevas_clasificaciones[cuenta] = categoria_seleccionada
+            
+            # Validar que hay al menos una selección nueva
+            if not nuevas_clasificaciones:
+                st.warning("⚠️ No hay selecciones nuevas. Selecciona al menos una categoría antes de guardar.")
+            else:
+                # Actualizar clasificaciones permanentes
+                st.session_state.clasificaciones_manuales.update(nuevas_clasificaciones)
+                
+                # Guardar en archivo JSON
+                try:
+                    os.makedirs('/mnt/user-data/outputs', exist_ok=True)
+                    with open(clasificaciones_file, 'w', encoding='utf-8') as f:
+                        json.dump(
+                            st.session_state.clasificaciones_manuales, 
+                            f, 
+                            indent=2, 
+                            ensure_ascii=False
+                        )
+                    
+                    st.success(f"✅ {len(nuevas_clasificaciones)} clasificación(es) guardada(s)")
+                    st.info("💡 Haz clic en 'Continuar al Análisis' cuando hayas terminado de clasificar")
+                    
+                    # NO hacer rerun aquí - permitir clasificar más cuentas
+                    
+                except Exception as e:
+                    st.error(f"❌ Error al guardar clasificaciones: {str(e)}")
+    
+    with col_btn3:
+        # Botón para continuar al análisis
+        if st.button("➡️ Continuar al Análisis", use_container_width=True):
+            # Reprocesar datos con clasificaciones aplicadas
+            st.session_state.forzar_reprocesar = True
+            st.session_state.paso_ejecucion = 5
+            st.rerun()
 
 
 # ============================================================================
