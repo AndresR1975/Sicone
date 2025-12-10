@@ -2,34 +2,37 @@
 SICONE - Módulo de Ejecución Real FCL
 Análisis de FCL Real Ejecutado vs FCL Planeado
 
-Versión: 2.3.1.5
+Versión: 2.3.2
 Fecha: Diciembre 2024
 Autor: AI-MindNovation
 
-CORRECCIONES CRÍTICAS (Diciembre 2024):
-- ✅ v1.1.2: Soporte multi-hojas consolidado
-- ✅ v1.1.3: Bug hitos compartidos (pérdida de datos C2)
-- ✅ v1.1.4: KeyError 'semana' en comparación
-- ✅ v1.1.5: Registros sin clasificar descartados ($412M)
-- ✅ v1.1.6: Formato fechas DD/MM/YYYY (79.5% datos perdidos)
-- ✅ v2.0.0: Paso 5 completo (análisis de egresos)
-- ✅ v2.0.1: KeyError 'semana' en Paso 5 (normalización columnas)
-- ✅ v2.0.2: Error tabla comparación (simplificación estilo)
-- ✅ v2.1.0: Métricas de tesorería completas
-- ✅ v2.3.1.5: **CORRECCIONES FUNCIONALES DEFINITIVAS** 🔧
+CORRECCIONES CRÍTICAS v2.3.2: 🔧🔧🔧
   
-  **PROBLEMA 1 - CLASIFICACIÓN MANUAL (RESUELTO):**
-  - ❌ v2.3.1.3-4: Intentos con botones toggle y contenedores complejos - NO funcionaron
-  - ✅ v2.3.1.5: Regresado a `st.expander()` estándar con `expanded=True`
-  - ✅ Solución simple y efectiva - expander abierto por defecto
-  - ✅ Usuario puede ver y seleccionar todas las categorías sin problemas
-  
-  **PROBLEMA 2 - CÁLCULO DE SEMANAS DE RETRASO (CORREGIDO):**
-  - ❌ Antes: Retraso = semana_actual - semana_esperada_hito_actual (ej: 66-1=65)
-  - ✅ Ahora: Retraso = semana_actual - semana_inicio_siguiente_hito (ej: 66-2=64)
-  - ✅ El retraso se mide desde cuando DEBERÍA HABER EMPEZADO el siguiente hito
-  - ✅ Alineado con expectativa del usuario: "inicio del próximo hito"
-  - ✅ Si no hay siguiente hito, usa semana esperada del hito actual (fallback)
+**PROBLEMA RAÍZ IDENTIFICADO Y CORREGIDO:**
+Los hitos en el JSON NO tenían campo 'semana_esperada' porque proyeccion_fcl.py 
+NO lo estaba calculando ni guardando.
+
+**SOLUCIONES IMPLEMENTADAS:**
+
+1. **proyeccion_fcl.py v2.3.2:**
+   - ✅ Nueva función: calcular_semanas_esperadas_hitos()
+   - ✅ Calcula semana_esperada para cada hito basándose en:
+     * fase_vinculada (ej: "Estructura, Mampostería...")
+     * momento ("inicio" o "fin")
+     * Duraciones de fases configuradas
+   - ✅ El JSON ahora incluye 'semana_esperada' en cada hito
+
+2. **ejecucion_fcl.py v2.3.2:**
+   - ✅ Cálculo SIMPLE de retraso: semana_actual - semana_esperada
+   - ✅ Incluye hitos con pago_parcial en alertas (no solo pendientes)
+   - ✅ Mensaje claro: "debió completarse en sem X, actual Y"
+   - ✅ Clasificación manual con expander expanded=True
+
+**EJEMPLOS DE CORRECCIÓN:**
+Hito 3 (Estructura): semana_esperada = 42 (fin de Estructura)
+Si semana actual = 66:
+- Retraso = 66 - 42 = 24 semanas ✅ (NO 65)
+- Mensaje: "debió completarse en sem 42, actual 66"
 
 ESTRUCTURA MODULAR:
 └── ejecucion_fcl.py
@@ -630,18 +633,19 @@ def generar_alertas_cartera(contratos_cartera: List[Dict], proyeccion_df: pd.Dat
     """
     Genera lista de alertas basadas en el estado de la cartera
     
-    CORRECCIÓN v2.3.1.5: El retraso se calcula desde la semana en que DEBERÍA HABER EMPEZADO
-    EL SIGUIENTE HITO, no desde la semana del hito actual.
+    CORRECCIÓN v2.3.2:
+    - Cálculo simple: semana_actual - semana_esperada
+    - Incluye hitos con pago_parcial (ejecución en curso con retraso)
+    - Los hitos con pago completo NO generan alerta
     """
     alertas = []
     
     for contrato in contratos_cartera:
-        hitos_contrato = contrato.get('hitos', [])
-        
-        for idx_hito, hito in enumerate(hitos_contrato):
+        for hito in contrato.get('hitos', []):
             conciliacion = conciliar_hito(hito)
+            semana_esperada = hito.get('semana_esperada', 0)
             
-            # Alerta de pago vencido
+            # Alerta de pago vencido (si tiene fecha de vencimiento)
             fecha_venc = hito.get('fecha_vencimiento')
             if fecha_venc and conciliacion['estado'] in ['pendiente', 'pago_parcial']:
                 if isinstance(fecha_venc, str):
@@ -671,47 +675,31 @@ def generar_alertas_cartera(contratos_cartera: List[Dict], proyeccion_df: pd.Dat
                     'contrato': contrato.get('numero')
                 })
             
-            # Alerta de hito pendiente en etapa pasada
-            # CORRECCIÓN v2.3.1.5: Calcular atraso desde el SIGUIENTE HITO
-            # El retraso se mide desde cuando debería haber empezado el siguiente hito,
-            # no desde cuando debería haber terminado el hito actual
+            # Alerta de hito atrasado
+            # CORRECCIÓN v2.3.2: Cálculo simple y incluir pagos parciales
+            # - Si está 100% completo: NO alertar
+            # - Si está pendiente o parcial Y pasó su semana: alertar
             
-            semana_esperada = hito.get('semana_esperada', 0)
-            
-            if semana_esperada < semana_actual and conciliacion['estado'] == 'pendiente':
-                # Buscar el siguiente hito en el contrato
-                semana_inicio_siguiente = None
-                
-                if idx_hito + 1 < len(hitos_contrato):
-                    # Hay un siguiente hito
-                    siguiente_hito = hitos_contrato[idx_hito + 1]
-                    semana_inicio_siguiente = siguiente_hito.get('semana_esperada', None)
-                
-                if semana_inicio_siguiente:
-                    # Calcular retraso desde la semana del siguiente hito
-                    if semana_inicio_siguiente < semana_actual:
-                        semanas_atraso = semana_actual - semana_inicio_siguiente
-                        
-                        alertas.append({
-                            'tipo': 'hito_atrasado',
-                            'severidad': 'alta',
-                            'emoji': '🔴',
-                            'descripcion': f"Hito '{hito.get('descripcion')}' sin cobrar (siguiente hito en sem {semana_inicio_siguiente}, actual {semana_actual})",
-                            'monto': conciliacion['monto_esperado'],
-                            'semanas_atraso': semanas_atraso,
-                            'contrato': contrato.get('numero')
-                        })
-                else:
-                    # No hay siguiente hito o es el último
-                    # Usar la semana esperada del hito actual como referencia
+            if semana_esperada > 0 and semana_esperada < semana_actual:
+                # Verificar que no esté completo
+                if conciliacion['estado'] in ['pendiente', 'pago_parcial']:
+                    # Cálculo SIMPLE
                     semanas_atraso = semana_actual - semana_esperada
+                    monto_pendiente = conciliacion['monto_esperado'] - conciliacion['monto_pagado']
+                    
+                    # Mensaje claro
+                    if conciliacion['estado'] == 'pendiente':
+                        desc = f"Hito '{hito.get('descripcion')}' sin cobrar (debió completarse en sem {semana_esperada}, actual {semana_actual})"
+                    else:  # pago_parcial
+                        pct_pagado = calcular_porcentaje(conciliacion['monto_pagado'], conciliacion['monto_esperado'])
+                        desc = f"Hito '{hito.get('descripcion')}' con pago parcial {pct_pagado:.0f}% (debió completarse en sem {semana_esperada}, actual {semana_actual})"
                     
                     alertas.append({
                         'tipo': 'hito_atrasado',
                         'severidad': 'alta',
                         'emoji': '🔴',
-                        'descripcion': f"Hito '{hito.get('descripcion')}' sin cobrar (debió completarse en sem {semana_esperada}, actual {semana_actual})",
-                        'monto': conciliacion['monto_esperado'],
+                        'descripcion': desc,
+                        'monto': monto_pendiente,
                         'semanas_atraso': semanas_atraso,
                         'contrato': contrato.get('numero')
                     })
