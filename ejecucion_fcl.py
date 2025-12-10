@@ -2,9 +2,27 @@
 SICONE - Módulo de Ejecución Real FCL
 Análisis de FCL Real Ejecutado vs FCL Planeado
 
-Versión: 2.3.1.1
+Versión: 2.3.1.3
 Fecha: Diciembre 2024
 Autor: AI-MindNovation
+
+CORRECCIONES CRÍTICAS (Diciembre 2024):
+- ✅ v1.1.2: Soporte multi-hojas consolidado
+- ✅ v1.1.3: Bug hitos compartidos (pérdida de datos C2)
+- ✅ v1.1.4: KeyError 'semana' en comparación
+- ✅ v1.1.5: Registros sin clasificar descartados ($412M)
+- ✅ v1.1.6: Formato fechas DD/MM/YYYY (79.5% datos perdidos)
+- ✅ v2.0.0: Paso 5 completo (análisis de egresos)
+- ✅ v2.0.1: KeyError 'semana' en Paso 5 (normalización columnas)
+- ✅ v2.0.2: Error tabla comparación (simplificación estilo)
+- ✅ v2.1.0: Métricas de tesorería completas
+- ✅ v2.3.1.3: **CLASIFICACIÓN MANUAL MEJORADA** ⭐
+  - Eliminado callback `on_change` que causaba interferencias
+  - Flujo intuitivo: seleccionar todas las opciones → guardar → reprocesar
+  - Botón "Guardar y Reprocesar" ahora captura correctamente todas las selecciones
+  - Feedback visual mejorado (indicador "✅ Guardada")
+  - Validación de selecciones antes de guardar
+  - Solución al problema de selectboxes que no guardaban estados
 
 ESTRUCTURA MODULAR:
 └── ejecucion_fcl.py
@@ -78,17 +96,6 @@ FUNCIONALIDADES ACTUALES (v2.1.0):
   - Recomendación de inversión temporal
 - ✅ Gráfica de evolución de tesorería
 - ✅ Exportación JSON v5.0 (proyección + cartera + egresos + tesorería)
-
-CORRECCIONES CRÍTICAS (Diciembre 2024):
-- ✅ v1.1.2: Soporte multi-hojas consolidado
-- ✅ v1.1.3: Bug hitos compartidos (pérdida de datos C2)
-- ✅ v1.1.4: KeyError 'semana' en comparación
-- ✅ v1.1.5: Registros sin clasificar descartados ($412M)
-- ✅ v1.1.6: Formato fechas DD/MM/YYYY (79.5% datos perdidos)
-- ✅ v2.0.0: Paso 5 completo (análisis de egresos)
-- ✅ v2.0.1: KeyError 'semana' en Paso 5 (normalización columnas)
-- ✅ v2.0.2: Error tabla comparación (simplificación estilo)
-- ✅ v2.1.0: Métricas de tesorería completas
 
 ROADMAP:
 - v1.0.0: Módulo Cartera (ingresos) ✅
@@ -653,23 +660,52 @@ def generar_alertas_cartera(contratos_cartera: List[Dict], proyeccion_df: pd.Dat
                 })
             
             # Alerta de hito pendiente en etapa pasada
-            # CORRECCIÓN v2.3.1: Solo alertar si está PENDIENTE (0% pagado)
+            # CORRECCIÓN v2.3.1.1: Solo alertar si está PENDIENTE (0% pagado)
             # NO alertar para pagos parciales (que son normales en avance de obra)
-            semana_esperada = hito.get('semana_esperada', 0)
-            if semana_esperada < semana_actual:
-                # Solo alertar si está 100% pendiente
-                if conciliacion['estado'] == 'pendiente':
-                    monto_pendiente = conciliacion['monto_esperado']
+            # CORRECCIÓN v2.3.1.2: Calcular atraso desde fecha de VENCIMIENTO, no desde inicio
+            
+            # Usar fecha de vencimiento si existe, sino usar semana_esperada
+            fecha_venc = hito.get('fecha_vencimiento')
+            
+            if fecha_venc:
+                # Calcular semana de vencimiento desde fecha
+                if isinstance(fecha_venc, str):
+                    fecha_venc = datetime.fromisoformat(fecha_venc).date()
+                
+                # Calcular semana de vencimiento (asumiendo fecha_inicio del proyecto)
+                # Este cálculo puede variar según cómo se definan las semanas en el proyecto
+                dias_desde_vencimiento = (fecha_corte - fecha_venc).days
+                
+                # Si hay atraso (fecha_corte > fecha_vencimiento)
+                if dias_desde_vencimiento > 0 and conciliacion['estado'] == 'pendiente':
+                    semanas_atraso = max(1, dias_desde_vencimiento // 7)  # Convertir días a semanas
                     
                     alertas.append({
                         'tipo': 'hito_atrasado',
                         'severidad': 'alta',
                         'emoji': '🔴',
-                        'descripcion': f"Hito '{hito.get('descripcion')}' sin cobrar (sem {semana_esperada}, actual {semana_actual})",
-                        'monto': monto_pendiente,
-                        'semanas_atraso': semana_actual - semana_esperada,
+                        'descripcion': f"Hito '{hito.get('descripcion')}' sin cobrar (vencido {fecha_venc.strftime('%Y-%m-%d')})",
+                        'monto': conciliacion['monto_esperado'],
+                        'semanas_atraso': semanas_atraso,
                         'contrato': contrato.get('numero')
                     })
+            else:
+                # Fallback: usar semana_esperada si no hay fecha_vencimiento
+                semana_esperada = hito.get('semana_esperada', 0)
+                if semana_esperada < semana_actual:
+                    # Solo alertar si está 100% pendiente
+                    if conciliacion['estado'] == 'pendiente':
+                        monto_pendiente = conciliacion['monto_esperado']
+                        
+                        alertas.append({
+                            'tipo': 'hito_atrasado',
+                            'severidad': 'alta',
+                            'emoji': '🔴',
+                            'descripcion': f"Hito '{hito.get('descripcion')}' sin cobrar (sem {semana_esperada}, actual {semana_actual})",
+                            'monto': monto_pendiente,
+                            'semanas_atraso': semana_actual - semana_esperada,
+                            'contrato': contrato.get('numero')
+                        })
     
     return alertas
 
@@ -2473,7 +2509,7 @@ def render_paso_4_ingresar_egresos():
                 st.write(f"   • ... y {len(datos_egresos['cuentas_sin_clasificar'])-5} más")
             
             # ============================================================
-            # CLASIFICACIÓN MANUAL v2.3.0
+            # CLASIFICACIÓN MANUAL v2.3.1.3 - MEJORADA
             # ============================================================
             
             st.markdown("---")
@@ -2482,7 +2518,10 @@ def render_paso_4_ingresar_egresos():
                 st.markdown("""
                 **Asigna categorías a las cuentas sin clasificar:**
                 
-                Las clasificaciones se guardarán y se aplicarán automáticamente en futuros análisis.
+                1. ✅ Selecciona la categoría para cada cuenta en los menús desplegables
+                2. ✅ Haz clic en "💾 Guardar y Reprocesar" para aplicar las clasificaciones
+                
+                Las clasificaciones se guardarán permanentemente y se aplicarán en futuros análisis.
                 """)
                 
                 # Inicializar clasificaciones manuales en session_state
@@ -2494,29 +2533,47 @@ def render_paso_4_ingresar_egresos():
                 import os
                 clasificaciones_file = '/mnt/user-data/outputs/clasificaciones_manuales.json'
                 
-                if os.path.exists(clasificaciones_file) and not st.session_state.clasificaciones_manuales:
+                if os.path.exists(clasificaciones_file):
                     try:
                         with open(clasificaciones_file, 'r', encoding='utf-8') as f:
-                            st.session_state.clasificaciones_manuales = json.load(f)
-                        st.info(f"✅ Cargadas {len(st.session_state.clasificaciones_manuales)} clasificaciones previas")
-                    except:
-                        pass
+                            clasificaciones_cargadas = json.load(f)
+                            # Actualizar solo si hay clasificaciones nuevas
+                            for k, v in clasificaciones_cargadas.items():
+                                if k not in st.session_state.clasificaciones_manuales:
+                                    st.session_state.clasificaciones_manuales[k] = v
+                        if clasificaciones_cargadas:
+                            st.info(f"✅ Cargadas {len(clasificaciones_cargadas)} clasificaciones previas del archivo")
+                    except Exception as e:
+                        st.warning(f"⚠️ No se pudieron cargar clasificaciones previas: {str(e)}")
                 
                 # Categorías disponibles
                 categorias_disponibles = ["Materiales", "Mano de Obra", "Variables", "Administracion"]
                 
-                # Mostrar cada cuenta sin clasificar con selector
-                # CORRECCIÓN v2.3.1.1: Usar session_state directamente para evitar resets
+                # ====================================================================
+                # NUEVA LÓGICA v2.3.1.3: Sin callbacks automáticos
+                # Los selectboxes solo guardan en session_state temporal
+                # El guardado permanente se hace al hacer clic en "Guardar y Reprocesar"
+                # ====================================================================
                 
+                # Inicializar dict temporal si no existe (para capturar selecciones actuales)
+                if 'clasificaciones_temp' not in st.session_state:
+                    st.session_state.clasificaciones_temp = {}
+                
+                st.markdown("##### 📋 Selecciona las categorías:")
+                
+                # Mostrar cada cuenta sin clasificar con selector
                 for idx, cuenta in enumerate(datos_egresos['cuentas_sin_clasificar']):
                     col1, col2, col3 = st.columns([3, 2, 1])
                     
                     with col1:
+                        # Mostrar nombre de cuenta
                         st.text(cuenta)
                     
                     with col2:
-                        # Valor por defecto: clasificación previa o "Seleccionar..."
+                        # Determinar valor por defecto
                         default_idx = 0
+                        
+                        # Prioridad: clasificación guardada
                         if cuenta in st.session_state.clasificaciones_manuales:
                             categoria_previa = st.session_state.clasificaciones_manuales[cuenta]
                             if categoria_previa in categorias_disponibles:
@@ -2524,58 +2581,94 @@ def render_paso_4_ingresar_egresos():
                         
                         opciones = ["Seleccionar..."] + categorias_disponibles
                         
-                        # Callback para guardar automáticamente
-                        def guardar_clasificacion(cuenta_param=cuenta):
-                            categoria = st.session_state[f"clasificar_{idx}"]
-                            if categoria != "Seleccionar...":
-                                st.session_state.clasificaciones_manuales[cuenta_param] = categoria
-                                # Guardar en archivo inmediatamente
-                                import json
-                                import os
-                                os.makedirs('/mnt/user-data/outputs', exist_ok=True)
-                                with open(clasificaciones_file, 'w', encoding='utf-8') as f:
-                                    json.dump(st.session_state.clasificaciones_manuales, f, indent=2, ensure_ascii=False)
-                        
+                        # CRÍTICO: Selectbox SIN callback on_change
+                        # La selección se guardará cuando se haga clic en "Guardar y Reprocesar"
                         st.selectbox(
                             "Categoría",
                             options=opciones,
                             index=default_idx,
                             key=f"clasificar_{idx}",
                             label_visibility="collapsed",
-                            on_change=guardar_clasificacion
+                            help=f"Selecciona la categoría para la cuenta {cuenta}"
                         )
                     
                     with col3:
-                        # Botón para eliminar clasificación previa
+                        # Indicador visual de clasificación guardada
                         if cuenta in st.session_state.clasificaciones_manuales:
-                            if st.button("🗑️", key=f"delete_clasif_{idx}", help="Eliminar clasificación"):
+                            st.caption("✅ Guardada")
+                            # Botón para eliminar clasificación guardada
+                            if st.button("🗑️", key=f"delete_clasif_{idx}", help="Eliminar clasificación guardada"):
                                 del st.session_state.clasificaciones_manuales[cuenta]
-                                # Guardar en archivo
+                                # Guardar en archivo inmediatamente
+                                os.makedirs('/mnt/user-data/outputs', exist_ok=True)
                                 with open(clasificaciones_file, 'w', encoding='utf-8') as f:
                                     json.dump(st.session_state.clasificaciones_manuales, f, indent=2, ensure_ascii=False)
-                                # NO hacer rerun aquí - causa reset
+                                st.success(f"Clasificación eliminada para: {cuenta}")
+                                st.rerun()
                 
                 st.markdown("---")
                 
-                # Botones de acción
+                # ====================================================================
+                # BOTONES DE ACCIÓN
+                # ====================================================================
+                
                 col_btn1, col_btn2 = st.columns(2)
                 
                 with col_btn1:
-                    # Botón para ver clasificaciones guardadas
+                    # Botón para ver clasificaciones guardadas (solo visualización)
                     if st.button("📋 Ver Clasificaciones Guardadas", use_container_width=True):
                         if st.session_state.clasificaciones_manuales:
-                            st.markdown("**Clasificaciones guardadas:**")
+                            st.markdown("**Clasificaciones guardadas (persistentes):**")
                             for cuenta, categoria in sorted(st.session_state.clasificaciones_manuales.items()):
                                 st.write(f"• {cuenta} → **{categoria}**")
                         else:
-                            st.info("No hay clasificaciones guardadas")
+                            st.info("No hay clasificaciones guardadas todavía")
                 
                 with col_btn2:
-                    if st.button("🔄 Reprocesar con Clasificaciones", type="primary", use_container_width=True):
-                        # Forzar reprocesamiento aplicando clasificaciones manuales
-                        if 'egresos_reales_input' in st.session_state:
-                            st.session_state.forzar_reprocesar = True
-                            st.rerun()
+                    # BOTÓN CRÍTICO: Guardar clasificaciones y reprocesar
+                    if st.button("💾 Guardar y Reprocesar", type="primary", use_container_width=True):
+                        
+                        # Capturar todas las selecciones actuales de los selectboxes
+                        nuevas_clasificaciones = {}
+                        
+                        for idx, cuenta in enumerate(datos_egresos['cuentas_sin_clasificar']):
+                            # Leer valor actual del selectbox
+                            key = f"clasificar_{idx}"
+                            if key in st.session_state:
+                                categoria_seleccionada = st.session_state[key]
+                                
+                                # Solo guardar si no es "Seleccionar..."
+                                if categoria_seleccionada != "Seleccionar...":
+                                    nuevas_clasificaciones[cuenta] = categoria_seleccionada
+                        
+                        # Validar que hay al menos una selección nueva
+                        if not nuevas_clasificaciones:
+                            st.warning("⚠️ No hay selecciones nuevas. Selecciona al menos una categoría antes de guardar.")
+                        else:
+                            # Actualizar clasificaciones permanentes
+                            st.session_state.clasificaciones_manuales.update(nuevas_clasificaciones)
+                            
+                            # Guardar en archivo JSON
+                            try:
+                                os.makedirs('/mnt/user-data/outputs', exist_ok=True)
+                                with open(clasificaciones_file, 'w', encoding='utf-8') as f:
+                                    json.dump(
+                                        st.session_state.clasificaciones_manuales, 
+                                        f, 
+                                        indent=2, 
+                                        ensure_ascii=False
+                                    )
+                                
+                                # Forzar reprocesamiento aplicando las nuevas clasificaciones
+                                st.session_state.forzar_reprocesar = True
+                                
+                                st.success(f"✅ {len(nuevas_clasificaciones)} clasificación(es) guardada(s). Reprocesando datos...")
+                                
+                                # Rerun para aplicar cambios
+                                st.rerun()
+                                
+                            except Exception as e:
+                                st.error(f"❌ Error al guardar clasificaciones: {str(e)}")
             
             # ============================================================
     
