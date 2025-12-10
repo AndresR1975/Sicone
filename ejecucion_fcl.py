@@ -2537,198 +2537,11 @@ def render_paso_4_ingresar_egresos():
             if st.button("➡️ Continuar al Análisis", type="primary", use_container_width=True):
                 st.session_state.paso_ejecucion = 5
                 st.rerun()
-            
-    
-    # Mostrar vista previa si ya hay datos procesados
-    if 'egresos_reales_input' in st.session_state:
-        st.markdown("---")
-        st.subheader("📊 Vista Previa de Datos Procesados")
-        
-        datos = st.session_state.egresos_reales_input
-        
-        # KPIs principales
-        col1, col2, col3, col4 = st.columns(4)
-        
-        with col1:
-            st.metric(
-                "Total Gastado",
-                formatear_moneda(datos['totales_acumulados']['total'])
-            )
-        
-        with col2:
-            st.metric(
-                "Semanas con Datos",
-                f"1 a {datos['semana_ultima']}"
-            )
-        
-        with col3:
-            st.metric(
-                "Registros",
-                f"{datos['registros_procesados']:,}"
-            )
-        
-        with col4:
-            hojas_procesadas = datos.get('hojas_procesadas', [])
-            st.metric(
-                "Hojas procesadas",
-                len(hojas_procesadas) if hojas_procesadas else 1
-            )
-        
-        # Totales por categoría
-        st.markdown("### 💰 Totales por Categoría")
-        
-        totales = datos['totales_acumulados']
-        total_general = totales['total']
-        
-        col1, col2, col3 = st.columns(3)
-        
-        with col1:
-            st.metric(
-                "💎 Materiales",
-                formatear_moneda(totales['materiales']),
-                delta=f"{calcular_porcentaje(totales['materiales'], total_general):.1f}%"
-            )
-            st.metric(
-                "👷 Mano de Obra",
-                formatear_moneda(totales['mano_obra']),
-                delta=f"{calcular_porcentaje(totales['mano_obra'], total_general):.1f}%"
-            )
-        
-        with col2:
-            st.metric(
-                "📦 Variables",
-                formatear_moneda(totales['variables']),
-                delta=f"{calcular_porcentaje(totales['variables'], total_general):.1f}%"
-            )
-            st.metric(
-                "🏢 Administración",
-                formatear_moneda(totales['admin']),
-                delta=f"{calcular_porcentaje(totales['admin'], total_general):.1f}%"
-            )
-        
-        with col3:
-            # Mostrar "Sin Clasificar" solo si hay montos
-            sin_clasificar = totales.get('sin_clasificar', 0)
-            if sin_clasificar > 0:
-                st.metric(
-                    "❓ Sin Clasificar",
-                    formatear_moneda(sin_clasificar),
-                    delta=f"{calcular_porcentaje(sin_clasificar, total_general):.1f}%",
-                    help="Cuentas contables que aún no están mapeadas en la tabla de clasificación"
-                )
-        
-        # Tabla semanal (últimas 10 semanas)
-        st.markdown("### 📅 Egresos Semanales (Últimas 10 Semanas)")
-        
-        egresos_semanales = datos['egresos_semanales']
-        ultimas_semanas = egresos_semanales[-10:] if len(egresos_semanales) > 10 else egresos_semanales
-        
-        df_preview = pd.DataFrame(ultimas_semanas)
-        
-        # Incluir sin_clasificar solo si hay datos
-        columnas_base = ['semana', 'materiales', 'mano_obra', 'variables', 'admin']
-        nombres_base = ['Semana', 'Materiales', 'Mano Obra', 'Variables', 'Admin']
-        
-        if sin_clasificar > 0:
-            columnas_base.append('sin_clasificar')
-            nombres_base.append('Sin Clasificar')
-        
-        columnas_base.append('total')
-        nombres_base.append('Total')
-        
-        df_preview_display = df_preview[columnas_base].copy()
-        df_preview_display.columns = nombres_base
-        
-        # Formatear como moneda
-        columnas_a_formatear = ['Materiales', 'Mano Obra', 'Variables', 'Admin']
-        if sin_clasificar > 0:
-            columnas_a_formatear.append('Sin Clasificar')
-        columnas_a_formatear.append('Total')
-        
-        for col in columnas_a_formatear:
-            df_preview_display[col] = df_preview_display[col].apply(lambda x: formatear_moneda(x))
-        
-        st.dataframe(df_preview_display, use_container_width=True, hide_index=True)
-        
-        # Comparación rápida vs proyección (si existe)
-        if 'proyeccion_semanal' in proyeccion:
-            try:
-                st.markdown("### ⚡ Comparación Rápida vs Proyección")
-                
-                df_proy = pd.DataFrame(proyeccion['proyeccion_semanal'])
-                
-                # Verificar que existen las columnas necesarias
-                if 'semana' not in df_proy.columns:
-                    st.warning("⚠️ No se puede mostrar comparación: estructura de proyección incompatible")
-                else:
-                    # Calcular totales proyectados por categoría (acumulado hasta semana última)
-                    semana_ultima = datos['semana_ultima']
-                    df_proy_filtrado = df_proy[df_proy['semana'] <= semana_ultima]
-                    
-                    # Obtener valores con .get() para evitar KeyError si no existen
-                    proy_materiales = df_proy_filtrado.get('materiales', pd.Series([0])).sum()
-                    proy_mano_obra = df_proy_filtrado.get('mano_obra', pd.Series([0])).sum()
-                    proy_equipos = df_proy_filtrado.get('equipos', pd.Series([0])).sum()
-                    proy_imprevistos = df_proy_filtrado.get('imprevistos', pd.Series([0])).sum()
-                    proy_logistica = df_proy_filtrado.get('logistica', pd.Series([0])).sum()
-                    proy_admin = df_proy_filtrado.get('admin', pd.Series([0])).sum()
-                    
-                    # Variables = Equipos + Imprevistos + Logística
-                    proy_variables = proy_equipos + proy_imprevistos + proy_logistica
-                    
-                    col1, col2, col3, col4 = st.columns(4)
-                    
-                    with col1:
-                        desv_mat = totales['materiales'] - proy_materiales
-                        pct_mat = calcular_porcentaje(desv_mat, proy_materiales) if proy_materiales > 0 else 0
-                        st.metric(
-                            "Materiales",
-                            f"{'+' if desv_mat > 0 else ''}{pct_mat:.1f}%",
-                            delta=formatear_moneda(desv_mat),
-                            delta_color="inverse"
-                        )
-                    
-                    with col2:
-                        desv_mo = totales['mano_obra'] - proy_mano_obra
-                        pct_mo = calcular_porcentaje(desv_mo, proy_mano_obra) if proy_mano_obra > 0 else 0
-                        st.metric(
-                            "Mano de Obra",
-                            f"{'+' if desv_mo > 0 else ''}{pct_mo:.1f}%",
-                            delta=formatear_moneda(desv_mo),
-                            delta_color="inverse"
-                        )
-                    
-                    with col3:
-                        desv_var = totales['variables'] - proy_variables
-                        pct_var = calcular_porcentaje(desv_var, proy_variables) if proy_variables > 0 else 0
-                        st.metric(
-                            "Variables",
-                            f"{'+' if desv_var > 0 else ''}{pct_var:.1f}%",
-                            delta=formatear_moneda(desv_var),
-                            delta_color="inverse"
-                        )
-                    
-                    with col4:
-                        desv_admin = totales['admin'] - proy_admin
-                        pct_admin = calcular_porcentaje(desv_admin, proy_admin) if proy_admin > 0 else 0
-                        st.metric(
-                            "Administración",
-                            f"{'+' if desv_admin > 0 else ''}{pct_admin:.1f}%",
-                            delta=formatear_moneda(desv_admin),
-                            delta_color="inverse"
-                        )
-            
-            except Exception as e:
-                st.warning(f"⚠️ No se pudo generar comparación vs proyección: {str(e)}")
-                # Continuar sin mostrar la comparación
-        
-        # Botón generar análisis
-        st.markdown("---")
-        
-        if st.button("▶️ Generar Análisis de Egresos", type="primary", use_container_width=True):
-            st.session_state.paso_ejecucion = 5
-            st.rerun()
 
+
+# ============================================================================
+# FUNCIÓN AUXILIAR - CONSOLIDACIÓN DE MÚLTIPLES ARCHIVOS
+# ============================================================================
 
 def consolidar_egresos_multiples_archivos(lista_datos: List[Dict]) -> Dict:
     """
@@ -2839,6 +2652,9 @@ def main():
     
     paso = st.session_state.paso_ejecucion
     
+    # DEBUG: Mostrar paso actual
+    st.sidebar.markdown(f"**Debug:** Paso = `{paso}` (tipo: {type(paso).__name__})")
+    
     # Indicador de progreso
     progress_labels = {
         1: "📁 Cargar Proyección",
@@ -2852,15 +2668,19 @@ def main():
     # Determinar total de pasos (5 por ahora, 6 cuando se implemente FCL completo)
     total_pasos = 5
     
-    st.progress(paso / total_pasos, text=f"Paso {paso}/{total_pasos}: {progress_labels.get(paso, 'Análisis')}")
+    # Ajustar paso para progress bar (convertir 4.5 a 4.5 para la barra)
+    paso_progress = paso if paso != 4.5 else 4.5
+    
+    st.progress(paso_progress / total_pasos, text=f"Paso {paso}/{total_pasos}: {progress_labels.get(paso, 'Análisis')}")
     
     st.markdown("---")
     
     # Renderizar paso correspondiente
-    if paso == 1:
+    # Nota: Usamos comparación explícita para manejar flotantes correctamente
+    if paso == 1 or paso == 1.0:
         render_paso_1_cargar_proyeccion()
     
-    elif paso == 2:
+    elif paso == 2 or paso == 2.0:
         if 'proyeccion_cartera' not in st.session_state:
             st.error("❌ No se ha cargado una proyección. Regresando al paso 1...")
             st.session_state.paso_ejecucion = 1
@@ -2868,7 +2688,7 @@ def main():
         else:
             render_paso_2_ingresar_cartera()
     
-    elif paso == 3:
+    elif paso == 3 or paso == 3.0:
         if 'contratos_cartera_input' not in st.session_state:
             st.error("❌ No se han ingresado datos de cartera. Regresando al paso 2...")
             st.session_state.paso_ejecucion = 2
@@ -2876,7 +2696,7 @@ def main():
         else:
             render_paso_3_analisis()
     
-    elif paso == 4:
+    elif paso == 4 or paso == 4.0:
         if 'proyeccion_cartera' not in st.session_state:
             st.error("❌ No se ha cargado una proyección. Regresando al paso 1...")
             st.session_state.paso_ejecucion = 1
@@ -2884,7 +2704,8 @@ def main():
         else:
             render_paso_4_ingresar_egresos()
     
-    elif paso == 4.5:
+    elif paso == 4.5 or str(paso) == "4.5" or (isinstance(paso, float) and 4.4 < paso < 4.6):
+        # Comparación robusta para manejar flotantes
         if 'egresos_reales_input' not in st.session_state:
             st.error("❌ No se han ingresado datos de egresos. Regresando al paso 4...")
             st.session_state.paso_ejecucion = 4
@@ -2892,13 +2713,20 @@ def main():
         else:
             render_paso_4_5_clasificar_cuentas()
     
-    elif paso == 5:
+    elif paso == 5 or paso == 5.0 or paso >= 5:
         if 'egresos_reales_input' not in st.session_state:
             st.error("❌ No se han ingresado datos de egresos. Regresando al paso 4...")
             st.session_state.paso_ejecucion = 4
             st.rerun()
         else:
             render_paso_5_analisis_egresos()
+    
+    else:
+        st.error(f"❌ Paso {paso} no reconocido. Tipo: {type(paso)}")
+        st.info("Regresando al paso 1...")
+        st.session_state.paso_ejecucion = 1
+        if st.button("🔄 Reiniciar"):
+            st.rerun()
 
 
 # ============================================================================
