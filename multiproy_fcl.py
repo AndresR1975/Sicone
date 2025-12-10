@@ -126,8 +126,12 @@ class ConsolidadorMultiproyecto:
                 # Verificar si tiene datos reales
                 tiene_egresos = data.get('egresos') and data['egresos'].get('egresos_semanales')
                 tiene_cartera = data.get('cartera') and data['cartera']
+                tiene_tesoreria = data.get('tesoreria') and data['tesoreria'].get('metricas_semanales')
                 
-                if tiene_egresos or tiene_cartera:
+                # Debug info
+                st.caption(f"   📊 {proyecto_info['nombre']}: Egresos={bool(tiene_egresos)}, Cartera={bool(tiene_cartera)}, Tesorería={bool(tiene_tesoreria)}")
+                
+                if tiene_egresos or tiene_cartera or tiene_tesoreria:
                     proyecto_info['estado'] = 'ACTIVO'
                 else:
                     proyecto_info['estado'] = 'EN_COTIZACIÓN'
@@ -164,6 +168,14 @@ class ConsolidadorMultiproyecto:
         # Calcular métricas consolidadas
         df_consolidado = self._calcular_metricas_consolidadas(df_consolidado)
         
+        # Debug: Mostrar resumen de datos consolidados
+        st.caption(f"📊 **Debug Consolidación:**")
+        st.caption(f"   • Semanas totales: {len(df_consolidado)}")
+        st.caption(f"   • Semana actual: {self.semana_actual_consolidada}")
+        st.caption(f"   • Saldo proy total (primera semana): ${df_consolidado['saldo_proy_total'].iloc[0]:,.0f}")
+        st.caption(f"   • Saldo real total (primera semana): ${df_consolidado['saldo_real_total'].iloc[0]:,.0f}")
+        st.caption(f"   • Saldo consolidado (primera semana): ${df_consolidado['saldo_consolidado'].iloc[0]:,.0f}")
+        
         self.df_consolidado = df_consolidado
     
     def _determinar_rango_temporal(self):
@@ -185,13 +197,16 @@ class ConsolidadorMultiproyecto:
         """Crea el eje temporal consolidado"""
         semanas = list(range(1, self.semana_fin_consolidada + 1))
         fechas = [
-            self.fecha_inicio_empresa + timedelta(weeks=s-1) 
+            self.fecha_inicio_empresa + timedelta(days=(s-1)*7)
             for s in semanas
         ]
         
+        # Convertir a datetime para compatibilidad con Plotly
+        fechas_dt = [datetime.combine(f, datetime.min.time()) for f in fechas]
+        
         df = pd.DataFrame({
             'semana_consolidada': semanas,
-            'fecha': fechas,
+            'fecha': fechas_dt,  # Usar datetime en lugar de date
             'es_historica': [s <= self.semana_actual_consolidada for s in semanas],
             'es_futura': [s > self.semana_actual_consolidada for s in semanas]
         })
@@ -294,27 +309,46 @@ class ConsolidadorMultiproyecto:
         df['egresos_proy_total'] = df[cols_egresos_proy].sum(axis=1)
         df['egresos_real_total'] = df[cols_egresos_real].sum(axis=1)
         
-        # Saldo consolidado (usa real si existe, sino proyectado)
-        df['saldo_consolidado'] = df.apply(
-            lambda row: row['saldo_real_total'] if row['saldo_real_total'] > 0 
-            else row['saldo_proy_total'],
-            axis=1
-        )
+        # Saldo consolidado: SIEMPRE usa proyectado como base
+        # Solo en semanas históricas con datos reales, calcular saldo basado en flujo real
+        df['saldo_consolidado'] = df['saldo_proy_total'].copy()
+        
+        # Para semanas con datos reales, intentar calcular saldo real
+        # basado en ingresos y egresos acumulados
+        for idx in range(len(df)):
+            if df.at[idx, 'es_historica'] and df.at[idx, 'saldo_real_total'] > 0:
+                # Si hay saldo real registrado, usarlo
+                df.at[idx, 'saldo_consolidado'] = df.at[idx, 'saldo_real_total']
         
         # Calcular Burn Rate (promedio últimas 8 semanas con datos reales)
         df['burn_rate'] = 0.0
         for idx in range(len(df)):
             if df.at[idx, 'es_historica']:
+                # Buscar hasta 8 semanas atrás con datos
                 ventana_inicio = max(0, idx - 7)
                 ventana = df.iloc[ventana_inicio:idx+1]
+                
+                # Usar egresos reales si existen, sino usar egresos proyectados
                 egresos_ventana = ventana['egresos_real_total']
+                if egresos_ventana.sum() == 0:
+                    # Si no hay egresos reales, usar proyectados como estimado
+                    egresos_ventana = ventana['egresos_proy_total']
+                
                 egresos_positivos = egresos_ventana[egresos_ventana > 0]
                 
                 if len(egresos_positivos) > 0:
                     df.at[idx, 'burn_rate'] = egresos_positivos.mean()
         
         # Propagar burn rate a semanas futuras
-        ultimo_burn_rate = df[df['es_historica']]['burn_rate'].iloc[-1] if len(df[df['es_historica']]) > 0 else 0
+        burn_rates_historicos = df[df['es_historica']]['burn_rate']
+        burn_rates_positivos = burn_rates_historicos[burn_rates_historicos > 0]
+        
+        if len(burn_rates_positivos) > 0:
+            ultimo_burn_rate = burn_rates_positivos.iloc[-1]
+        else:
+            # Si no hay burn rate histórico, calcular de egresos proyectados
+            ultimo_burn_rate = df[df['es_historica']]['egresos_proy_total'].mean()
+        
         df.loc[df['es_futura'], 'burn_rate'] = ultimo_burn_rate
         
         # Margen de protección (Burn Rate * 8 semanas)
