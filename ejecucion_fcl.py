@@ -3532,7 +3532,11 @@ def render_paso_4_5_clasificar_cuentas():
     # Cargar clasificaciones guardadas desde archivo (si existe)
     import json
     import os
-    clasificaciones_file = '/mnt/user-data/outputs/clasificaciones_manuales.json'
+    
+    # Usar directorio de datos en el directorio de trabajo
+    data_dir = 'data'
+    os.makedirs(data_dir, exist_ok=True)
+    clasificaciones_file = os.path.join(data_dir, 'clasificaciones_manuales.json')
     
     if os.path.exists(clasificaciones_file):
         try:
@@ -3626,7 +3630,8 @@ def render_paso_4_5_clasificar_cuentas():
                 
                 # Guardar en archivo JSON
                 try:
-                    os.makedirs('/mnt/user-data/outputs', exist_ok=True)
+                    # Asegurar que directorio existe (ya debería existir)
+                    os.makedirs(data_dir, exist_ok=True)
                     with open(clasificaciones_file, 'w', encoding='utf-8') as f:
                         json.dump(
                             st.session_state.clasificaciones_manuales, 
