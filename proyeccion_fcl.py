@@ -1,6 +1,6 @@
 # CORRECCIÓN CRÍTICA: Agregar esta función DESPUÉS de configurar_hitos_default()
 # Insertar en línea ~757, justo después de la función configurar_hitos_default()
-
+from typing import Dict, List, Optional, Tuple
 def calcular_semanas_esperadas_hitos(hitos: List[Dict], fases_config: List[Dict]) -> List[Dict]:
     """
     Calcula y agrega 'semana_esperada' a cada hito basándose en:
