@@ -2540,157 +2540,157 @@ def render_paso_4_ingresar_egresos():
             st.markdown("### 🔧 Clasificar Cuentas Manualmente")
             
             # Container siempre visible (sin controles que puedan colapsarla)
-                st.markdown("""
-                **Asigna categorías a las cuentas sin clasificar:**
+            st.markdown("""
+            **Asigna categorías a las cuentas sin clasificar:**
+            
+            1. ✅ Selecciona la categoría para cada cuenta en los menús desplegables
+            2. ✅ Haz clic en "💾 Guardar y Reprocesar" para aplicar las clasificaciones
+            
+            Las clasificaciones se guardarán permanentemente y se aplicarán en futuros análisis.
+            """)
+            
+            # Inicializar clasificaciones manuales en session_state
+            if 'clasificaciones_manuales' not in st.session_state:
+                st.session_state.clasificaciones_manuales = {}
+            
+            # Cargar clasificaciones guardadas desde archivo (si existe)
+            import json
+            import os
+            clasificaciones_file = '/mnt/user-data/outputs/clasificaciones_manuales.json'
+            
+            if os.path.exists(clasificaciones_file):
+                try:
+                    with open(clasificaciones_file, 'r', encoding='utf-8') as f:
+                        clasificaciones_cargadas = json.load(f)
+                        # Actualizar solo si hay clasificaciones nuevas
+                        for k, v in clasificaciones_cargadas.items():
+                            if k not in st.session_state.clasificaciones_manuales:
+                                st.session_state.clasificaciones_manuales[k] = v
+                    if clasificaciones_cargadas:
+                        st.info(f"✅ Cargadas {len(clasificaciones_cargadas)} clasificaciones previas del archivo")
+                except Exception as e:
+                    st.warning(f"⚠️ No se pudieron cargar clasificaciones previas: {str(e)}")
+            
+            # Categorías disponibles
+            categorias_disponibles = ["Materiales", "Mano de Obra", "Variables", "Administracion"]
+            
+            st.markdown("##### 📋 Selecciona las categorías:")
+            
+            # Mostrar cada cuenta sin clasificar con selector
+            for idx, cuenta in enumerate(datos_egresos['cuentas_sin_clasificar']):
+                col1, col2, col3 = st.columns([3, 2, 1])
                 
-                1. ✅ Selecciona la categoría para cada cuenta en los menús desplegables
-                2. ✅ Haz clic en "💾 Guardar y Reprocesar" para aplicar las clasificaciones
+                with col1:
+                    # Mostrar nombre de cuenta
+                    st.text(cuenta)
                 
-                Las clasificaciones se guardarán permanentemente y se aplicarán en futuros análisis.
-                """)
-                
-                # Inicializar clasificaciones manuales en session_state
-                if 'clasificaciones_manuales' not in st.session_state:
-                    st.session_state.clasificaciones_manuales = {}
-                
-                # Cargar clasificaciones guardadas desde archivo (si existe)
-                import json
-                import os
-                clasificaciones_file = '/mnt/user-data/outputs/clasificaciones_manuales.json'
-                
-                if os.path.exists(clasificaciones_file):
-                    try:
-                        with open(clasificaciones_file, 'r', encoding='utf-8') as f:
-                            clasificaciones_cargadas = json.load(f)
-                            # Actualizar solo si hay clasificaciones nuevas
-                            for k, v in clasificaciones_cargadas.items():
-                                if k not in st.session_state.clasificaciones_manuales:
-                                    st.session_state.clasificaciones_manuales[k] = v
-                        if clasificaciones_cargadas:
-                            st.info(f"✅ Cargadas {len(clasificaciones_cargadas)} clasificaciones previas del archivo")
-                    except Exception as e:
-                        st.warning(f"⚠️ No se pudieron cargar clasificaciones previas: {str(e)}")
-                
-                # Categorías disponibles
-                categorias_disponibles = ["Materiales", "Mano de Obra", "Variables", "Administracion"]
-                
-                st.markdown("##### 📋 Selecciona las categorías:")
-                
-                # Mostrar cada cuenta sin clasificar con selector
-                for idx, cuenta in enumerate(datos_egresos['cuentas_sin_clasificar']):
-                    col1, col2, col3 = st.columns([3, 2, 1])
+                with col2:
+                    # Determinar valor por defecto
+                    default_idx = 0
                     
-                    with col1:
-                        # Mostrar nombre de cuenta
-                        st.text(cuenta)
+                    # Prioridad: clasificación guardada
+                    if cuenta in st.session_state.clasificaciones_manuales:
+                        categoria_previa = st.session_state.clasificaciones_manuales[cuenta]
+                        if categoria_previa in categorias_disponibles:
+                            default_idx = categorias_disponibles.index(categoria_previa) + 1
                     
-                    with col2:
-                        # Determinar valor por defecto
-                        default_idx = 0
-                        
-                        # Prioridad: clasificación guardada
-                        if cuenta in st.session_state.clasificaciones_manuales:
-                            categoria_previa = st.session_state.clasificaciones_manuales[cuenta]
-                            if categoria_previa in categorias_disponibles:
-                                default_idx = categorias_disponibles.index(categoria_previa) + 1
-                        
-                        opciones = ["Seleccionar..."] + categorias_disponibles
-                        
-                        # CRÍTICO: Selectbox SIN callback on_change
-                        # La selección se guardará cuando se haga clic en "Guardar y Reprocesar"
-                        st.selectbox(
-                            "Categoría",
-                            options=opciones,
-                            index=default_idx,
-                            key=f"clasificar_{idx}",
-                            label_visibility="collapsed",
-                            help=f"Selecciona la categoría para la cuenta {cuenta}"
-                        )
+                    opciones = ["Seleccionar..."] + categorias_disponibles
                     
-                    with col3:
-                        # Indicador visual de clasificación guardada (sin botones interactivos)
-                        if cuenta in st.session_state.clasificaciones_manuales:
-                            st.caption("✅ Guardada")
+                    # CRÍTICO: Selectbox SIN callback on_change
+                    # La selección se guardará cuando se haga clic en "Guardar y Reprocesar"
+                    st.selectbox(
+                        "Categoría",
+                        options=opciones,
+                        index=default_idx,
+                        key=f"clasificar_{idx}",
+                        label_visibility="collapsed",
+                        help=f"Selecciona la categoría para la cuenta {cuenta}"
+                    )
                 
-                st.markdown("---")
-                
-                # ====================================================================
-                # BOTONES DE ACCIÓN
-                # ====================================================================
-                
-                col_btn1, col_btn2, col_btn3 = st.columns(3)
-                
-                with col_btn1:
-                    # Botón para ver clasificaciones guardadas (solo visualización)
-                    if st.button("📋 Ver Guardadas", use_container_width=True):
-                        if st.session_state.clasificaciones_manuales:
-                            st.markdown("**Clasificaciones guardadas (persistentes):**")
-                            for cuenta, categoria in sorted(st.session_state.clasificaciones_manuales.items()):
-                                st.write(f"• {cuenta} → **{categoria}**")
-                        else:
-                            st.info("No hay clasificaciones guardadas todavía")
-                
-                with col_btn2:
-                    # Botón para limpiar todas las clasificaciones guardadas
-                    if st.button("🗑️ Limpiar Todo", use_container_width=True, help="Elimina todas las clasificaciones guardadas"):
-                        if st.session_state.clasificaciones_manuales:
-                            if st.button("⚠️ Confirmar Limpieza", type="secondary"):
-                                st.session_state.clasificaciones_manuales = {}
-                                try:
-                                    if os.path.exists(clasificaciones_file):
-                                        os.remove(clasificaciones_file)
-                                    st.success("✅ Todas las clasificaciones han sido eliminadas")
-                                    st.rerun()
-                                except Exception as e:
-                                    st.error(f"❌ Error al limpiar: {str(e)}")
-                        else:
-                            st.info("No hay clasificaciones para limpiar")
-                
-                with col_btn3:
-                    # BOTÓN CRÍTICO: Guardar clasificaciones y reprocesar
-                    if st.button("💾 Guardar y Reprocesar", type="primary", use_container_width=True):
-                        
-                        # Capturar todas las selecciones actuales de los selectboxes
-                        nuevas_clasificaciones = {}
-                        
-                        for idx, cuenta in enumerate(datos_egresos['cuentas_sin_clasificar']):
-                            # Leer valor actual del selectbox
-                            key = f"clasificar_{idx}"
-                            if key in st.session_state:
-                                categoria_seleccionada = st.session_state[key]
-                                
-                                # Solo guardar si no es "Seleccionar..."
-                                if categoria_seleccionada != "Seleccionar...":
-                                    nuevas_clasificaciones[cuenta] = categoria_seleccionada
-                        
-                        # Validar que hay al menos una selección nueva
-                        if not nuevas_clasificaciones:
-                            st.warning("⚠️ No hay selecciones nuevas. Selecciona al menos una categoría antes de guardar.")
-                        else:
-                            # Actualizar clasificaciones permanentes
-                            st.session_state.clasificaciones_manuales.update(nuevas_clasificaciones)
-                            
-                            # Guardar en archivo JSON
+                with col3:
+                    # Indicador visual de clasificación guardada (sin botones interactivos)
+                    if cuenta in st.session_state.clasificaciones_manuales:
+                        st.caption("✅ Guardada")
+            
+            st.markdown("---")
+            
+            # ====================================================================
+            # BOTONES DE ACCIÓN
+            # ====================================================================
+            
+            col_btn1, col_btn2, col_btn3 = st.columns(3)
+            
+            with col_btn1:
+                # Botón para ver clasificaciones guardadas (solo visualización)
+                if st.button("📋 Ver Guardadas", use_container_width=True):
+                    if st.session_state.clasificaciones_manuales:
+                        st.markdown("**Clasificaciones guardadas (persistentes):**")
+                        for cuenta, categoria in sorted(st.session_state.clasificaciones_manuales.items()):
+                            st.write(f"• {cuenta} → **{categoria}**")
+                    else:
+                        st.info("No hay clasificaciones guardadas todavía")
+            
+            with col_btn2:
+                # Botón para limpiar todas las clasificaciones guardadas
+                if st.button("🗑️ Limpiar Todo", use_container_width=True, help="Elimina todas las clasificaciones guardadas"):
+                    if st.session_state.clasificaciones_manuales:
+                        if st.button("⚠️ Confirmar Limpieza", type="secondary"):
+                            st.session_state.clasificaciones_manuales = {}
                             try:
-                                os.makedirs('/mnt/user-data/outputs', exist_ok=True)
-                                with open(clasificaciones_file, 'w', encoding='utf-8') as f:
-                                    json.dump(
-                                        st.session_state.clasificaciones_manuales, 
-                                        f, 
-                                        indent=2, 
-                                        ensure_ascii=False
-                                    )
-                                
-                                # Forzar reprocesamiento aplicando las nuevas clasificaciones
-                                st.session_state.forzar_reprocesar = True
-                                
-                                st.success(f"✅ {len(nuevas_clasificaciones)} clasificación(es) guardada(s). Reprocesando datos...")
-                                
-                                # Rerun para aplicar cambios
+                                if os.path.exists(clasificaciones_file):
+                                    os.remove(clasificaciones_file)
+                                st.success("✅ Todas las clasificaciones han sido eliminadas")
                                 st.rerun()
-                                
                             except Exception as e:
-                                st.error(f"❌ Error al guardar clasificaciones: {str(e)}")
+                                st.error(f"❌ Error al limpiar: {str(e)}")
+                    else:
+                        st.info("No hay clasificaciones para limpiar")
+            
+            with col_btn3:
+                # BOTÓN CRÍTICO: Guardar clasificaciones y reprocesar
+                if st.button("💾 Guardar y Reprocesar", type="primary", use_container_width=True):
+                    
+                    # Capturar todas las selecciones actuales de los selectboxes
+                    nuevas_clasificaciones = {}
+                    
+                    for idx, cuenta in enumerate(datos_egresos['cuentas_sin_clasificar']):
+                        # Leer valor actual del selectbox
+                        key = f"clasificar_{idx}"
+                        if key in st.session_state:
+                            categoria_seleccionada = st.session_state[key]
+                            
+                            # Solo guardar si no es "Seleccionar..."
+                            if categoria_seleccionada != "Seleccionar...":
+                                nuevas_clasificaciones[cuenta] = categoria_seleccionada
+                    
+                    # Validar que hay al menos una selección nueva
+                    if not nuevas_clasificaciones:
+                        st.warning("⚠️ No hay selecciones nuevas. Selecciona al menos una categoría antes de guardar.")
+                    else:
+                        # Actualizar clasificaciones permanentes
+                        st.session_state.clasificaciones_manuales.update(nuevas_clasificaciones)
+                        
+                        # Guardar en archivo JSON
+                        try:
+                            os.makedirs('/mnt/user-data/outputs', exist_ok=True)
+                            with open(clasificaciones_file, 'w', encoding='utf-8') as f:
+                                json.dump(
+                                    st.session_state.clasificaciones_manuales, 
+                                    f, 
+                                    indent=2, 
+                                    ensure_ascii=False
+                                )
+                            
+                            # Forzar reprocesamiento aplicando las nuevas clasificaciones
+                            st.session_state.forzar_reprocesar = True
+                            
+                            st.success(f"✅ {len(nuevas_clasificaciones)} clasificación(es) guardada(s). Reprocesando datos...")
+                            
+                            # Rerun para aplicar cambios
+                            st.rerun()
+                            
+                        except Exception as e:
+                            st.error(f"❌ Error al guardar clasificaciones: {str(e)}")
             
             # ============================================================
     
