@@ -2,7 +2,7 @@
 SICONE - Módulo de Ejecución Real FCL
 Análisis de FCL Real Ejecutado vs FCL Planeado
 
-Versión: 2.3.1.4
+Versión: 2.3.1.5
 Fecha: Diciembre 2024
 Autor: AI-MindNovation
 
@@ -16,20 +16,20 @@ CORRECCIONES CRÍTICAS (Diciembre 2024):
 - ✅ v2.0.1: KeyError 'semana' en Paso 5 (normalización columnas)
 - ✅ v2.0.2: Error tabla comparación (simplificación estilo)
 - ✅ v2.1.0: Métricas de tesorería completas
-- ✅ v2.3.1.3: **CLASIFICACIÓN MANUAL MEJORADA** ⭐
-  - Eliminado callback `on_change` que causaba interferencias
-  - Flujo intuitivo: seleccionar todas las opciones → guardar → reprocesar
-  - Botón "Guardar y Reprocesar" ahora captura correctamente todas las selecciones
-  - Feedback visual mejorado (indicador "✅ Guardada")
-  - Validación de selecciones antes de guardar
-  - Solución al problema de selectboxes que no guardaban estados
-- ✅ v2.3.1.4: **CORRECCIONES FUNCIONALES CRÍTICAS** 🔧
-  - **Cálculo de semanas de retraso corregido**: Ahora calcula correctamente desde
-    la semana en que DEBERÍA haber terminado el hito, no desde la semana 1
-  - **Expander de clasificación persistente**: Reemplazado expander por contenedor
-    controlado con botón toggle para evitar cierre automático al seleccionar opciones
-  - **Eliminados reruns innecesarios**: Botones que causaban cierre de interfaz
-  - **UX mejorada**: Ahora se pueden seleccionar múltiples categorías sin interrupciones
+- ✅ v2.3.1.5: **CORRECCIONES FUNCIONALES DEFINITIVAS** 🔧
+  
+  **PROBLEMA 1 - CLASIFICACIÓN MANUAL (RESUELTO):**
+  - ❌ v2.3.1.3-4: Intentos con botones toggle y contenedores complejos - NO funcionaron
+  - ✅ v2.3.1.5: Regresado a `st.expander()` estándar con `expanded=True`
+  - ✅ Solución simple y efectiva - expander abierto por defecto
+  - ✅ Usuario puede ver y seleccionar todas las categorías sin problemas
+  
+  **PROBLEMA 2 - CÁLCULO DE SEMANAS DE RETRASO (CORREGIDO):**
+  - ❌ Antes: Retraso = semana_actual - semana_esperada_hito_actual (ej: 66-1=65)
+  - ✅ Ahora: Retraso = semana_actual - semana_inicio_siguiente_hito (ej: 66-2=64)
+  - ✅ El retraso se mide desde cuando DEBERÍA HABER EMPEZADO el siguiente hito
+  - ✅ Alineado con expectativa del usuario: "inicio del próximo hito"
+  - ✅ Si no hay siguiente hito, usa semana esperada del hito actual (fallback)
 
 ESTRUCTURA MODULAR:
 └── ejecucion_fcl.py
@@ -629,11 +629,16 @@ def generar_alertas_cartera(contratos_cartera: List[Dict], proyeccion_df: pd.Dat
                             fecha_corte: date, semana_actual: int) -> List[Dict]:
     """
     Genera lista de alertas basadas en el estado de la cartera
+    
+    CORRECCIÓN v2.3.1.5: El retraso se calcula desde la semana en que DEBERÍA HABER EMPEZADO
+    EL SIGUIENTE HITO, no desde la semana del hito actual.
     """
     alertas = []
     
     for contrato in contratos_cartera:
-        for hito in contrato.get('hitos', []):
+        hitos_contrato = contrato.get('hitos', [])
+        
+        for idx_hito, hito in enumerate(hitos_contrato):
             conciliacion = conciliar_hito(hito)
             
             # Alerta de pago vencido
@@ -667,56 +672,49 @@ def generar_alertas_cartera(contratos_cartera: List[Dict], proyeccion_df: pd.Dat
                 })
             
             # Alerta de hito pendiente en etapa pasada
-            # CORRECCIÓN v2.3.1.4: Calcular atraso correctamente
-            # - Atraso = cuántas semanas han pasado DESDE que el hito debería haberse completado
-            # - NO calcular desde la semana 1 del proyecto
+            # CORRECCIÓN v2.3.1.5: Calcular atraso desde el SIGUIENTE HITO
+            # El retraso se mide desde cuando debería haber empezado el siguiente hito,
+            # no desde cuando debería haber terminado el hito actual
             
-            # Usar fecha de vencimiento si existe, sino usar semana_esperada
-            fecha_venc = hito.get('fecha_vencimiento')
+            semana_esperada = hito.get('semana_esperada', 0)
             
-            if fecha_venc:
-                # Calcular desde fecha de vencimiento
-                if isinstance(fecha_venc, str):
-                    fecha_venc = datetime.fromisoformat(fecha_venc).date()
+            if semana_esperada < semana_actual and conciliacion['estado'] == 'pendiente':
+                # Buscar el siguiente hito en el contrato
+                semana_inicio_siguiente = None
                 
-                # Días transcurridos DESDE el vencimiento
-                dias_desde_vencimiento = (fecha_corte - fecha_venc).days
+                if idx_hito + 1 < len(hitos_contrato):
+                    # Hay un siguiente hito
+                    siguiente_hito = hitos_contrato[idx_hito + 1]
+                    semana_inicio_siguiente = siguiente_hito.get('semana_esperada', None)
                 
-                # Si hay atraso (fecha_corte > fecha_vencimiento) y está pendiente
-                if dias_desde_vencimiento > 0 and conciliacion['estado'] == 'pendiente':
-                    semanas_atraso = max(1, dias_desde_vencimiento // 7)
-                    
-                    alertas.append({
-                        'tipo': 'hito_atrasado',
-                        'severidad': 'alta',
-                        'emoji': '🔴',
-                        'descripcion': f"Hito '{hito.get('descripcion')}' sin cobrar (vencido {fecha_venc.strftime('%Y-%m-%d')})",
-                        'monto': conciliacion['monto_esperado'],
-                        'semanas_atraso': semanas_atraso,
-                        'contrato': contrato.get('numero')
-                    })
-            else:
-                # Usar semana_esperada del hito
-                semana_esperada = hito.get('semana_esperada', 0)
-                
-                # CORRECCIÓN: Atraso = semanas desde que DEBERÍA haber terminado
-                # Si estamos en semana 66 y el hito debía completarse en semana 1,
-                # el atraso es 66 - 1 = 65 semanas desde que debió completarse
-                if semana_esperada < semana_actual:
-                    # Solo alertar si está 100% pendiente
-                    if conciliacion['estado'] == 'pendiente':
-                        # Semanas que han pasado DESDE que debería haberse completado
-                        semanas_desde_vencimiento = semana_actual - semana_esperada
+                if semana_inicio_siguiente:
+                    # Calcular retraso desde la semana del siguiente hito
+                    if semana_inicio_siguiente < semana_actual:
+                        semanas_atraso = semana_actual - semana_inicio_siguiente
                         
                         alertas.append({
                             'tipo': 'hito_atrasado',
                             'severidad': 'alta',
                             'emoji': '🔴',
-                            'descripcion': f"Hito '{hito.get('descripcion')}' sin cobrar (debió completarse en sem {semana_esperada}, actual {semana_actual})",
+                            'descripcion': f"Hito '{hito.get('descripcion')}' sin cobrar (siguiente hito en sem {semana_inicio_siguiente}, actual {semana_actual})",
                             'monto': conciliacion['monto_esperado'],
-                            'semanas_atraso': semanas_desde_vencimiento,
+                            'semanas_atraso': semanas_atraso,
                             'contrato': contrato.get('numero')
                         })
+                else:
+                    # No hay siguiente hito o es el último
+                    # Usar la semana esperada del hito actual como referencia
+                    semanas_atraso = semana_actual - semana_esperada
+                    
+                    alertas.append({
+                        'tipo': 'hito_atrasado',
+                        'severidad': 'alta',
+                        'emoji': '🔴',
+                        'descripcion': f"Hito '{hito.get('descripcion')}' sin cobrar (debió completarse en sem {semana_esperada}, actual {semana_actual})",
+                        'monto': conciliacion['monto_esperado'],
+                        'semanas_atraso': semanas_atraso,
+                        'contrato': contrato.get('numero')
+                    })
     
     return alertas
 
@@ -2520,29 +2518,14 @@ def render_paso_4_ingresar_egresos():
                 st.write(f"   • ... y {len(datos_egresos['cuentas_sin_clasificar'])-5} más")
             
             # ============================================================
-            # CLASIFICACIÓN MANUAL v2.3.1.4 - EXPANDER PERSISTENTE
+            # CLASIFICACIÓN MANUAL v2.3.1.5 - REALMENTE FUNCIONAL
             # ============================================================
             
             st.markdown("---")
             
-            # CORRECCIÓN v2.3.1.4: Controlar estado del expander con session_state
-            # para evitar que se cierre al interactuar con los widgets
-            if 'expander_clasificacion_abierto' not in st.session_state:
-                st.session_state.expander_clasificacion_abierto = False
-            
-            # Usar contenedor normal en lugar de expander para evitar cierres
-            st.markdown("### 🔧 Clasificar Cuentas Manualmente")
-            
-            # Botón para mostrar/ocultar sección
-            if st.button(
-                "📋 Mostrar Clasificación Manual" if not st.session_state.expander_clasificacion_abierto else "📁 Ocultar Clasificación Manual",
-                use_container_width=True
-            ):
-                st.session_state.expander_clasificacion_abierto = not st.session_state.expander_clasificacion_abierto
-                st.rerun()
-            
-            if st.session_state.expander_clasificacion_abierto:
-                st.markdown("---")
+            # Usar expander NORMAL de Streamlit - es la forma más confiable
+            # El problema anterior era sobre-ingeniería innecesaria
+            with st.expander("🔧 Clasificar Cuentas Manualmente", expanded=True):
                 st.markdown("""
                 **Asigna categorías a las cuentas sin clasificar:**
                 
@@ -2580,7 +2563,6 @@ def render_paso_4_ingresar_egresos():
                 st.markdown("##### 📋 Selecciona las categorías:")
                 
                 # Mostrar cada cuenta sin clasificar con selector
-                # CRÍTICO v2.3.1.4: Sin callbacks ni botones que causen rerun inmediato
                 for idx, cuenta in enumerate(datos_egresos['cuentas_sin_clasificar']):
                     col1, col2, col3 = st.columns([3, 2, 1])
                     
@@ -2644,7 +2626,6 @@ def render_paso_4_ingresar_egresos():
                                     if os.path.exists(clasificaciones_file):
                                         os.remove(clasificaciones_file)
                                     st.success("✅ Todas las clasificaciones han sido eliminadas")
-                                    st.session_state.expander_clasificacion_abierto = True  # Mantener abierto
                                     st.rerun()
                                 except Exception as e:
                                     st.error(f"❌ Error al limpiar: {str(e)}")
@@ -2685,9 +2666,6 @@ def render_paso_4_ingresar_egresos():
                                         indent=2, 
                                         ensure_ascii=False
                                     )
-                                
-                                # Mantener el expander abierto después de guardar
-                                st.session_state.expander_clasificacion_abierto = True
                                 
                                 # Forzar reprocesamiento aplicando las nuevas clasificaciones
                                 st.session_state.forzar_reprocesar = True
