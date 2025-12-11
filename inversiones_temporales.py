@@ -17,6 +17,69 @@ TASAS_REFERENCIA = {
     'IBR': 12.80,  # EA
 }
 
+
+def obtener_tasas_en_vivo() -> Dict:
+    """
+    Obtiene tasas actuales DTF e IBR del Banco de la República
+    
+    Fuentes:
+    - IBR: datos.gov.co (API Socrata)
+    - DTF: Estimado basado en promedios semanales
+    
+    Returns:
+        Dict con tasas actualizadas o tasas por defecto si falla
+    """
+    import requests
+    from datetime import datetime
+    
+    tasas = {
+        'DTF': TASAS_REFERENCIA['DTF'],
+        'IBR': TASAS_REFERENCIA['IBR'],
+        'ultima_actualizacion': None,
+        'fuente': 'Manual',
+        'error': None
+    }
+    
+    try:
+        # Intentar obtener IBR desde datos.gov.co
+        # URL del API de IBR Overnight (más actualizado)
+        ibr_url = "https://www.datos.gov.co/resource/b8fs-cx24.json?$order=vigenciadesde DESC&$limit=1"
+        
+        response = requests.get(ibr_url, timeout=5)
+        
+        if response.status_code == 200:
+            data = response.json()
+            if data and len(data) > 0:
+                # El último registro
+                ultimo = data[0]
+                valor_tasa = float(ultimo.get('valor', TASAS_REFERENCIA['IBR']))
+                
+                # Convertir a EA si es necesario (IBR viene como nominal)
+                # IBR overnight nominal a EA: (1 + i/100)^365 - 1
+                if 'tipotasa' in ultimo and ultimo['tipotasa'] == 'Nominal':
+                    # Para overnight: tasa diaria
+                    ibr_ea = ((1 + valor_tasa/100) ** 365 - 1) * 100
+                else:
+                    ibr_ea = valor_tasa
+                
+                tasas['IBR'] = round(ibr_ea, 2)
+                tasas['ultima_actualizacion'] = ultimo.get('vigenciadesde', 'Desconocida')
+                tasas['fuente'] = 'Banco de la República (datos.gov.co)'
+                
+        # DTF: Más complejo de obtener en tiempo real
+        # Por ahora usar valor estimado basado en IBR
+        # DTF típicamente es IBR + 0.5% aproximadamente
+        tasas['DTF'] = round(tasas['IBR'] + 0.45, 2)
+        
+    except requests.exceptions.Timeout:
+        tasas['error'] = 'Timeout al conectar con API'
+    except requests.exceptions.RequestException as e:
+        tasas['error'] = f'Error de conexión: {str(e)}'
+    except Exception as e:
+        tasas['error'] = f'Error inesperado: {str(e)}'
+    
+    return tasas
+
 # Comisiones típicas por instrumento (%)
 COMISIONES = {
     'CDT': 0.0,  # Sin comisión
@@ -514,4 +577,48 @@ def validar_rentabilidad_inversion(inversion: Inversion) -> Dict:
         'roi_neto': resultado['roi_neto'],
         'alertas': alertas,
         'nivel_general': alertas[0]['nivel'] if alertas else 'OK'
+    }
+
+
+def crear_timeline_vencimientos(inversiones: List[Inversion], fecha_inicio: date = None) -> Dict:
+    """
+    Crea datos para visualizar timeline de vencimientos tipo Gantt
+    
+    Args:
+        inversiones: Lista de inversiones
+        fecha_inicio: Fecha de inicio (default: hoy)
+    
+    Returns:
+        Dict con datos para gráfica
+    """
+    if fecha_inicio is None:
+        fecha_inicio = date.today()
+    
+    timeline_data = []
+    
+    for inv in inversiones:
+        fecha_venc = inv.get_fecha_vencimiento(fecha_inicio)
+        resultado = inv.calcular_retorno_neto()
+        
+        timeline_data.append({
+            'nombre': inv.nombre,
+            'instrumento': inv.instrumento,
+            'monto': inv.monto,
+            'plazo_dias': inv.plazo_dias,
+            'fecha_inicio': fecha_inicio,
+            'fecha_vencimiento': fecha_venc,
+            'retorno_neto': resultado['retorno_neto'],
+            'capital_final': resultado['capital_final_neto'],
+            'tasa_efectiva': resultado['tasa_efectiva_neta']
+        })
+    
+    # Ordenar por fecha de vencimiento
+    timeline_data.sort(key=lambda x: x['fecha_vencimiento'])
+    
+    return {
+        'inversiones': timeline_data,
+        'fecha_inicio': fecha_inicio,
+        'fecha_fin_max': max([inv['fecha_vencimiento'] for inv in timeline_data]) if timeline_data else fecha_inicio,
+        'retorno_total': sum([inv['retorno_neto'] for inv in timeline_data]),
+        'capital_total': sum([inv['monto'] for inv in timeline_data])
     }

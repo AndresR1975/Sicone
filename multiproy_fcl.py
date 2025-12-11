@@ -29,8 +29,8 @@ try:
     from inversiones_temporales import (
         Inversion, calcular_excedente_invertible, analizar_riesgo_liquidez,
         generar_recomendaciones, get_info_instrumento, calcular_resumen_portafolio,
-        validar_rentabilidad_inversion, PLAZOS_MINIMOS_RECOMENDADOS,
-        TASAS_REFERENCIA, COMISIONES, RETENCION_FUENTE, GMF
+        validar_rentabilidad_inversion, crear_timeline_vencimientos, obtener_tasas_en_vivo,
+        PLAZOS_MINIMOS_RECOMENDADOS, TASAS_REFERENCIA, COMISIONES, RETENCION_FUENTE, GMF
     )
     INVERSIONES_DISPONIBLES = True
 except ImportError:
@@ -939,7 +939,7 @@ def render_inversiones_temporales(estado: Dict):
     st.caption("Optimiza excedentes de liquidez con instrumentos financieros")
     
     # Configuración del margen de seguridad
-    col_config1, col_config2 = st.columns([3, 1])
+    col_config1, col_config2, col_config3 = st.columns([2, 1, 1])
     
     with col_config1:
         margen_seguridad_pct = st.slider(
@@ -952,11 +952,30 @@ def render_inversiones_temporales(estado: Dict):
         )
     
     with col_config2:
+        # Obtener tasas (desde session_state o API)
+        if 'tasas_actualizadas' not in st.session_state:
+            st.session_state.tasas_actualizadas = {
+                'DTF': TASAS_REFERENCIA['DTF'],
+                'IBR': TASAS_REFERENCIA['IBR'],
+                'fuente': 'Manual'
+            }
+        
         st.metric(
             "Tasa DTF Ref.",
-            f"{TASAS_REFERENCIA['DTF']:.2f}% EA",
-            help="Tasa de referencia DTF"
+            f"{st.session_state.tasas_actualizadas['DTF']:.2f}% EA",
+            help=f"Fuente: {st.session_state.tasas_actualizadas.get('fuente', 'Manual')}"
         )
+    
+    with col_config3:
+        if st.button("🔄 Actualizar Tasas", help="Obtener tasas actuales del Banco de la República"):
+            with st.spinner("Consultando Banco de la República..."):
+                tasas_nuevas = obtener_tasas_en_vivo()
+                if tasas_nuevas.get('error'):
+                    st.warning(f"⚠️ {tasas_nuevas['error']}\nUsando tasas por defecto.")
+                else:
+                    st.session_state.tasas_actualizadas = tasas_nuevas
+                    st.success(f"✅ Tasas actualizadas\nIBR: {tasas_nuevas['IBR']:.2f}% EA")
+                    st.rerun()
     
     # Calcular excedente invertible
     excedente_info = calcular_excedente_invertible(
@@ -997,6 +1016,51 @@ def render_inversiones_temporales(estado: Dict):
     
     st.markdown("---")
     
+    # Recomendaciones automáticas
+    st.markdown("#### 💡 Estrategias Recomendadas")
+    st.caption("Aplica una estrategia predefinida con 1 click o configura manualmente")
+    
+    recomendaciones = generar_recomendaciones(
+        excedente_info['excedente_invertible'],
+        excedente_info['margen_total']
+    )
+    
+    if recomendaciones and recomendaciones[0].get('nombre') != 'Sin Recomendación':
+        # Mostrar recomendaciones en columns
+        num_recs = len(recomendaciones)
+        cols_rec = st.columns(num_recs)
+        
+        for idx, (col, rec) in enumerate(zip(cols_rec, recomendaciones), 1):
+            with col:
+                # Card de recomendación
+                emoji_rec = "✅" if rec.get('recomendada') else ("📊" if rec['nombre'] == 'Balanceada' else "⚡")
+                st.markdown(f"**{emoji_rec} {rec['nombre']}**")
+                st.caption(rec['descripcion'])
+                
+                st.metric(
+                    "Total a Invertir",
+                    formatear_moneda(rec['monto']),
+                    delta=f"{(rec['monto']/excedente_info['excedente_invertible']*100):.0f}% del excedente"
+                )
+                
+                st.caption(f"**Riesgo:** {rec['riesgo']}")
+                
+                # Distribución
+                with st.expander("Ver distribución"):
+                    for dist in rec['distribucion']:
+                        st.caption(f"• {dist['porcentaje']}% en {dist['instrumento']} ({dist['plazo']}d): {formatear_moneda(dist['monto'])}")
+                
+                # Botón para aplicar
+                if st.button(f"Aplicar {rec['nombre']}", key=f"aplicar_rec_{idx}", use_container_width=True):
+                    # Guardar configuración en session_state
+                    st.session_state.estrategia_aplicada = rec
+                    st.success(f"✅ Estrategia {rec['nombre']} aplicada")
+                    st.info("👇 Revisa los tabs de inversión abajo para ver la configuración")
+    else:
+        st.info(recomendaciones[0]['mensaje'] if recomendaciones else "No hay recomendaciones disponibles")
+    
+    st.markdown("---")
+    
     # Configurar 3 inversiones
     st.markdown("#### ⚙️ Configurar Inversiones")
     st.caption("Configure hasta 3 alternativas de inversión con diferentes instrumentos y plazos")
@@ -1008,12 +1072,19 @@ def render_inversiones_temporales(estado: Dict):
     
     for idx, tab in enumerate([tab1, tab2, tab3], 1):
         with tab:
+            # Verificar si hay estrategia aplicada
+            estrategia = st.session_state.get('estrategia_aplicada')
+            config_recomendada = None
+            
+            if estrategia and 'distribucion' in estrategia and idx <= len(estrategia['distribucion']):
+                config_recomendada = estrategia['distribucion'][idx-1]
+            
             col_inv1, col_inv2 = st.columns([2, 1])
             
             with col_inv1:
                 activa = st.checkbox(
                     f"Activar Inversión {idx}",
-                    value=(idx == 1),  # Primera activa por defecto
+                    value=(config_recomendada is not None) if config_recomendada else (idx == 1),
                     key=f"inv_{idx}_activa"
                 )
             
@@ -1025,10 +1096,15 @@ def render_inversiones_temporales(estado: Dict):
             col_inst1, col_inst2 = st.columns(2)
             
             with col_inst1:
+                # Valor por defecto de estrategia o default
+                instrumento_default = config_recomendada['instrumento'] if config_recomendada else ('CDT' if idx == 1 else ('Fondo Liquidez' if idx == 2 else 'Fondo Corto Plazo'))
+                instrumentos_lista = ['CDT', 'Fondo Liquidez', 'Fondo Corto Plazo', 'Cuenta Remunerada']
+                idx_default = instrumentos_lista.index(instrumento_default) if instrumento_default in instrumentos_lista else 0
+                
                 instrumento = st.selectbox(
                     "🏦 Instrumento",
-                    options=['CDT', 'Fondo Liquidez', 'Fondo Corto Plazo', 'Cuenta Remunerada'],
-                    index=0 if idx == 1 else (1 if idx == 2 else 2),
+                    options=instrumentos_lista,
+                    index=idx_default,
                     key=f"inv_{idx}_instrumento"
                 )
             
@@ -1036,18 +1112,22 @@ def render_inversiones_temporales(estado: Dict):
                 # Plazos disponibles según instrumento (plazos mínimos rentables)
                 if instrumento == 'CDT':
                     plazos_disponibles = [30, 60, 90, 180, 360]
-                    plazo_default = 90 if idx == 1 else (180 if idx == 2 else 60)
+                    plazo_default = config_recomendada.get('plazo', 90) if config_recomendada else (90 if idx == 1 else (180 if idx == 2 else 60))
                 elif instrumento in ['Fondo Liquidez', 'Fondo Corto Plazo']:
                     plazos_disponibles = [30, 60, 90]  # Eliminados 1, 7, 15 días
-                    plazo_default = 30 if idx == 1 else 60
+                    plazo_default = config_recomendada.get('plazo', 30) if config_recomendada else (30 if idx == 1 else 60)
                 else:  # Cuenta Remunerada
                     plazos_disponibles = [1, 7, 15, 30, 60, 90]  # Flexible pero tasa baja
                     plazo_default = 1
                 
+                # Asegurar que plazo_default está en la lista
+                if plazo_default not in plazos_disponibles:
+                    plazo_default = plazos_disponibles[0]
+                
                 plazo = st.selectbox(
                     "⏱️ Plazo (días)",
                     options=plazos_disponibles,
-                    index=plazos_disponibles.index(plazo_default) if plazo_default in plazos_disponibles else 0,
+                    index=plazos_disponibles.index(plazo_default),
                     key=f"inv_{idx}_plazo"
                 )
                 
@@ -1060,8 +1140,10 @@ def render_inversiones_temporales(estado: Dict):
             col_monto1, col_monto2 = st.columns(2)
             
             with col_monto1:
-                # Sugerir distribución
-                if idx == 1:
+                # Sugerir distribución (de estrategia o predeterminada)
+                if config_recomendada:
+                    monto_sugerido = int(config_recomendada['monto'])
+                elif idx == 1:
                     monto_sugerido = int(excedente_info['excedente_invertible'] * 0.50)
                 elif idx == 2:
                     monto_sugerido = int(excedente_info['excedente_invertible'] * 0.30)
@@ -1272,6 +1354,101 @@ def render_inversiones_temporales(estado: Dict):
             st.warning(f"⚠️ Liquidez ajustada. Ratio de cobertura: {riesgo['ratio_cobertura']:.2f}x (recomendado >2.0x)")
         else:
             st.success(f"✅ Liquidez adecuada. Inversiones dentro de parámetros seguros.")
+        
+        # Timeline de vencimientos
+        st.markdown("---")
+        st.markdown("#### 📅 Timeline de Vencimientos")
+        
+        timeline_data = crear_timeline_vencimientos(inversiones)
+        
+        if timeline_data['inversiones']:
+            # Crear gráfica Gantt
+            from datetime import datetime, timedelta
+            
+            fig = go.Figure()
+            
+            # Agregar barras para cada inversión
+            for i, inv_data in enumerate(timeline_data['inversiones']):
+                # Calcular duración en días para la barra
+                duracion = (inv_data['fecha_vencimiento'] - inv_data['fecha_inicio']).days
+                
+                # Color según instrumento
+                color_map = {
+                    'CDT': '#1f77b4',
+                    'Fondo Liquidez': '#2ca02c',
+                    'Fondo Corto Plazo': '#ff7f0e',
+                    'Cuenta Remunerada': '#d62728'
+                }
+                color = color_map.get(inv_data['instrumento'], '#7f7f7f')
+                
+                # Barra horizontal
+                fig.add_trace(go.Bar(
+                    name=inv_data['nombre'],
+                    y=[inv_data['nombre']],
+                    x=[duracion],
+                    base=[inv_data['fecha_inicio']],
+                    orientation='h',
+                    marker=dict(color=color),
+                    text=[f"{formatear_moneda(inv_data['monto'])}<br>+{formatear_moneda(inv_data['retorno_neto'])}"],
+                    textposition='inside',
+                    hovertemplate=f"<b>{inv_data['nombre']}</b><br>" +
+                                 f"Instrumento: {inv_data['instrumento']}<br>" +
+                                 f"Plazo: {inv_data['plazo_dias']} días<br>" +
+                                 f"Monto: {formatear_moneda(inv_data['monto'])}<br>" +
+                                 f"Retorno Neto: {formatear_moneda(inv_data['retorno_neto'])}<br>" +
+                                 f"Vence: {inv_data['fecha_vencimiento'].strftime('%d/%m/%Y')}<br>" +
+                                 "<extra></extra>"
+                ))
+            
+            # Línea vertical "Hoy"
+            fig.add_vline(
+                x=timeline_data['fecha_inicio'],
+                line_dash="dot",
+                line_color="gray",
+                line_width=2,
+                annotation_text="Hoy",
+                annotation_position="top"
+            )
+            
+            # Layout
+            fig.update_layout(
+                title="Cronograma de Vencimientos",
+                xaxis_title="Fecha",
+                yaxis_title="",
+                showlegend=False,
+                height=300 + len(timeline_data['inversiones']) * 40,
+                hovermode='closest',
+                xaxis=dict(
+                    type='date',
+                    tickformat='%d/%m/%Y'
+                )
+            )
+            
+            st.plotly_chart(fig, use_container_width=True)
+            
+            # Resumen de vencimientos
+            col_time1, col_time2, col_time3 = st.columns(3)
+            
+            with col_time1:
+                st.metric(
+                    "Próximo Vencimiento",
+                    timeline_data['inversiones'][0]['fecha_vencimiento'].strftime('%d/%m/%Y'),
+                    delta=f"{timeline_data['inversiones'][0]['plazo_dias']} días"
+                )
+            
+            with col_time2:
+                st.metric(
+                    "Capital a Recuperar",
+                    formatear_moneda(timeline_data['capital_total']),
+                    help="Capital total invertido"
+                )
+            
+            with col_time3:
+                st.metric(
+                    "Retorno Total Esperado",
+                    formatear_moneda(timeline_data['retorno_total']),
+                    delta=f"+{(timeline_data['retorno_total']/timeline_data['capital_total']*100):.2f}%"
+                )
 
 
 # ============================================================================
