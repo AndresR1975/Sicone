@@ -332,7 +332,7 @@ class ConsolidadorMultiproyecto:
                         
                         if semana_cons <= len(df):
                             idx_row = semana_cons - 1
-                            df.at[idx_row, col_saldo_real] = met_sem.get('saldo', 0)
+                            df.at[idx_row, col_saldo_real] = met_sem.get('saldo_final_real', 0)  # ← Corregido
         
         return df
     
@@ -419,7 +419,15 @@ class ConsolidadorMultiproyecto:
         if len(df[df['es_futura']]) > 0:
             # Obtener índice de primera semana futura
             idx_primera_futura = df[df['es_futura']].index[0]
-            saldo_base = df.at[idx_primera_futura - 1, 'saldo_consolidado'] if idx_primera_futura > 0 else df['saldo_consolidado'].iloc[0]
+            
+            # Saldo base: usar saldo real actual de tesorería (más preciso)
+            saldo_base_real = sum(p.get('saldo_real_tesoreria', 0) for p in self.proyectos)
+            
+            # Si el saldo real está disponible, usarlo; sino usar el consolidado
+            if saldo_base_real > 0:
+                saldo_base = saldo_base_real
+            else:
+                saldo_base = df.at[idx_primera_futura - 1, 'saldo_consolidado'] if idx_primera_futura > 0 else df['saldo_consolidado'].iloc[0]
             
             # Proyectar saldo con gastos fijos
             for idx in df[df['es_futura']].index:
@@ -488,10 +496,12 @@ class ConsolidadorMultiproyecto:
             estado = proyecto['estado']
             estados[estado] = estados.get(estado, 0) + 1
         
-        # Calcular capital total real (excedentes + saldos de tesorería)
-        total_excedentes = sum(p.get('excedente', 0) for p in self.proyectos)
+        # Capital total real = Suma de saldos de tesorería (NO sumar excedentes por separado)
+        # Los excedentes ya están implícitos en los saldos de tesorería
         total_saldos_reales = sum(p.get('saldo_real_tesoreria', 0) for p in self.proyectos)
-        capital_total_real = total_excedentes + total_saldos_reales
+        
+        # Para información adicional (no se suma al capital)
+        total_excedentes = sum(p.get('excedente', 0) for p in self.proyectos)
         
         # Burn rate consolidado (proyectos + gastos fijos)
         burn_rate_proyectos = float(row['burn_rate'])
@@ -501,17 +511,17 @@ class ConsolidadorMultiproyecto:
         margen_proteccion = burn_rate_total * 8
         
         # Excedente invertible
-        excedente_invertible = capital_total_real - margen_proteccion
+        excedente_invertible = total_saldos_reales - margen_proteccion
         
         # Estado general basado en capital real
-        estado_general = determinar_estado_liquidez(capital_total_real, margen_proteccion)
+        estado_general = determinar_estado_liquidez(total_saldos_reales, margen_proteccion)
         
         return {
             'semana': int(row['semana_consolidada']),
             'fecha': row['fecha'],
-            'saldo_total': float(capital_total_real),  # ← Capital real
-            'total_excedentes': float(total_excedentes),
+            'saldo_total': float(total_saldos_reales),  # ← Solo saldos reales
             'total_saldos_reales': float(total_saldos_reales),
+            'total_excedentes_info': float(total_excedentes),  # Solo info, no se suma
             'burn_rate': float(burn_rate_total),  # ← Incluye gastos fijos
             'burn_rate_proyectos': float(burn_rate_proyectos),
             'gastos_fijos_semanales': float(self.gastos_fijos_semanales),
@@ -540,11 +550,10 @@ def render_metricas_principales(estado: Dict):
         st.metric(
             "Saldo Total",
             formatear_moneda(estado['saldo_total']),
-            help="Capital Total Disponible = Excedentes + Saldos de Tesorería"
+            help="Suma de saldos reales de tesorería de todos los proyectos"
         )
-        # Desglose
-        st.caption(f"   💎 Excedentes: ${estado['total_excedentes']:,.0f}")
-        st.caption(f"   🏦 Saldos Reales: ${estado['total_saldos_reales']:,.0f}")
+        # Mostrar solo saldos reales (no excedentes por separado para evitar confusión)
+        st.caption(f"   🏦 Efectivo disponible en proyectos")
     
     with col2:
         color_estado = ESTADO_COLORES.get(estado['estado_general'], '#gray')
