@@ -24,6 +24,18 @@ from datetime import datetime, timedelta, date
 from typing import List, Dict, Tuple, Optional
 import os
 
+# Importar módulo de inversiones temporales
+try:
+    from inversiones_temporales import (
+        Inversion, calcular_excedente_invertible, analizar_riesgo_liquidez,
+        generar_recomendaciones, get_info_instrumento, calcular_resumen_portafolio,
+        TASAS_REFERENCIA, COMISIONES, RETENCION_FUENTE, GMF
+    )
+    INVERSIONES_DISPONIBLES = True
+except ImportError:
+    INVERSIONES_DISPONIBLES = False
+    st.warning("⚠️ Módulo de inversiones no disponible")
+
 # ============================================================================
 # CONFIGURACIÓN Y CONSTANTES
 # ============================================================================
@@ -915,6 +927,322 @@ def render_timeline_consolidado(consolidador: ConsolidadorMultiproyecto):
     st.plotly_chart(fig, use_container_width=True)
 
 
+def render_inversiones_temporales(estado: Dict):
+    """Renderiza sección de inversiones temporales"""
+    
+    if not INVERSIONES_DISPONIBLES:
+        st.warning("⚠️ Módulo de inversiones temporales no disponible")
+        return
+    
+    st.markdown("### 💰 Inversiones Temporales")
+    st.caption("Optimiza excedentes de liquidez con instrumentos financieros")
+    
+    # Configuración del margen de seguridad
+    col_config1, col_config2 = st.columns([3, 1])
+    
+    with col_config1:
+        margen_seguridad_pct = st.slider(
+            "🛡️ Margen de Seguridad Adicional (%)",
+            min_value=0,
+            max_value=50,
+            value=20,
+            step=5,
+            help="Porcentaje adicional sobre el margen requerido base"
+        )
+    
+    with col_config2:
+        st.metric(
+            "Tasa DTF Ref.",
+            f"{TASAS_REFERENCIA['DTF']:.2f}% EA",
+            help="Tasa de referencia DTF"
+        )
+    
+    # Calcular excedente invertible
+    excedente_info = calcular_excedente_invertible(
+        estado['saldo_total'],
+        estado['margen_proteccion'],
+        margen_seguridad_pct
+    )
+    
+    # Mostrar capital disponible
+    st.markdown("#### 💼 Capital Disponible para Inversión")
+    
+    col1, col2, col3 = st.columns(3)
+    
+    with col1:
+        st.metric(
+            "Saldo Total",
+            formatear_moneda(excedente_info['saldo_total'])
+        )
+    
+    with col2:
+        st.metric(
+            "Margen Total",
+            formatear_moneda(excedente_info['margen_total']),
+            help=f"Margen base + {margen_seguridad_pct}% seguridad"
+        )
+    
+    with col3:
+        st.metric(
+            "💎 Excedente Invertible",
+            formatear_moneda(excedente_info['excedente_invertible']),
+            delta=f"{excedente_info['porcentaje_excedente']:.1f}% del saldo",
+            help="Capital disponible para inversión sin comprometer operación"
+        )
+    
+    if excedente_info['excedente_invertible'] <= 0:
+        st.warning("⚠️ No hay excedente disponible para inversión. Enfocarse en liquidez operativa.")
+        return
+    
+    st.markdown("---")
+    
+    # Configurar 3 inversiones
+    st.markdown("#### ⚙️ Configurar Inversiones")
+    st.caption("Configure hasta 3 alternativas de inversión con diferentes instrumentos y plazos")
+    
+    inversiones = []
+    
+    # Crear 3 tabs para las inversiones
+    tab1, tab2, tab3 = st.tabs(["📊 Inversión 1", "📊 Inversión 2", "📊 Inversión 3"])
+    
+    for idx, tab in enumerate([tab1, tab2, tab3], 1):
+        with tab:
+            col_inv1, col_inv2 = st.columns([2, 1])
+            
+            with col_inv1:
+                activa = st.checkbox(
+                    f"Activar Inversión {idx}",
+                    value=(idx == 1),  # Primera activa por defecto
+                    key=f"inv_{idx}_activa"
+                )
+            
+            if not activa:
+                st.info(f"Inversión {idx} desactivada")
+                continue
+            
+            # Selección de instrumento
+            col_inst1, col_inst2 = st.columns(2)
+            
+            with col_inst1:
+                instrumento = st.selectbox(
+                    "🏦 Instrumento",
+                    options=['CDT', 'Fondo Liquidez', 'Fondo Corto Plazo', 'Cuenta Remunerada'],
+                    index=0 if idx == 1 else (1 if idx == 2 else 2),
+                    key=f"inv_{idx}_instrumento"
+                )
+            
+            with col_inst2:
+                # Plazos disponibles según instrumento
+                if instrumento == 'CDT':
+                    plazos_disponibles = [30, 60, 90, 180, 360]
+                    plazo_default = 90 if idx == 1 else (180 if idx == 2 else 60)
+                else:
+                    plazos_disponibles = [1, 7, 15, 30, 60, 90]
+                    plazo_default = 1 if instrumento in ['Fondo Liquidez', 'Cuenta Remunerada'] else 30
+                
+                plazo = st.selectbox(
+                    "⏱️ Plazo (días)",
+                    options=plazos_disponibles,
+                    index=plazos_disponibles.index(plazo_default) if plazo_default in plazos_disponibles else 0,
+                    key=f"inv_{idx}_plazo"
+                )
+            
+            # Monto y tasa
+            col_monto1, col_monto2 = st.columns(2)
+            
+            with col_monto1:
+                # Sugerir distribución
+                if idx == 1:
+                    monto_sugerido = int(excedente_info['excedente_invertible'] * 0.50)
+                elif idx == 2:
+                    monto_sugerido = int(excedente_info['excedente_invertible'] * 0.30)
+                else:
+                    monto_sugerido = int(excedente_info['excedente_invertible'] * 0.15)
+                
+                monto = st.number_input(
+                    "💵 Monto a Invertir",
+                    min_value=0,
+                    max_value=int(excedente_info['excedente_invertible']),
+                    value=monto_sugerido,
+                    step=10_000_000,
+                    format="%d",
+                    key=f"inv_{idx}_monto"
+                )
+                
+                porcentaje_usado = (monto / excedente_info['excedente_invertible'] * 100) if excedente_info['excedente_invertible'] > 0 else 0
+                st.caption(f"   {porcentaje_usado:.1f}% del excedente")
+            
+            with col_monto2:
+                # Tasa según instrumento
+                tasa_ea = st.number_input(
+                    "📈 Tasa EA (%)",
+                    min_value=0.0,
+                    max_value=30.0,
+                    value=13.5 if instrumento == 'CDT' else (11.0 if 'Fondo' in instrumento else 4.5),
+                    step=0.1,
+                    format="%.2f",
+                    key=f"inv_{idx}_tasa"
+                )
+            
+            # Crear objeto inversión
+            if monto > 0:
+                comision = COMISIONES.get(instrumento, 0)
+                inv = Inversion(
+                    nombre=f"Inversión {idx}",
+                    monto=monto,
+                    plazo_dias=plazo,
+                    tasa_ea=tasa_ea,
+                    instrumento=instrumento,
+                    comision_anual=comision
+                )
+                inversiones.append(inv)
+                
+                # Mostrar cálculos
+                resultado = inv.calcular_retorno_neto()
+                
+                st.markdown(f"**📊 Proyección Inversión {idx}:**")
+                
+                col_r1, col_r2, col_r3, col_r4 = st.columns(4)
+                
+                with col_r1:
+                    st.metric(
+                        "Retorno Bruto",
+                        formatear_moneda(resultado['retorno_bruto']),
+                        help="Antes de descuentos"
+                    )
+                
+                with col_r2:
+                    st.metric(
+                        "Descuentos",
+                        formatear_moneda(resultado['descuentos_totales']),
+                        delta=f"-{(resultado['descuentos_totales']/resultado['retorno_bruto']*100):.1f}%",
+                        delta_color="inverse",
+                        help=f"Comisión: ${resultado['comision']:,.0f} | Retención: ${resultado['retencion_fuente']:,.0f} | GMF: ${resultado['gmf']:,.0f}"
+                    )
+                
+                with col_r3:
+                    st.metric(
+                        "💰 Retorno Neto",
+                        formatear_moneda(resultado['retorno_neto']),
+                        delta=f"+{resultado['roi_neto']:.2f}%",
+                        help="Después de todos los descuentos"
+                    )
+                
+                with col_r4:
+                    st.metric(
+                        "Tasa Efectiva",
+                        f"{resultado['tasa_efectiva_neta']:.2f}% EA",
+                        help="Tasa real después de descuentos"
+                    )
+            
+            # Mostrar información del instrumento
+            with st.expander(f"ℹ️ ¿Por qué invertir en {instrumento}?"):
+                info = get_info_instrumento(instrumento)
+                if info:
+                    st.markdown(f"**{info['nombre_completo']}**")
+                    st.caption(info['descripcion'])
+                    
+                    col_info1, col_info2 = st.columns(2)
+                    
+                    with col_info1:
+                        st.markdown("**Ventajas:**")
+                        for ventaja in info['ventajas']:
+                            st.caption(ventaja)
+                    
+                    with col_info2:
+                        st.markdown("**Desventajas:**")
+                        for desventaja in info['desventajas']:
+                            st.caption(desventaja)
+                    
+                    st.info(f"💡 **Mejor para:** {info['mejor_para']}")
+                    
+                    col_det1, col_det2, col_det3 = st.columns(3)
+                    with col_det1:
+                        st.caption(f"🔒 **Liquidez:** {info['liquidez']}")
+                    with col_det2:
+                        st.caption(f"⚠️ **Riesgo:** {info['riesgo']}")
+                    with col_det3:
+                        st.caption(f"💰 **Comisión:** {info['comision']}")
+    
+    # Resumen consolidado de inversiones
+    if inversiones:
+        st.markdown("---")
+        st.markdown("#### 📊 Resumen Consolidado")
+        
+        resumen = calcular_resumen_portafolio(inversiones)
+        monto_total_inv = resumen['monto_total']
+        
+        col_res1, col_res2, col_res3, col_res4 = st.columns(4)
+        
+        with col_res1:
+            st.metric(
+                "Total Invertido",
+                formatear_moneda(monto_total_inv),
+                delta=f"{resumen['numero_inversiones']} inversión(es)"
+            )
+        
+        with col_res2:
+            st.metric(
+                "Retorno Neto Total",
+                formatear_moneda(resumen['retorno_neto_total']),
+                delta=f"+{resumen['roi_promedio_ponderado']:.2f}%"
+            )
+        
+        with col_res3:
+            st.metric(
+                "Descuentos Totales",
+                formatear_moneda(resumen['descuentos_totales']),
+                delta=f"-{(resumen['descuentos_totales']/resumen['retorno_bruto_total']*100):.1f}%",
+                delta_color="inverse"
+            )
+        
+        with col_res4:
+            st.metric(
+                "Plazo Promedio",
+                f"{resumen['plazo_promedio_ponderado']:.0f} días"
+            )
+        
+        # Análisis de riesgo
+        st.markdown("#### ⚖️ Análisis de Riesgo de Liquidez")
+        
+        riesgo = analizar_riesgo_liquidez(
+            estado['saldo_total'],
+            monto_total_inv,
+            excedente_info['margen_total']
+        )
+        
+        col_riesgo1, col_riesgo2, col_riesgo3 = st.columns(3)
+        
+        with col_riesgo1:
+            st.metric(
+                "Liquidez Post-Inversión",
+                formatear_moneda(riesgo['liquidez_post_inversion']),
+                delta=f"{riesgo['porcentaje_invertido']:.1f}% invertido"
+            )
+        
+        with col_riesgo2:
+            st.metric(
+                "Ratio de Cobertura",
+                f"{riesgo['ratio_cobertura']:.2f}x",
+                help="Veces que la liquidez cubre el margen total"
+            )
+        
+        with col_riesgo3:
+            st.metric(
+                f"{riesgo['emoji']} Estado",
+                riesgo['estado'],
+                help=f"Nivel de riesgo: {riesgo['nivel_riesgo']}"
+            )
+        
+        # Alertas
+        if riesgo['nivel_riesgo'] in ['ALTO', 'CRÍTICO']:
+            st.error(f"⚠️ **ALERTA:** Liquidez {riesgo['nivel_riesgo']} post-inversión. Considere reducir montos o diversificar plazos.")
+        elif riesgo['nivel_riesgo'] == 'MEDIO':
+            st.warning(f"⚠️ Liquidez ajustada. Ratio de cobertura: {riesgo['ratio_cobertura']:.2f}x (recomendado >2.0x)")
+        else:
+            st.success(f"✅ Liquidez adecuada. Inversiones dentro de parámetros seguros.")
+
+
 # ============================================================================
 # FUNCIÓN PRINCIPAL DEL MÓDULO
 # ============================================================================
@@ -1103,6 +1431,12 @@ def main():
         st.markdown("---")
         
         render_timeline_consolidado(consolidador)
+        
+        st.markdown("---")
+        
+        # Sección de Inversiones Temporales
+        if INVERSIONES_DISPONIBLES:
+            render_inversiones_temporales(estado)
 
 
 if __name__ == "__main__":
