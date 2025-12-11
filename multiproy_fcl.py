@@ -1012,15 +1012,26 @@ def main():
         with st.spinner("Consolidando datos..."):
             consolidador.consolidar()
             st.session_state.consolidador = consolidador
+            st.session_state.gastos_fijos_mensuales = gastos_fijos_mensuales
             st.success("✅ Consolidación completada")
             st.rerun()
     
     # Mostrar dashboard si ya está consolidado
     if 'consolidador' in st.session_state:
-        consolidador = st.session_state.consolidador
+        consolidador_previo = st.session_state.consolidador
         
-        st.markdown("---")
-        st.markdown("## 📊 Dashboard Consolidado")
+        # Verificar si cambiaron los gastos fijos
+        gastos_fijos_previos = st.session_state.get('gastos_fijos_mensuales', gastos_fijos_mensuales)
+        
+        if gastos_fijos_previos != gastos_fijos_mensuales:
+            # Reconsolidar con nuevos gastos fijos
+            with st.spinner("Recalculando con nuevos gastos fijos..."):
+                consolidador_previo.gastos_fijos_semanales = gastos_fijos_mensuales / 4.33
+                consolidador_previo.consolidar()
+                st.session_state.consolidador = consolidador_previo
+                st.session_state.gastos_fijos_mensuales = gastos_fijos_mensuales
+        
+        consolidador = st.session_state.consolidador
         
         # Obtener estado actual
         estado = consolidador.get_estado_actual()
@@ -1028,6 +1039,45 @@ def main():
         if not estado:
             st.error("❌ No se pudo obtener el estado actual")
             return
+        
+        # SIDEBAR: Métricas dinámicas
+        with st.sidebar:
+            st.markdown("---")
+            st.markdown("### 📊 Estado Actual")
+            
+            # Cobertura
+            if estado['burn_rate'] > 0:
+                cobertura_semanas = estado['saldo_total'] / estado['burn_rate']
+                st.metric(
+                    "Cobertura",
+                    f"{cobertura_semanas:.1f} semanas",
+                    help="Semanas de operación con capital disponible"
+                )
+            else:
+                st.metric("Cobertura", "∞ semanas", help="Sin gastos proyectados")
+            
+            # Margen requerido
+            st.metric(
+                "Margen Requerido",
+                formatear_moneda(estado['margen_proteccion']),
+                help="8 semanas de burn rate total"
+            )
+            
+            # Estado de liquidez
+            color_map = {
+                'EXCEDENTE': '🟢',
+                'AJUSTADO': '🟡',
+                'CRÍTICO': '🔴'
+            }
+            emoji = color_map.get(estado['estado_general'], '⚪')
+            st.metric(
+                "Estado",
+                f"{emoji} {estado['estado_general']}",
+                help="Estado de liquidez empresarial"
+            )
+        
+        st.markdown("---")
+        st.markdown("## 📊 Dashboard Consolidado")
         
         # Renderizar secciones del dashboard
         render_metricas_principales(estado)
