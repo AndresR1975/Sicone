@@ -1054,8 +1054,25 @@ def render_inversiones_temporales(estado: Dict):
                 if st.button(f"Aplicar {rec['nombre']}", key=f"aplicar_rec_{idx}", use_container_width=True):
                     # Guardar configuración en session_state
                     st.session_state.estrategia_aplicada = rec
+                    
+                    # Pre-guardar valores para cada inversión
+                    for inv_idx, dist in enumerate(rec['distribucion'], 1):
+                        st.session_state[f'inv_{inv_idx}_activa_value'] = True
+                        st.session_state[f'inv_{inv_idx}_instrumento_value'] = dist['instrumento']
+                        st.session_state[f'inv_{inv_idx}_plazo_value'] = dist['plazo']
+                        st.session_state[f'inv_{inv_idx}_monto_value'] = dist['monto']
+                        # Tasa según instrumento
+                        if dist['instrumento'] == 'CDT':
+                            tasa_sugerida = st.session_state.tasas_actualizadas.get('DTF', 13.25)
+                        elif dist['instrumento'] == 'Fondo Corto Plazo':
+                            tasa_sugerida = st.session_state.tasas_actualizadas.get('IBR', 12.80) + 0.5
+                        else:
+                            tasa_sugerida = st.session_state.tasas_actualizadas.get('IBR', 12.80)
+                        st.session_state[f'inv_{inv_idx}_tasa_value'] = tasa_sugerida
+                    
                     st.success(f"✅ Estrategia {rec['nombre']} aplicada")
                     st.info("👇 Revisa los tabs de inversión abajo para ver la configuración")
+                    st.rerun()
     else:
         st.info(recomendaciones[0]['mensaje'] if recomendaciones else "No hay recomendaciones disponibles")
     
@@ -1072,19 +1089,15 @@ def render_inversiones_temporales(estado: Dict):
     
     for idx, tab in enumerate([tab1, tab2, tab3], 1):
         with tab:
-            # Verificar si hay estrategia aplicada
-            estrategia = st.session_state.get('estrategia_aplicada')
-            config_recomendada = None
-            
-            if estrategia and 'distribucion' in estrategia and idx <= len(estrategia['distribucion']):
-                config_recomendada = estrategia['distribucion'][idx-1]
-            
             col_inv1, col_inv2 = st.columns([2, 1])
             
             with col_inv1:
+                # Valor por defecto de session_state si existe
+                activa_default = st.session_state.get(f'inv_{idx}_activa_value', (idx == 1))
+                
                 activa = st.checkbox(
                     f"Activar Inversión {idx}",
-                    value=(config_recomendada is not None) if config_recomendada else (idx == 1),
+                    value=activa_default,
                     key=f"inv_{idx}_activa"
                 )
             
@@ -1096,8 +1109,9 @@ def render_inversiones_temporales(estado: Dict):
             col_inst1, col_inst2 = st.columns(2)
             
             with col_inst1:
-                # Valor por defecto de estrategia o default
-                instrumento_default = config_recomendada['instrumento'] if config_recomendada else ('CDT' if idx == 1 else ('Fondo Liquidez' if idx == 2 else 'Fondo Corto Plazo'))
+                # Valor por defecto
+                instrumento_default = st.session_state.get(f'inv_{idx}_instrumento_value', 
+                                                           'CDT' if idx == 1 else ('Fondo Liquidez' if idx == 2 else 'Fondo Corto Plazo'))
                 instrumentos_lista = ['CDT', 'Fondo Liquidez', 'Fondo Corto Plazo', 'Cuenta Remunerada']
                 idx_default = instrumentos_lista.index(instrumento_default) if instrumento_default in instrumentos_lista else 0
                 
@@ -1112,13 +1126,14 @@ def render_inversiones_temporales(estado: Dict):
                 # Plazos disponibles según instrumento (plazos mínimos rentables)
                 if instrumento == 'CDT':
                     plazos_disponibles = [30, 60, 90, 180, 360]
-                    plazo_default = config_recomendada.get('plazo', 90) if config_recomendada else (90 if idx == 1 else (180 if idx == 2 else 60))
                 elif instrumento in ['Fondo Liquidez', 'Fondo Corto Plazo']:
                     plazos_disponibles = [30, 60, 90]  # Eliminados 1, 7, 15 días
-                    plazo_default = config_recomendada.get('plazo', 30) if config_recomendada else (30 if idx == 1 else 60)
                 else:  # Cuenta Remunerada
                     plazos_disponibles = [1, 7, 15, 30, 60, 90]  # Flexible pero tasa baja
-                    plazo_default = 1
+                
+                # Valor por defecto de session_state o default
+                plazo_default = st.session_state.get(f'inv_{idx}_plazo_value',
+                                                     90 if idx == 1 else (180 if idx == 2 else 60))
                 
                 # Asegurar que plazo_default está en la lista
                 if plazo_default not in plazos_disponibles:
@@ -1140,15 +1155,18 @@ def render_inversiones_temporales(estado: Dict):
             col_monto1, col_monto2 = st.columns(2)
             
             with col_monto1:
-                # Sugerir distribución (de estrategia o predeterminada)
-                if config_recomendada:
-                    monto_sugerido = int(config_recomendada['monto'])
-                elif idx == 1:
-                    monto_sugerido = int(excedente_info['excedente_invertible'] * 0.50)
-                elif idx == 2:
-                    monto_sugerido = int(excedente_info['excedente_invertible'] * 0.30)
-                else:
-                    monto_sugerido = int(excedente_info['excedente_invertible'] * 0.15)
+                # Monto sugerido de session_state o predeterminado
+                monto_default = st.session_state.get(f'inv_{idx}_monto_value')
+                
+                if monto_default is None:
+                    if idx == 1:
+                        monto_default = int(excedente_info['excedente_invertible'] * 0.50)
+                    elif idx == 2:
+                        monto_default = int(excedente_info['excedente_invertible'] * 0.30)
+                    else:
+                        monto_default = int(excedente_info['excedente_invertible'] * 0.15)
+                
+                monto_sugerido = int(monto_default)
                 
                 monto = st.number_input(
                     "💵 Monto a Invertir",
@@ -1164,12 +1182,24 @@ def render_inversiones_temporales(estado: Dict):
                 st.caption(f"   {porcentaje_usado:.1f}% del excedente")
             
             with col_monto2:
-                # Tasa según instrumento
+                # Tasa de session_state o según instrumento
+                tasa_default = st.session_state.get(f'inv_{idx}_tasa_value')
+                
+                if tasa_default is None:
+                    if instrumento == 'CDT':
+                        tasa_default = st.session_state.tasas_actualizadas.get('DTF', 13.25)
+                    elif instrumento == 'Fondo Corto Plazo':
+                        tasa_default = st.session_state.tasas_actualizadas.get('IBR', 12.80) + 0.5
+                    elif instrumento == 'Fondo Liquidez':
+                        tasa_default = st.session_state.tasas_actualizadas.get('IBR', 12.80)
+                    else:  # Cuenta Remunerada
+                        tasa_default = 4.5
+                
                 tasa_ea = st.number_input(
                     "📈 Tasa EA (%)",
                     min_value=0.0,
                     max_value=30.0,
-                    value=13.5 if instrumento == 'CDT' else (11.0 if 'Fondo' in instrumento else 4.5),
+                    value=float(tasa_default),
                     step=0.1,
                     format="%.2f",
                     key=f"inv_{idx}_tasa"
@@ -1369,8 +1399,12 @@ def render_inversiones_temporales(estado: Dict):
             
             # Agregar barras para cada inversión
             for i, inv_data in enumerate(timeline_data['inversiones']):
+                # Convertir fechas a datetime para Plotly
+                fecha_inicio_dt = datetime.combine(inv_data['fecha_inicio'], datetime.min.time())
+                fecha_venc_dt = datetime.combine(inv_data['fecha_vencimiento'], datetime.min.time())
+                
                 # Calcular duración en días para la barra
-                duracion = (inv_data['fecha_vencimiento'] - inv_data['fecha_inicio']).days
+                duracion_days = (fecha_venc_dt - fecha_inicio_dt).days
                 
                 # Color según instrumento
                 color_map = {
@@ -1381,12 +1415,12 @@ def render_inversiones_temporales(estado: Dict):
                 }
                 color = color_map.get(inv_data['instrumento'], '#7f7f7f')
                 
-                # Barra horizontal
+                # Barra horizontal (usando timedelta en milisegundos)
                 fig.add_trace(go.Bar(
                     name=inv_data['nombre'],
                     y=[inv_data['nombre']],
-                    x=[duracion],
-                    base=[inv_data['fecha_inicio']],
+                    x=[duracion_days * 24 * 60 * 60 * 1000],  # Convertir días a milisegundos
+                    base=[fecha_inicio_dt],
                     orientation='h',
                     marker=dict(color=color),
                     text=[f"{formatear_moneda(inv_data['monto'])}<br>+{formatear_moneda(inv_data['retorno_neto'])}"],
@@ -1401,8 +1435,9 @@ def render_inversiones_temporales(estado: Dict):
                 ))
             
             # Línea vertical "Hoy"
+            fecha_inicio_dt = datetime.combine(timeline_data['fecha_inicio'], datetime.min.time())
             fig.add_vline(
-                x=timeline_data['fecha_inicio'],
+                x=fecha_inicio_dt,
                 line_dash="dot",
                 line_color="gray",
                 line_width=2,
