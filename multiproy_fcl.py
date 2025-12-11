@@ -1013,6 +1013,7 @@ def main():
             consolidador.consolidar()
             st.session_state.consolidador = consolidador
             st.session_state.gastos_fijos_mensuales = gastos_fijos_mensuales
+            st.session_state.semanas_futuro = semanas_futuro
             st.success("✅ Consolidación completada")
             st.rerun()
     
@@ -1020,16 +1021,25 @@ def main():
     if 'consolidador' in st.session_state:
         consolidador_previo = st.session_state.consolidador
         
-        # Verificar si cambiaron los gastos fijos
+        # Verificar si cambiaron los parámetros
         gastos_fijos_previos = st.session_state.get('gastos_fijos_mensuales', gastos_fijos_mensuales)
+        semanas_futuro_previas = st.session_state.get('semanas_futuro', semanas_futuro)
         
-        if gastos_fijos_previos != gastos_fijos_mensuales:
-            # Reconsolidar con nuevos gastos fijos
-            with st.spinner("Recalculando con nuevos gastos fijos..."):
-                consolidador_previo.gastos_fijos_semanales = gastos_fijos_mensuales / 4.33
+        cambio_gastos = gastos_fijos_previos != gastos_fijos_mensuales
+        cambio_horizonte = semanas_futuro_previas != semanas_futuro
+        
+        if cambio_gastos or cambio_horizonte:
+            # Reconsolidar con nuevos parámetros
+            with st.spinner("Recalculando..."):
+                if cambio_gastos:
+                    consolidador_previo.gastos_fijos_semanales = gastos_fijos_mensuales / 4.33
+                if cambio_horizonte:
+                    consolidador_previo.semanas_futuro = semanas_futuro
+                
                 consolidador_previo.consolidar()
                 st.session_state.consolidador = consolidador_previo
                 st.session_state.gastos_fijos_mensuales = gastos_fijos_mensuales
+                st.session_state.semanas_futuro = semanas_futuro
         
         consolidador = st.session_state.consolidador
         
