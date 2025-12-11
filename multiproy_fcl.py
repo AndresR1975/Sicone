@@ -586,12 +586,20 @@ def render_timeline_consolidado(consolidador: ConsolidadorMultiproyecto):
         st.warning("No hay datos para visualizar")
         return
     
+    # Convertir fechas de Pandas Timestamp a Python datetime para Plotly
+    fechas_py = []
+    for f in df['fecha']:
+        if hasattr(f, 'to_pydatetime'):
+            fechas_py.append(f.to_pydatetime())
+        else:
+            fechas_py.append(f)
+    
     # Crear figura
     fig = go.Figure()
     
     # Línea de saldo consolidado
     fig.add_trace(go.Scatter(
-        x=df['fecha'],
+        x=fechas_py,
         y=df['saldo_consolidado'],
         mode='lines',
         name='Saldo Consolidado',
@@ -605,7 +613,7 @@ def render_timeline_consolidado(consolidador: ConsolidadorMultiproyecto):
     
     # Línea de margen de protección
     fig.add_trace(go.Scatter(
-        x=df['fecha'],
+        x=fechas_py,
         y=df['margen_proteccion'],
         mode='lines',
         name='Margen de Protección',
@@ -618,9 +626,15 @@ def render_timeline_consolidado(consolidador: ConsolidadorMultiproyecto):
     # Marcar semana actual
     semana_actual_data = df[df['semana_consolidada'] == consolidador.semana_actual_consolidada]
     if len(semana_actual_data) > 0:
-        # Usar fecha directamente del DataFrame
+        # Convertir Pandas Timestamp a Python datetime puro
+        fecha_ts = semana_actual_data['fecha'].iloc[0]
+        if hasattr(fecha_ts, 'to_pydatetime'):
+            fecha_actual = fecha_ts.to_pydatetime()
+        else:
+            fecha_actual = fecha_ts
+        
         fig.add_vline(
-            x=semana_actual_data['fecha'].iloc[0],
+            x=fecha_actual,
             line_dash="dot",
             line_color="gray",
             annotation_text="Hoy",
@@ -628,9 +642,9 @@ def render_timeline_consolidado(consolidador: ConsolidadorMultiproyecto):
         )
     
     # Sombrear zona de riesgo (debajo del margen)
-    # Usar fechas directamente del DataFrame
+    # Usar fechas_py ya convertidas anteriormente
     fig.add_trace(go.Scatter(
-        x=df['fecha'].tolist() + df['fecha'].tolist()[::-1],
+        x=fechas_py + fechas_py[::-1],
         y=[0]*len(df) + df['margen_proteccion'].tolist()[::-1],
         fill='toself',
         fillcolor='rgba(214, 39, 40, 0.1)',
