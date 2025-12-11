@@ -84,9 +84,11 @@ class ConsolidadorMultiproyecto:
     Clase para consolidar y analizar múltiples proyectos
     """
     
-    def __init__(self, semanas_futuro: int = SEMANAS_FUTURO_DEFAULT):
+    def __init__(self, semanas_futuro: int = SEMANAS_FUTURO_DEFAULT, gastos_fijos_mensuales: float = 50_000_000):
         self.proyectos = []
         self.semanas_futuro = semanas_futuro
+        self.gastos_fijos_mensuales = gastos_fijos_mensuales
+        self.gastos_fijos_semanales = gastos_fijos_mensuales / 4.33  # Promedio semanas/mes
         self.df_consolidado = None
         self.fecha_inicio_empresa = None
         self.fecha_actual = date.today()
@@ -119,6 +121,35 @@ class ConsolidadorMultiproyecto:
                 'archivo': os.path.basename(ruta_json)
             }
             
+            # Calcular excedente del proyecto
+            if 'totales' in data and 'egresos' in data:
+                presupuesto_egresos = data['totales'].get('total_egresos', 0)
+                ejecutado = sum(eg.get('total', 0) for eg in data['egresos'].get('egresos_semanales', []))
+                proyecto_info['presupuesto_egresos'] = presupuesto_egresos
+                proyecto_info['ejecutado'] = ejecutado
+                proyecto_info['excedente'] = presupuesto_egresos - ejecutado
+            else:
+                proyecto_info['presupuesto_egresos'] = 0
+                proyecto_info['ejecutado'] = 0
+                proyecto_info['excedente'] = 0
+            
+            # Obtener saldo real de tesorería (última semana)
+            if 'tesoreria' in data and 'metricas_semanales' in data['tesoreria']:
+                metricas = data['tesoreria']['metricas_semanales']
+                if metricas:
+                    ultima_metrica = metricas[-1]
+                    proyecto_info['saldo_real_tesoreria'] = ultima_metrica.get('saldo_final_real', 0)
+                    proyecto_info['burn_rate_real'] = ultima_metrica.get('burn_rate_acum', 0)
+                else:
+                    proyecto_info['saldo_real_tesoreria'] = 0
+                    proyecto_info['burn_rate_real'] = 0
+            else:
+                proyecto_info['saldo_real_tesoreria'] = 0
+                proyecto_info['burn_rate_real'] = 0
+            
+            # Capital disponible del proyecto
+            proyecto_info['capital_disponible'] = proyecto_info['excedente'] + proyecto_info['saldo_real_tesoreria']
+            
             # Determinar estado del proyecto
             if proyecto_info['fecha_inicio'] > self.fecha_actual:
                 proyecto_info['estado'] = 'EN_COTIZACIÓN'
@@ -127,9 +158,6 @@ class ConsolidadorMultiproyecto:
                 tiene_egresos = data.get('egresos') and data['egresos'].get('egresos_semanales')
                 tiene_cartera = data.get('cartera') and data['cartera']
                 tiene_tesoreria = data.get('tesoreria') and data['tesoreria'].get('metricas_semanales')
-                
-                # Debug info
-                st.caption(f"   📊 {proyecto_info['nombre']}: Egresos={bool(tiene_egresos)}, Cartera={bool(tiene_cartera)}, Tesorería={bool(tiene_tesoreria)}")
                 
                 if tiene_egresos or tiene_cartera or tiene_tesoreria:
                     proyecto_info['estado'] = 'ACTIVO'
@@ -168,29 +196,10 @@ class ConsolidadorMultiproyecto:
         # Calcular métricas consolidadas
         df_consolidado = self._calcular_metricas_consolidadas(df_consolidado)
         
-        # Debug: Mostrar resumen de datos consolidados
-        st.caption(f"📊 **Debug Consolidación Final:**")
-        st.caption(f"   • Semanas totales: {len(df_consolidado)}")
-        st.caption(f"   • Semana actual: {self.semana_actual_consolidada}")
-        
-        if len(df_consolidado) > 0:
-            primera_semana_valida = None
-            for idx in range(min(5, len(df_consolidado))):
-                if df_consolidado['saldo_proy_total'].iloc[idx] > 0:
-                    primera_semana_valida = idx
-                    break
-            
-            if primera_semana_valida is not None:
-                st.caption(f"   • Primera semana con datos (idx {primera_semana_valida}):")
-                st.caption(f"      - Saldo proy total: ${df_consolidado['saldo_proy_total'].iloc[primera_semana_valida]:,.0f}")
-                st.caption(f"      - Saldo real total: ${df_consolidado['saldo_real_total'].iloc[primera_semana_valida]:,.0f}")
-                st.caption(f"      - Saldo consolidado: ${df_consolidado['saldo_consolidado'].iloc[primera_semana_valida]:,.0f}")
-                st.caption(f"      - Egresos proy total: ${df_consolidado['egresos_proy_total'].iloc[primera_semana_valida]:,.0f}")
-            else:
-                st.warning("⚠️ No se encontraron semanas con saldo_proy_total > 0")
-                st.caption(f"   Primeras 3 semanas saldo_proy_total:")
-                for idx in range(min(3, len(df_consolidado))):
-                    st.caption(f"      - Semana {idx+1}: ${df_consolidado['saldo_proy_total'].iloc[idx]:,.0f}")
+        # Debug: Mostrar resumen de datos consolidados (comentado para producción)
+        # st.caption(f"📊 **Debug Consolidación Final:**")
+        # st.caption(f"   • Semanas totales: {len(df_consolidado)}")
+        # st.caption(f"   • Semana actual: {self.semana_actual_consolidada}")
         
         self.df_consolidado = df_consolidado
     
@@ -275,8 +284,8 @@ class ConsolidadorMultiproyecto:
         # Mapear proyección semanal
         proyeccion = data.get('proyeccion_semanal', [])
         
-        # DEBUG
-        st.caption(f"   🔍 Mapeando {nombre}: {len(proyeccion)} semanas de proyección")
+        # DEBUG (comentado para producción)
+        # st.caption(f"   🔍 Mapeando {nombre}: {len(proyeccion)} semanas de proyección")
         
         semanas_mapeadas = 0
         for sem_data in proyeccion:
@@ -292,12 +301,12 @@ class ConsolidadorMultiproyecto:
                     df.at[idx_row, col_egresos_proy] = sem_data.get('Total_Egresos', 0)
                     semanas_mapeadas += 1
         
-        # DEBUG
-        st.caption(f"      ✓ {semanas_mapeadas} semanas mapeadas correctamente")
-        if semanas_mapeadas > 0 and semana_inicio_rel <= len(df):
-            idx_primera = semana_inicio_rel - 1
-            if idx_primera >= 0 and idx_primera < len(df):
-                st.caption(f"      Ejemplo semana 1: Saldo=${df.at[idx_primera, col_saldo_proy]:,.0f}")
+        # DEBUG (comentado para producción)
+        # st.caption(f"      ✓ {semanas_mapeadas} semanas mapeadas correctamente")
+        # if semanas_mapeadas > 0 and semana_inicio_rel <= len(df):
+        #     idx_primera = semana_inicio_rel - 1
+        #     if idx_primera >= 0 and idx_primera < len(df):
+        #         st.caption(f"      Ejemplo semana 1: Saldo=${df.at[idx_primera, col_saldo_proy]:,.0f}")
         
         # Mapear datos reales (si existen)
         if proyecto['estado'] == 'ACTIVO':
@@ -337,11 +346,11 @@ class ConsolidadorMultiproyecto:
         cols_egresos_proy = [c for c in df.columns if c.startswith('egresos_proy_')]
         cols_egresos_real = [c for c in df.columns if c.startswith('egresos_real_')]
         
-        # DEBUG: Mostrar columnas encontradas
-        st.caption(f"🔍 **Debug Columnas:**")
-        st.caption(f"   • Saldo proy: {len(cols_saldo_proy)} columnas")
-        st.caption(f"   • Egresos proy: {len(cols_egresos_proy)} columnas")
-        st.caption(f"   • Egresos real: {len(cols_egresos_real)} columnas")
+        # DEBUG: Mostrar columnas encontradas (comentado para producción)
+        # st.caption(f"🔍 **Debug Columnas:**")
+        # st.caption(f"   • Saldo proy: {len(cols_saldo_proy)} columnas")
+        # st.caption(f"   • Egresos proy: {len(cols_egresos_proy)} columnas")
+        # st.caption(f"   • Egresos real: {len(cols_egresos_real)} columnas")
         
         # Sumar por tipo
         df['saldo_proy_total'] = df[cols_saldo_proy].sum(axis=1)
@@ -350,14 +359,12 @@ class ConsolidadorMultiproyecto:
         df['egresos_proy_total'] = df[cols_egresos_proy].sum(axis=1)
         df['egresos_real_total'] = df[cols_egresos_real].sum(axis=1)
         
-        # DEBUG: Mostrar valores de primera fila de cada proyecto
-        st.caption(f"🔍 **Debug Primera Semana (valores individuales):**")
-        for col in cols_saldo_proy:
-            valor = df[col].iloc[0]
-            st.caption(f"   • {col}: ${valor:,.0f}")
-        
-        # DEBUG: Mostrar suma
-        st.caption(f"   • SUMA saldo_proy_total: ${df['saldo_proy_total'].iloc[0]:,.0f}")
+        # DEBUG: Mostrar valores de primera fila de cada proyecto (comentado para producción)
+        # st.caption(f"🔍 **Debug Primera Semana (valores individuales):**")
+        # for col in cols_saldo_proy:
+        #     valor = df[col].iloc[0]
+        #     st.caption(f"   • {col}: ${valor:,.0f}")
+        # st.caption(f"   • SUMA saldo_proy_total: ${df['saldo_proy_total'].iloc[0]:,.0f}")
         
         # Saldo consolidado: SIEMPRE usa proyectado como base
         # Solo en semanas históricas con datos reales, calcular saldo basado en flujo real
@@ -401,8 +408,35 @@ class ConsolidadorMultiproyecto:
         
         df.loc[df['es_futura'], 'burn_rate'] = ultimo_burn_rate
         
-        # Margen de protección (Burn Rate * 8 semanas)
-        df['margen_proteccion'] = df['burn_rate'] * 8
+        # Agregar gastos fijos al burn rate para cálculos empresariales
+        # (NO se modifica burn_rate para no afectar gráfico de proyectos)
+        df['gastos_fijos_semanales'] = self.gastos_fijos_semanales
+        
+        # Calcular saldo ajustado con gastos fijos para proyección futura
+        df['saldo_consolidado_ajustado'] = df['saldo_consolidado'].copy()
+        
+        # Para semanas futuras, restar gastos fijos acumulados
+        if len(df[df['es_futura']]) > 0:
+            # Obtener índice de primera semana futura
+            idx_primera_futura = df[df['es_futura']].index[0]
+            saldo_base = df.at[idx_primera_futura - 1, 'saldo_consolidado'] if idx_primera_futura > 0 else df['saldo_consolidado'].iloc[0]
+            
+            # Proyectar saldo con gastos fijos
+            for idx in df[df['es_futura']].index:
+                semanas_desde_hoy = idx - idx_primera_futura + 1
+                gastos_fijos_acum = self.gastos_fijos_semanales * semanas_desde_hoy
+                egresos_proy_acum = df.loc[idx_primera_futura:idx, 'egresos_proy_total'].sum()
+                ingresos_proy_acum = df.loc[idx_primera_futura:idx, 'ingresos_proy_total'].sum()
+                
+                df.at[idx, 'saldo_consolidado_ajustado'] = (
+                    saldo_base + 
+                    ingresos_proy_acum - 
+                    egresos_proy_acum - 
+                    gastos_fijos_acum
+                )
+        
+        # Margen de protección (Burn Rate de proyectos * 8 semanas + Gastos Fijos * 8 semanas)
+        df['margen_proteccion'] = (df['burn_rate'] + self.gastos_fijos_semanales) * 8
         
         # Excedente invertible
         df['excedente_invertible'] = df['saldo_consolidado'] - df['margen_proteccion']
@@ -454,14 +488,36 @@ class ConsolidadorMultiproyecto:
             estado = proyecto['estado']
             estados[estado] = estados.get(estado, 0) + 1
         
+        # Calcular capital total real (excedentes + saldos de tesorería)
+        total_excedentes = sum(p.get('excedente', 0) for p in self.proyectos)
+        total_saldos_reales = sum(p.get('saldo_real_tesoreria', 0) for p in self.proyectos)
+        capital_total_real = total_excedentes + total_saldos_reales
+        
+        # Burn rate consolidado (proyectos + gastos fijos)
+        burn_rate_proyectos = float(row['burn_rate'])
+        burn_rate_total = burn_rate_proyectos + self.gastos_fijos_semanales
+        
+        # Margen de protección (8 semanas de burn rate total)
+        margen_proteccion = burn_rate_total * 8
+        
+        # Excedente invertible
+        excedente_invertible = capital_total_real - margen_proteccion
+        
+        # Estado general basado en capital real
+        estado_general = determinar_estado_liquidez(capital_total_real, margen_proteccion)
+        
         return {
             'semana': int(row['semana_consolidada']),
             'fecha': row['fecha'],
-            'saldo_total': float(row['saldo_consolidado']),
-            'burn_rate': float(row['burn_rate']),
-            'margen_proteccion': float(row['margen_proteccion']),
-            'excedente_invertible': float(row['excedente_invertible']),
-            'estado_general': row['estado_general'],
+            'saldo_total': float(capital_total_real),  # ← Capital real
+            'total_excedentes': float(total_excedentes),
+            'total_saldos_reales': float(total_saldos_reales),
+            'burn_rate': float(burn_rate_total),  # ← Incluye gastos fijos
+            'burn_rate_proyectos': float(burn_rate_proyectos),
+            'gastos_fijos_semanales': float(self.gastos_fijos_semanales),
+            'margen_proteccion': float(margen_proteccion),
+            'excedente_invertible': float(excedente_invertible),
+            'estado_general': estado_general,
             'proyecto_critico': row['proyecto_critico'],
             'proyectos_activos': estados.get('ACTIVO', 0),
             'proyectos_cotizacion': estados.get('EN_COTIZACIÓN', 0),
@@ -484,8 +540,11 @@ def render_metricas_principales(estado: Dict):
         st.metric(
             "Saldo Total",
             formatear_moneda(estado['saldo_total']),
-            help="Saldo consolidado de todos los proyectos"
+            help="Capital Total Disponible = Excedentes + Saldos de Tesorería"
         )
+        # Desglose
+        st.caption(f"   💎 Excedentes: ${estado['total_excedentes']:,.0f}")
+        st.caption(f"   🏦 Saldos Reales: ${estado['total_saldos_reales']:,.0f}")
     
     with col2:
         color_estado = ESTADO_COLORES.get(estado['estado_general'], '#gray')
@@ -532,14 +591,17 @@ def render_metricas_cobertura(estado: Dict):
         st.metric(
             "Burn Rate Consolidado",
             f"{formatear_moneda(estado['burn_rate'])} / semana",
-            help="Promedio de gastos semanales (últimas 8 semanas)"
+            help="Gastos semanales: Proyectos + Gastos Fijos"
         )
+        # Desglose
+        st.caption(f"   Proyectos: ${estado['burn_rate_proyectos']:,.0f}")
+        st.caption(f"   Gastos Fijos: ${estado['gastos_fijos_semanales']:,.0f}")
     
     with col2:
         st.metric(
             "Margen Requerido (8 sem)",
             formatear_moneda(estado['margen_proteccion']),
-            help="Burn Rate × 8 semanas"
+            help="Burn Rate Total × 8 semanas"
         )
     
     with col3:
@@ -622,6 +684,30 @@ def render_timeline_consolidado(consolidador: ConsolidadorMultiproyecto):
                       'Monto: $%{y:,.0f}<br>' +
                       '<extra></extra>'
     ))
+    
+    # Línea de proyección con gastos fijos (solo semanas futuras)
+    df_futuro = df[df['es_futura']].copy()
+    if len(df_futuro) > 0:
+        # Agregar el último punto histórico para conectar la línea
+        idx_ultima_historica = df[df['es_historica']].index[-1]
+        df_transicion = pd.concat([
+            df.iloc[[idx_ultima_historica]],
+            df_futuro
+        ])
+        
+        fechas_futuro = [fechas_py[i] for i in df_transicion.index]
+        
+        fig.add_trace(go.Scatter(
+            x=fechas_futuro,
+            y=df_transicion['saldo_consolidado_ajustado'],
+            mode='lines',
+            name='Proyección con Gastos Fijos',
+            line=dict(color='#ff7f0e', width=2, dash='dot'),
+            hovertemplate='<b>Proyección Ajustada</b><br>' +
+                          'Fecha: %{x|%Y-%m-%d}<br>' +
+                          'Saldo: $%{y:,.0f}<br>' +
+                          '<extra></extra>'
+        ))
     
     # Marcar semana actual
     semana_actual_data = df[df['semana_consolidada'] == consolidador.semana_actual_consolidada]
@@ -708,6 +794,20 @@ def main():
         )
         
         st.markdown("---")
+        
+        gastos_fijos_mensuales = st.number_input(
+            "💼 Gastos Fijos Mensuales",
+            min_value=0,
+            value=50_000_000,
+            step=1_000_000,
+            format="%d",
+            help="Gastos fijos empresariales (nómina, arriendo, servicios, etc.)"
+        )
+        
+        gastos_fijos_semanales = gastos_fijos_mensuales / 4.33
+        st.caption(f"   ≈ ${gastos_fijos_semanales:,.0f} / semana")
+        
+        st.markdown("---")
         st.markdown("### 📁 Proyectos Cargados")
     
     # Paso 1: Cargar proyectos
@@ -725,7 +825,10 @@ def main():
         return
     
     # Cargar proyectos
-    consolidador = ConsolidadorMultiproyecto(semanas_futuro=semanas_futuro)
+    consolidador = ConsolidadorMultiproyecto(
+        semanas_futuro=semanas_futuro,
+        gastos_fijos_mensuales=gastos_fijos_mensuales
+    )
     
     with st.spinner("Cargando proyectos..."):
         proyectos_cargados = 0
