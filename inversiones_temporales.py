@@ -41,14 +41,26 @@ TASAS_MERCADO = {
         360: (14.0, 15.0),
     },
     'Fondo Liquidez': {
-        1: (10.0, 11.0),  # Diario
+        30: (10.0, 11.0),  # Mínimo 30 días para rentabilidad positiva
+        60: (10.0, 11.0),
+        90: (10.0, 11.0),
     },
     'Fondo Corto Plazo': {
-        1: (11.0, 13.0),  # Diario
+        30: (11.0, 13.0),  # Mínimo 30 días para rentabilidad positiva
+        60: (11.0, 13.0),
+        90: (11.0, 13.0),
     },
     'Cuenta Remunerada': {
-        1: (3.0, 6.0),  # Diario
+        1: (3.0, 6.0),  # Flexible pero tasa muy baja
     },
+}
+
+# Plazos mínimos recomendados por instrumento (para rentabilidad positiva)
+PLAZOS_MINIMOS_RECOMENDADOS = {
+    'CDT': 30,  # Sin comisión, pero GMF (0.4%) requiere mínimo 30 días
+    'Fondo Liquidez': 30,  # Con comisión 0.5% + GMF = mínimo 30 días
+    'Fondo Corto Plazo': 30,  # Con comisión 0.8% + GMF = mínimo 30 días
+    'Cuenta Remunerada': 1,  # Sin comisión, sin plazo mínimo (pero tasa muy baja)
 }
 
 
@@ -447,4 +459,59 @@ def calcular_resumen_portafolio(inversiones: List[Inversion]) -> Dict:
         'roi_promedio_ponderado': roi_promedio,
         'plazo_promedio_ponderado': plazo_ponderado,
         'numero_inversiones': len(inversiones)
+    }
+
+
+def validar_rentabilidad_inversion(inversion: Inversion) -> Dict:
+    """
+    Valida si una inversión es rentable y genera advertencias
+    
+    Args:
+        inversion: Inversión a validar
+    
+    Returns:
+        Dict con resultado de validación y advertencias
+    """
+    resultado = inversion.calcular_retorno_neto()
+    retorno_neto = resultado['retorno_neto']
+    plazo_minimo = PLAZOS_MINIMOS_RECOMENDADOS.get(inversion.instrumento, 30)
+    
+    alertas = []
+    
+    # Alerta crítica: Retorno negativo
+    if retorno_neto < 0:
+        alertas.append({
+            'nivel': 'CRÍTICO',
+            'emoji': '🔴',
+            'mensaje': 'Esta inversión genera PÉRDIDA',
+            'detalle': f'Retorno neto: ${retorno_neto:,.0f} (descuentos superan ganancias)',
+            'recomendacion': f'Aumente el plazo a mínimo {plazo_minimo} días o incremente la tasa'
+        })
+    
+    # Alerta advertencia: Plazo menor al recomendado
+    elif inversion.plazo_dias < plazo_minimo:
+        alertas.append({
+            'nivel': 'ADVERTENCIA',
+            'emoji': '🟡',
+            'mensaje': f'Plazo menor al recomendado para {inversion.instrumento}',
+            'detalle': f'Plazo actual: {inversion.plazo_dias} días | Mínimo recomendado: {plazo_minimo} días',
+            'recomendacion': f'Considere extender a {plazo_minimo}+ días para mejor rentabilidad'
+        })
+    
+    # Alerta info: Rentabilidad marginal
+    elif resultado['roi_neto'] < 0.5:  # Menos de 0.5% de retorno
+        alertas.append({
+            'nivel': 'INFO',
+            'emoji': 'ℹ️',
+            'mensaje': 'Rentabilidad marginal',
+            'detalle': f'ROI neto: {resultado["roi_neto"]:.2f}% (muy bajo)',
+            'recomendacion': 'Considere aumentar plazo o buscar mejor tasa'
+        })
+    
+    return {
+        'es_rentable': retorno_neto > 0,
+        'retorno_neto': retorno_neto,
+        'roi_neto': resultado['roi_neto'],
+        'alertas': alertas,
+        'nivel_general': alertas[0]['nivel'] if alertas else 'OK'
     }

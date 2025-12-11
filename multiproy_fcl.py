@@ -29,6 +29,7 @@ try:
     from inversiones_temporales import (
         Inversion, calcular_excedente_invertible, analizar_riesgo_liquidez,
         generar_recomendaciones, get_info_instrumento, calcular_resumen_portafolio,
+        validar_rentabilidad_inversion, PLAZOS_MINIMOS_RECOMENDADOS,
         TASAS_REFERENCIA, COMISIONES, RETENCION_FUENTE, GMF
     )
     INVERSIONES_DISPONIBLES = True
@@ -1032,13 +1033,16 @@ def render_inversiones_temporales(estado: Dict):
                 )
             
             with col_inst2:
-                # Plazos disponibles según instrumento
+                # Plazos disponibles según instrumento (plazos mínimos rentables)
                 if instrumento == 'CDT':
                     plazos_disponibles = [30, 60, 90, 180, 360]
                     plazo_default = 90 if idx == 1 else (180 if idx == 2 else 60)
-                else:
-                    plazos_disponibles = [1, 7, 15, 30, 60, 90]
-                    plazo_default = 1 if instrumento in ['Fondo Liquidez', 'Cuenta Remunerada'] else 30
+                elif instrumento in ['Fondo Liquidez', 'Fondo Corto Plazo']:
+                    plazos_disponibles = [30, 60, 90]  # Eliminados 1, 7, 15 días
+                    plazo_default = 30 if idx == 1 else 60
+                else:  # Cuenta Remunerada
+                    plazos_disponibles = [1, 7, 15, 30, 60, 90]  # Flexible pero tasa baja
+                    plazo_default = 1
                 
                 plazo = st.selectbox(
                     "⏱️ Plazo (días)",
@@ -1046,6 +1050,11 @@ def render_inversiones_temporales(estado: Dict):
                     index=plazos_disponibles.index(plazo_default) if plazo_default in plazos_disponibles else 0,
                     key=f"inv_{idx}_plazo"
                 )
+                
+                # Mostrar plazo mínimo recomendado
+                plazo_minimo = PLAZOS_MINIMOS_RECOMENDADOS.get(instrumento, 30)
+                if plazo < plazo_minimo and instrumento != 'Cuenta Remunerada':
+                    st.caption(f"   ⚠️ Mínimo recomendado: {plazo_minimo} días")
             
             # Monto y tasa
             col_monto1, col_monto2 = st.columns(2)
@@ -1095,6 +1104,20 @@ def render_inversiones_temporales(estado: Dict):
                     instrumento=instrumento,
                     comision_anual=comision
                 )
+                
+                # Validar rentabilidad
+                validacion = validar_rentabilidad_inversion(inv)
+                
+                # Mostrar alertas ANTES de las métricas
+                if validacion['alertas']:
+                    for alerta in validacion['alertas']:
+                        if alerta['nivel'] == 'CRÍTICO':
+                            st.error(f"{alerta['emoji']} **{alerta['mensaje']}**\n\n{alerta['detalle']}\n\n💡 {alerta['recomendacion']}")
+                        elif alerta['nivel'] == 'ADVERTENCIA':
+                            st.warning(f"{alerta['emoji']} **{alerta['mensaje']}**\n\n{alerta['detalle']}\n\n💡 {alerta['recomendacion']}")
+                        else:
+                            st.info(f"{alerta['emoji']} **{alerta['mensaje']}**\n\n{alerta['detalle']}\n\n💡 {alerta['recomendacion']}")
+                
                 inversiones.append(inv)
                 
                 # Mostrar cálculos
@@ -1121,17 +1144,25 @@ def render_inversiones_temporales(estado: Dict):
                     )
                 
                 with col_r3:
+                    # Color ROJO si retorno negativo, VERDE si positivo
+                    retorno_neto = resultado['retorno_neto']
+                    roi_neto = resultado['roi_neto']
+                    
                     st.metric(
                         "💰 Retorno Neto",
-                        formatear_moneda(resultado['retorno_neto']),
-                        delta=f"+{resultado['roi_neto']:.2f}%",
+                        formatear_moneda(retorno_neto),
+                        delta=f"{'+' if roi_neto >= 0 else ''}{roi_neto:.2f}%",
+                        delta_color="normal" if retorno_neto >= 0 else "inverse",
                         help="Después de todos los descuentos"
                     )
                 
                 with col_r4:
+                    tasa_efectiva = resultado['tasa_efectiva_neta']
                     st.metric(
                         "Tasa Efectiva",
-                        f"{resultado['tasa_efectiva_neta']:.2f}% EA",
+                        f"{tasa_efectiva:.2f}% EA",
+                        delta=f"{tasa_efectiva - tasa_ea:.2f}% vs nominal" if tasa_efectiva < tasa_ea else None,
+                        delta_color="inverse" if tasa_efectiva < tasa_ea else "normal",
                         help="Tasa real después de descuentos"
                     )
             
