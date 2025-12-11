@@ -212,17 +212,23 @@ class ConsolidadorMultiproyecto:
     def _crear_eje_temporal(self) -> pd.DataFrame:
         """Crea el eje temporal consolidado"""
         semanas = list(range(1, self.semana_fin_consolidada + 1))
+        
+        # Crear fechas directamente como datetime (no date)
+        # Convertir fecha_inicio_empresa a datetime primero
+        if isinstance(self.fecha_inicio_empresa, date) and not isinstance(self.fecha_inicio_empresa, datetime):
+            fecha_base = datetime.combine(self.fecha_inicio_empresa, datetime.min.time())
+        else:
+            fecha_base = self.fecha_inicio_empresa
+        
+        # Generar fechas como datetime
         fechas = [
-            self.fecha_inicio_empresa + timedelta(days=(s-1)*7)
+            fecha_base + timedelta(days=(s-1)*7)
             for s in semanas
         ]
         
-        # Convertir a datetime para compatibilidad con Plotly
-        fechas_dt = [datetime.combine(f, datetime.min.time()) for f in fechas]
-        
         df = pd.DataFrame({
             'semana_consolidada': semanas,
-            'fecha': fechas_dt,  # Usar datetime en lugar de date
+            'fecha': pd.to_datetime(fechas),  # Asegurar que son pandas datetime
             'es_historica': [s <= self.semana_actual_consolidada for s in semanas],
             'es_futura': [s > self.semana_actual_consolidada for s in semanas]
         })
@@ -612,10 +618,9 @@ def render_timeline_consolidado(consolidador: ConsolidadorMultiproyecto):
     # Marcar semana actual
     semana_actual_data = df[df['semana_consolidada'] == consolidador.semana_actual_consolidada]
     if len(semana_actual_data) > 0:
-        # Convertir Timestamp a datetime de Python para evitar errores
-        fecha_actual = pd.to_datetime(semana_actual_data['fecha'].iloc[0]).to_pydatetime()
+        # Usar fecha directamente del DataFrame
         fig.add_vline(
-            x=fecha_actual,
+            x=semana_actual_data['fecha'].iloc[0],
             line_dash="dot",
             line_color="gray",
             annotation_text="Hoy",
@@ -623,10 +628,9 @@ def render_timeline_consolidado(consolidador: ConsolidadorMultiproyecto):
         )
     
     # Sombrear zona de riesgo (debajo del margen)
-    # Convertir fechas a lista de datetime de Python
-    fechas_list = [pd.to_datetime(f).to_pydatetime() for f in df['fecha']]
+    # Usar fechas directamente del DataFrame
     fig.add_trace(go.Scatter(
-        x=fechas_list + fechas_list[::-1],
+        x=df['fecha'].tolist() + df['fecha'].tolist()[::-1],
         y=[0]*len(df) + df['margen_proteccion'].tolist()[::-1],
         fill='toself',
         fillcolor='rgba(214, 39, 40, 0.1)',
