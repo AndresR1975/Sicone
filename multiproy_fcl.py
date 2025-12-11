@@ -633,12 +633,23 @@ def render_timeline_consolidado(consolidador: ConsolidadorMultiproyecto):
         else:
             fecha_actual = fecha_ts
         
+        # Usar add_vline SIN annotation_text para evitar error de sum()
         fig.add_vline(
             x=fecha_actual,
             line_dash="dot",
             line_color="gray",
-            annotation_text="Hoy",
-            annotation_position="top"
+            line_width=2
+        )
+        
+        # Agregar anotación manualmente en lugar de usar annotation_text
+        fig.add_annotation(
+            x=fecha_actual,
+            y=1,
+            yref="paper",
+            text="Hoy",
+            showarrow=False,
+            yshift=10,
+            font=dict(size=10, color="gray")
         )
     
     # Sombrear zona de riesgo (debajo del margen)
