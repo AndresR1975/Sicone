@@ -511,7 +511,9 @@ class ConsolidadorMultiproyecto:
                 for proyecto in self.proyectos:
                     # Calcular semana del proyecto
                     fecha_inicio = proyecto['fecha_inicio']
-                    fecha_semana = self.fecha_inicio_empresa + timedelta(days=(semana_consolidada-1)*7)
+                    # Convertir a int() para evitar error con numpy.int64
+                    semana_cons_int = int(semana_consolidada)
+                    fecha_semana = self.fecha_inicio_empresa + timedelta(days=(semana_cons_int-1)*7)
                     semana_proyecto = ((fecha_semana - fecha_inicio).days // 7) + 1
                     
                     # Calcular presupuesto restante
