@@ -1362,6 +1362,38 @@ def render_inversiones_temporales(estado: Dict):
                 f"{resumen['plazo_promedio_ponderado']:.0f} días"
             )
         
+        # Validación: Monto total vs Excedente disponible
+        excedente_disponible = excedente_info['excedente_invertible']
+        porcentaje_usado = (monto_total_inv / excedente_disponible * 100) if excedente_disponible > 0 else 0
+        
+        if monto_total_inv > excedente_disponible:
+            # SOBRE-INVERSIÓN - Alerta crítica
+            exceso = monto_total_inv - excedente_disponible
+            st.error(
+                f"🚨 **ALERTA CRÍTICA:** Total invertido ({formatear_moneda(monto_total_inv)}) "
+                f"excede el excedente disponible ({formatear_moneda(excedente_disponible)}) "
+                f"por {formatear_moneda(exceso)} ({porcentaje_usado:.1f}% del excedente). "
+                f"Reducir montos para evitar comprometer liquidez operativa."
+            )
+        elif porcentaje_usado > 90:
+            # INVERSIÓN ALTA - Advertencia
+            st.warning(
+                f"⚠️ **ADVERTENCIA:** Estás invirtiendo {porcentaje_usado:.1f}% del excedente disponible. "
+                f"Considera mantener mayor reserva de liquidez."
+            )
+        elif porcentaje_usado > 75:
+            # INVERSIÓN MODERADA-ALTA - Info
+            st.info(
+                f"ℹ️ Invirtiendo {porcentaje_usado:.1f}% del excedente disponible. "
+                f"Liquidez remanente: {formatear_moneda(excedente_disponible - monto_total_inv)}."
+            )
+        else:
+            # INVERSIÓN SALUDABLE
+            st.success(
+                f"✅ Inversión saludable: {porcentaje_usado:.1f}% del excedente. "
+                f"Reserva disponible: {formatear_moneda(excedente_disponible - monto_total_inv)}."
+            )
+        
         # Análisis de riesgo
         st.markdown("#### ⚖️ Análisis de Riesgo de Liquidez")
         
@@ -1409,8 +1441,9 @@ def render_inversiones_temporales(estado: Dict):
         timeline_data = crear_timeline_vencimientos(inversiones)
         
         if timeline_data['inversiones']:
-            import plotly.express as px
             from datetime import datetime, date
+            import pandas as pd
+            import plotly.express as px
             
             # Preparar datos para plotly express
             df_timeline = []
@@ -1423,6 +1456,10 @@ def render_inversiones_temporales(estado: Dict):
                     fecha_inicio = datetime.combine(fecha_inicio, datetime.min.time())
                 if isinstance(fecha_venc, date) and not isinstance(fecha_venc, datetime):
                     fecha_venc = datetime.combine(fecha_venc, datetime.min.time())
+                
+                # Convertir a pd.Timestamp para compatibilidad total con px.timeline
+                fecha_inicio = pd.Timestamp(fecha_inicio)
+                fecha_venc = pd.Timestamp(fecha_venc)
                 
                 df_timeline.append({
                     'Inversión': inv_data['nombre'],
@@ -1450,13 +1487,18 @@ def render_inversiones_temporales(estado: Dict):
             # Invertir eje Y para que la primera inversión esté arriba
             fig.update_yaxes(autorange="reversed")
             
-            # Línea vertical "Hoy" - convertir también
+            # Línea vertical "Hoy" - usar timestamp para compatibilidad
             fecha_hoy = timeline_data['fecha_inicio']
+            
+            # Convertir a datetime si es necesario
             if isinstance(fecha_hoy, date) and not isinstance(fecha_hoy, datetime):
                 fecha_hoy = datetime.combine(fecha_hoy, datetime.min.time())
             
+            # Convertir a timestamp (milisegundos) para compatibilidad con px.timeline
+            fecha_hoy_ts = pd.Timestamp(fecha_hoy)
+            
             fig.add_vline(
-                x=fecha_hoy,
+                x=fecha_hoy_ts,
                 line_dash="dot",
                 line_color="gray",
                 line_width=2,
