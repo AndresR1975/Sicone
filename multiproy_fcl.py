@@ -1052,15 +1052,15 @@ def render_inversiones_temporales(estado: Dict):
                 
                 # Botón para aplicar
                 if st.button(f"Aplicar {rec['nombre']}", key=f"aplicar_rec_{idx}", use_container_width=True):
-                    # Guardar configuración en session_state
-                    st.session_state.estrategia_aplicada = rec
-                    
-                    # Pre-guardar valores para cada inversión
+                    # Forzar valores DIRECTAMENTE en los widget keys
+                    # Esto hace que los widgets se rendericen con estos valores
                     for inv_idx, dist in enumerate(rec['distribucion'], 1):
-                        st.session_state[f'inv_{inv_idx}_activa_value'] = True
-                        st.session_state[f'inv_{inv_idx}_instrumento_value'] = dist['instrumento']
-                        st.session_state[f'inv_{inv_idx}_plazo_value'] = dist['plazo']
-                        st.session_state[f'inv_{inv_idx}_monto_value'] = dist['monto']
+                        # Forzar valores en las keys que los widgets usan
+                        st.session_state[f'inv_{inv_idx}_activa'] = True
+                        st.session_state[f'inv_{inv_idx}_instrumento'] = dist['instrumento']
+                        st.session_state[f'inv_{inv_idx}_plazo'] = dist['plazo']
+                        st.session_state[f'inv_{inv_idx}_monto'] = int(dist['monto'])
+                        
                         # Tasa según instrumento
                         if dist['instrumento'] == 'CDT':
                             tasa_sugerida = st.session_state.tasas_actualizadas.get('DTF', 13.25)
@@ -1068,10 +1068,9 @@ def render_inversiones_temporales(estado: Dict):
                             tasa_sugerida = st.session_state.tasas_actualizadas.get('IBR', 12.80) + 0.5
                         else:
                             tasa_sugerida = st.session_state.tasas_actualizadas.get('IBR', 12.80)
-                        st.session_state[f'inv_{inv_idx}_tasa_value'] = tasa_sugerida
+                        st.session_state[f'inv_{inv_idx}_tasa'] = tasa_sugerida
                     
                     st.success(f"✅ Estrategia {rec['nombre']} aplicada")
-                    st.info("👇 Revisa los tabs de inversión abajo para ver la configuración")
                     st.rerun()
     else:
         st.info(recomendaciones[0]['mensaje'] if recomendaciones else "No hay recomendaciones disponibles")
@@ -1089,21 +1088,23 @@ def render_inversiones_temporales(estado: Dict):
     
     for idx, tab in enumerate([tab1, tab2, tab3], 1):
         with tab:
+            # ============================================
+            # PATRÓN CORRECTO STREAMLIT:
+            # 1. Inicializar session_state si no existe
+            # 2. Widget SIN value parameter, solo key
+            # 3. session_state tiene control total
+            # ============================================
+            
+            # Inicializar checkbox si no existe
+            if f'inv_{idx}_activa' not in st.session_state:
+                st.session_state[f'inv_{idx}_activa'] = (idx == 1)
+            
             col_inv1, col_inv2 = st.columns([2, 1])
             
             with col_inv1:
-                # Leer en orden: widget → estrategia → default
-                if f'inv_{idx}_activa' in st.session_state:
-                    activa_default = st.session_state[f'inv_{idx}_activa']
-                elif f'inv_{idx}_activa_value' in st.session_state:
-                    activa_default = st.session_state[f'inv_{idx}_activa_value']
-                else:
-                    activa_default = (idx == 1)
-                
                 activa = st.checkbox(
                     f"Activar Inversión {idx}",
-                    value=activa_default,
-                    key=f"inv_{idx}_activa"
+                    key=f"inv_{idx}_activa"  # Sin value=, session_state controla
                 )
             
             if not activa:
@@ -1114,49 +1115,58 @@ def render_inversiones_temporales(estado: Dict):
             col_inst1, col_inst2 = st.columns(2)
             
             with col_inst1:
-                # Leer en orden: widget → estrategia → default
-                if f'inv_{idx}_instrumento' in st.session_state and st.session_state[f'inv_{idx}_instrumento'] is not None:
-                    instrumento_default = st.session_state[f'inv_{idx}_instrumento']
-                elif f'inv_{idx}_instrumento_value' in st.session_state:
-                    instrumento_default = st.session_state[f'inv_{idx}_instrumento_value']
-                else:
-                    instrumento_default = 'CDT' if idx == 1 else ('Fondo Liquidez' if idx == 2 else 'Fondo Corto Plazo')
+                # Inicializar instrumento si no existe
+                if f'inv_{idx}_instrumento' not in st.session_state:
+                    if idx == 1:
+                        st.session_state[f'inv_{idx}_instrumento'] = 'CDT'
+                    elif idx == 2:
+                        st.session_state[f'inv_{idx}_instrumento'] = 'Fondo Liquidez'
+                    else:
+                        st.session_state[f'inv_{idx}_instrumento'] = 'Fondo Corto Plazo'
                 
                 instrumentos_lista = ['CDT', 'Fondo Liquidez', 'Fondo Corto Plazo', 'Cuenta Remunerada']
-                idx_default = instrumentos_lista.index(instrumento_default) if instrumento_default in instrumentos_lista else 0
+                
+                # Calcular índice basado en session_state
+                try:
+                    idx_default = instrumentos_lista.index(st.session_state[f'inv_{idx}_instrumento'])
+                except (ValueError, KeyError):
+                    idx_default = 0
                 
                 instrumento = st.selectbox(
                     "🏦 Instrumento",
                     options=instrumentos_lista,
-                    index=idx_default,
+                    index=idx_default,  # Necesario para selectbox
                     key=f"inv_{idx}_instrumento"
                 )
             
             with col_inst2:
-                # Plazos disponibles según instrumento (plazos mínimos rentables)
+                # Plazos disponibles según instrumento
                 if instrumento == 'CDT':
                     plazos_disponibles = [30, 60, 90, 180, 360]
                 elif instrumento in ['Fondo Liquidez', 'Fondo Corto Plazo']:
-                    plazos_disponibles = [30, 60, 90]  # Eliminados 1, 7, 15 días
+                    plazos_disponibles = [30, 60, 90]
                 else:  # Cuenta Remunerada
-                    plazos_disponibles = [1, 7, 15, 30, 60, 90]  # Flexible pero tasa baja
+                    plazos_disponibles = [1, 7, 15, 30, 60, 90]
                 
-                # Leer en orden: widget → estrategia → default
-                if f'inv_{idx}_plazo' in st.session_state and st.session_state[f'inv_{idx}_plazo'] is not None:
-                    plazo_default = st.session_state[f'inv_{idx}_plazo']
-                elif f'inv_{idx}_plazo_value' in st.session_state:
-                    plazo_default = st.session_state[f'inv_{idx}_plazo_value']
-                else:
-                    plazo_default = 90 if idx == 1 else (180 if idx == 2 else 60)
+                # Inicializar plazo si no existe o no es válido
+                if f'inv_{idx}_plazo' not in st.session_state or st.session_state[f'inv_{idx}_plazo'] not in plazos_disponibles:
+                    if idx == 1:
+                        st.session_state[f'inv_{idx}_plazo'] = 90
+                    elif idx == 2:
+                        st.session_state[f'inv_{idx}_plazo'] = 180 if 180 in plazos_disponibles else 90
+                    else:
+                        st.session_state[f'inv_{idx}_plazo'] = 60 if 60 in plazos_disponibles else plazos_disponibles[0]
                 
-                # Asegurar que plazo_default está en la lista
-                if plazo_default not in plazos_disponibles:
-                    plazo_default = plazos_disponibles[0]
+                # Calcular índice basado en session_state
+                try:
+                    idx_plazo = plazos_disponibles.index(st.session_state[f'inv_{idx}_plazo'])
+                except (ValueError, KeyError):
+                    idx_plazo = 0
                 
                 plazo = st.selectbox(
                     "⏱️ Plazo (días)",
                     options=plazos_disponibles,
-                    index=plazos_disponibles.index(plazo_default),
+                    index=idx_plazo,  # Necesario para selectbox
                     key=f"inv_{idx}_plazo"
                 )
                 
@@ -1169,63 +1179,47 @@ def render_inversiones_temporales(estado: Dict):
             col_monto1, col_monto2 = st.columns(2)
             
             with col_monto1:
-                # Primero intentar leer del widget (si ya fue modificado)
-                # Luego de session_state guardado por estrategia
-                # Finalmente calcular default
-                
-                # Si el widget ya tiene valor (usuario modificó), usar ese
-                if f'inv_{idx}_monto' in st.session_state:
-                    monto_sugerido = st.session_state[f'inv_{idx}_monto']
-                # Si no, leer de estrategia aplicada
-                elif f'inv_{idx}_monto_value' in st.session_state:
-                    monto_sugerido = int(st.session_state[f'inv_{idx}_monto_value'])
-                # Si no, calcular default
-                else:
+                # Inicializar monto si no existe
+                if f'inv_{idx}_monto' not in st.session_state:
                     if idx == 1:
-                        monto_sugerido = int(excedente_info['excedente_invertible'] * 0.50)
+                        st.session_state[f'inv_{idx}_monto'] = int(excedente_info['excedente_invertible'] * 0.50)
                     elif idx == 2:
-                        monto_sugerido = int(excedente_info['excedente_invertible'] * 0.30)
+                        st.session_state[f'inv_{idx}_monto'] = int(excedente_info['excedente_invertible'] * 0.30)
                     else:
-                        monto_sugerido = int(excedente_info['excedente_invertible'] * 0.15)
+                        st.session_state[f'inv_{idx}_monto'] = int(excedente_info['excedente_invertible'] * 0.15)
                 
                 monto = st.number_input(
                     "💵 Monto a Invertir",
                     min_value=0,
                     max_value=int(excedente_info['excedente_invertible']),
-                    value=monto_sugerido,
                     step=10_000_000,
                     format="%d",
-                    key=f"inv_{idx}_monto"
+                    key=f"inv_{idx}_monto"  # Sin value=, session_state controla
                 )
                 
                 porcentaje_usado = (monto / excedente_info['excedente_invertible'] * 100) if excedente_info['excedente_invertible'] > 0 else 0
                 st.caption(f"   {porcentaje_usado:.1f}% del excedente")
             
             with col_monto2:
-                # Leer en orden: widget → estrategia → default
-                if f'inv_{idx}_tasa' in st.session_state and st.session_state[f'inv_{idx}_tasa'] is not None:
-                    tasa_default = st.session_state[f'inv_{idx}_tasa']
-                elif f'inv_{idx}_tasa_value' in st.session_state:
-                    tasa_default = st.session_state[f'inv_{idx}_tasa_value']
-                else:
-                    # Calcular default según instrumento
+                # Inicializar tasa si no existe
+                if f'inv_{idx}_tasa' not in st.session_state:
+                    # Calcular tasa según instrumento
                     if instrumento == 'CDT':
-                        tasa_default = st.session_state.tasas_actualizadas.get('DTF', 13.25)
+                        st.session_state[f'inv_{idx}_tasa'] = st.session_state.tasas_actualizadas.get('DTF', 13.25)
                     elif instrumento == 'Fondo Corto Plazo':
-                        tasa_default = st.session_state.tasas_actualizadas.get('IBR', 12.80) + 0.5
+                        st.session_state[f'inv_{idx}_tasa'] = st.session_state.tasas_actualizadas.get('IBR', 12.80) + 0.5
                     elif instrumento == 'Fondo Liquidez':
-                        tasa_default = st.session_state.tasas_actualizadas.get('IBR', 12.80)
+                        st.session_state[f'inv_{idx}_tasa'] = st.session_state.tasas_actualizadas.get('IBR', 12.80)
                     else:  # Cuenta Remunerada
-                        tasa_default = 4.5
+                        st.session_state[f'inv_{idx}_tasa'] = 4.5
                 
                 tasa_ea = st.number_input(
                     "📈 Tasa EA (%)",
                     min_value=0.0,
                     max_value=30.0,
-                    value=float(tasa_default),
                     step=0.1,
                     format="%.2f",
-                    key=f"inv_{idx}_tasa"
+                    key=f"inv_{idx}_tasa"  # Sin value=, session_state controla
                 )
             
             # Crear objeto inversión
@@ -1415,64 +1409,58 @@ def render_inversiones_temporales(estado: Dict):
         timeline_data = crear_timeline_vencimientos(inversiones)
         
         if timeline_data['inversiones']:
-            # Crear gráfica Gantt con approach correcto
-            from datetime import datetime
-            import pandas as pd
+            import plotly.express as px
+            from datetime import datetime, date
             
-            # Preparar datos para Plotly Timeline
+            # Preparar datos para plotly express
             df_timeline = []
             for inv_data in timeline_data['inversiones']:
+                # Convertir date a datetime si es necesario
+                fecha_inicio = inv_data['fecha_inicio']
+                fecha_venc = inv_data['fecha_vencimiento']
+                
+                if isinstance(fecha_inicio, date) and not isinstance(fecha_inicio, datetime):
+                    fecha_inicio = datetime.combine(fecha_inicio, datetime.min.time())
+                if isinstance(fecha_venc, date) and not isinstance(fecha_venc, datetime):
+                    fecha_venc = datetime.combine(fecha_venc, datetime.min.time())
+                
                 df_timeline.append({
                     'Inversión': inv_data['nombre'],
-                    'Inicio': inv_data['fecha_inicio'],
-                    'Fin': inv_data['fecha_vencimiento'],
+                    'Start': fecha_inicio,
+                    'Finish': fecha_venc,
                     'Instrumento': inv_data['instrumento'],
-                    'Monto': inv_data['monto'],
-                    'Retorno': inv_data['retorno_neto'],
-                    'Plazo': inv_data['plazo_dias']
+                    'Monto': formatear_moneda(inv_data['monto']),
+                    'Retorno': formatear_moneda(inv_data['retorno_neto']),
+                    'Plazo': f"{inv_data['plazo_dias']} días"
                 })
             
             df = pd.DataFrame(df_timeline)
             
-            # Color según instrumento
-            color_map = {
-                'CDT': '#1f77b4',
-                'Fondo Liquidez': '#2ca02c',
-                'Fondo Corto Plazo': '#ff7f0e',
-                'Cuenta Remunerada': '#d62728'
-            }
+            # Crear timeline con plotly express
+            fig = px.timeline(
+                df, 
+                x_start="Start", 
+                x_end="Finish", 
+                y="Inversión",
+                color="Instrumento",
+                hover_data=['Monto', 'Retorno', 'Plazo'],
+                title="Cronograma de Vencimientos"
+            )
             
-            # Crear gráfica
-            fig = go.Figure()
+            # Invertir eje Y para que la primera inversión esté arriba
+            fig.update_yaxes(autorange="reversed")
             
-            for i, row in df.iterrows():
-                color = color_map.get(row['Instrumento'], '#7f7f7f')
-                
-                # Agregar barra como shape (rectángulo)
-                fig.add_trace(go.Scatter(
-                    x=[row['Inicio'], row['Fin']],
-                    y=[row['Inversión'], row['Inversión']],
-                    mode='lines',
-                    line=dict(color=color, width=20),
-                    name=row['Inversión'],
-                    text=f"{formatear_moneda(row['Monto'])}<br>+{formatear_moneda(row['Retorno'])}",
-                    hovertemplate=f"<b>{row['Inversión']}</b><br>" +
-                                 f"Instrumento: {row['Instrumento']}<br>" +
-                                 f"Plazo: {row['Plazo']} días<br>" +
-                                 f"Monto: {formatear_moneda(row['Monto'])}<br>" +
-                                 f"Retorno Neto: {formatear_moneda(row['Retorno'])}<br>" +
-                                 f"Vence: {row['Fin'].strftime('%d/%m/%Y')}<br>" +
-                                 "<extra></extra>"
-                ))
+            # Línea vertical "Hoy" - convertir también
+            fecha_hoy = timeline_data['fecha_inicio']
+            if isinstance(fecha_hoy, date) and not isinstance(fecha_hoy, datetime):
+                fecha_hoy = datetime.combine(fecha_hoy, datetime.min.time())
             
-            # Línea vertical "Hoy"
             fig.add_vline(
-                x=timeline_data['fecha_inicio'],
+                x=fecha_hoy,
                 line_dash="dot",
                 line_color="gray",
                 line_width=2,
-                annotation_text="Hoy",
-                annotation_position="top"
+                annotation_text="Hoy"
             )
             
             # Layout
