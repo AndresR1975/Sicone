@@ -1487,22 +1487,40 @@ def render_inversiones_temporales(estado: Dict):
             # Invertir eje Y para que la primera inversión esté arriba
             fig.update_yaxes(autorange="reversed")
             
-            # Línea vertical "Hoy" - usar timestamp para compatibilidad
+            # Línea vertical "Hoy" - usar add_shape en lugar de add_vline
             fecha_hoy = timeline_data['fecha_inicio']
             
             # Convertir a datetime si es necesario
             if isinstance(fecha_hoy, date) and not isinstance(fecha_hoy, datetime):
                 fecha_hoy = datetime.combine(fecha_hoy, datetime.min.time())
             
-            # Convertir a timestamp (milisegundos) para compatibilidad con px.timeline
+            # Convertir a pd.Timestamp
             fecha_hoy_ts = pd.Timestamp(fecha_hoy)
             
-            fig.add_vline(
+            # Usar add_shape en lugar de add_vline (compatible con Timestamps)
+            fig.add_shape(
+                type="line",
+                x0=fecha_hoy_ts,
+                x1=fecha_hoy_ts,
+                y0=0,
+                y1=1,
+                yref="paper",  # Línea vertical completa (de 0 a 1 en coordenadas paper)
+                line=dict(
+                    color="gray",
+                    width=2,
+                    dash="dot"
+                )
+            )
+            
+            # Agregar anotación "Hoy"
+            fig.add_annotation(
                 x=fecha_hoy_ts,
-                line_dash="dot",
-                line_color="gray",
-                line_width=2,
-                annotation_text="Hoy"
+                y=1,
+                yref="paper",
+                text="Hoy",
+                showarrow=False,
+                yshift=10,
+                font=dict(size=10, color="gray")
             )
             
             # Layout
