@@ -1924,9 +1924,23 @@ def render_paso_2_configurar_proyecto():
     # Botón continuar
     st.markdown("---")
     
+    # CRÍTICO: Sincronizar una vez más justo antes del botón para garantizar
+    # que los valores más recientes de los widgets se usen al generar proyección.
+    # Esto es necesario porque el botón causa un rerun inmediato.
+    fases_actuales = st.session_state.get('fases_config_fcl', [])
+    for i in range(len(fases_actuales)):
+        key_widget = f"dur_fase_{i}"
+        if key_widget in st.session_state:
+            valor_widget = st.session_state[key_widget]
+            if valor_widget is not None:
+                fases_actuales[i]['duracion_semanas'] = valor_widget
+    
+    # Guardar explícitamente
+    st.session_state.fases_config_fcl = fases_actuales
+    
     if st.button("▶️ Generar Proyección", type="primary", use_container_width=True):
         # Validar que todas las fases tengan duración
-        if all([f['duracion_semanas'] for f in fases]):
+        if all([f.get('duracion_semanas') for f in fases_actuales]):
             # fecha_inicio ya está en session_state desde el widget
             st.session_state.paso_fcl = 3
             st.rerun()
