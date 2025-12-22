@@ -308,41 +308,47 @@ def extraer_conceptos_dinamico(cotizacion: dict) -> Dict:
         }
     
     # 8. PERSONAL ADMINISTRATIVO
-    if 'personal_administrativo' in cotizacion:
-        total_admin = 0
-        for puesto, datos in cotizacion['personal_administrativo'].items():
-            total_admin += (
-                datos.get('valor_mes', 0) * 
-                (1 + datos.get('pct_prestaciones', 0) / 100) *
-                datos.get('dedicacion', 0) *
-                datos.get('meses', 0) *
-                datos.get('cantidad', 0)
-            )
-        
-        conceptos['Personal Administrativo'] = {
-            'total': total_admin,
-            'materiales': 0,
-            'equipos': 0,
-            'mano_obra': 0,
-            'admin': total_admin,
-            'fuente': 'personal_administrativo'
-        }
+    # NOTA: Este concepto NO se incluye en proyección individual porque ya está
+    # cubierto por el porcentaje de administración en el AIU.
+    # Solo debe aplicarse a nivel multiproyecto como gasto fijo empresarial.
+    # if 'personal_administrativo' in cotizacion:
+    #     total_admin = 0
+    #     for puesto, datos in cotizacion['personal_administrativo'].items():
+    #         total_admin += (
+    #             datos.get('valor_mes', 0) * 
+    #             (1 + datos.get('pct_prestaciones', 0) / 100) *
+    #             datos.get('dedicacion', 0) *
+    #             datos.get('meses', 0) *
+    #             datos.get('cantidad', 0)
+    #         )
+    #     
+    #     conceptos['Personal Administrativo'] = {
+    #         'total': total_admin,
+    #         'materiales': 0,
+    #         'equipos': 0,
+    #         'mano_obra': 0,
+    #         'admin': total_admin,
+    #         'fuente': 'personal_administrativo'
+    #     }
     
     # 9. OTROS CONCEPTOS ADMINISTRATIVOS
-    if 'otros_admin' in cotizacion:
-        total_otros = 0
-        for categoria, datos in cotizacion['otros_admin'].items():
-            if isinstance(datos, dict) and 'items_detalle' in datos:
-                total_otros += sum(datos['items_detalle'].values())
-        
-        conceptos['Otros Conceptos Admin'] = {
-            'total': total_otros,
-            'materiales': 0,
-            'equipos': 0,
-            'mano_obra': 0,
-            'admin': total_otros,
-            'fuente': 'otros_admin'
-        }
+    # NOTA: Este concepto NO se incluye en proyección individual porque ya está
+    # cubierto por el porcentaje de administración en el AIU.
+    # Solo debe aplicarse a nivel multiproyecto como gasto fijo empresarial.
+    # if 'otros_admin' in cotizacion:
+    #     total_otros = 0
+    #     for categoria, datos in cotizacion['otros_admin'].items():
+    #         if isinstance(datos, dict) and 'items_detalle' in datos:
+    #             total_otros += sum(datos['items_detalle'].values())
+    #     
+    #     conceptos['Otros Conceptos Admin'] = {
+    #         'total': total_otros,
+    #         'materiales': 0,
+    #         'equipos': 0,
+    #         'mano_obra': 0,
+    #         'admin': total_otros,
+    #         'fuente': 'otros_admin'
+    #     }
     
     return conceptos
 
@@ -491,14 +497,17 @@ def asignar_contratos(conceptos: Dict, cotizacion: dict) -> Tuple[Dict, Dict]:
         utilidad_pct = config_aiu.get('Utilidad (%)', 0) / 100
         
         # CÁLCULO DE % ADMIN REAL (como en cotizador)
-        # Calcular Admin detallada desde conceptos
+        # NOTA: Personal Administrativo y Otros Conceptos Admin ya están cubiertos
+        # por el % de Administración en el AIU. No se suman aquí para evitar duplicación.
+        # Solo se suma Personal Profesional que sí son costos directos del proyecto.
         admin_detallada_total = 0
         if 'Personal Profesional' in conceptos:
             admin_detallada_total += conceptos['Personal Profesional']['total']
-        if 'Personal Administrativo' in conceptos:
-            admin_detallada_total += conceptos['Personal Administrativo']['total']
-        if 'Otros Conceptos Admin' in conceptos:
-            admin_detallada_total += conceptos['Otros Conceptos Admin']['total']
+        # COMENTADO: Ya incluido en AIU
+        # if 'Personal Administrativo' in conceptos:
+        #     admin_detallada_total += conceptos['Personal Administrativo']['total']
+        # if 'Otros Conceptos Admin' in conceptos:
+        #     admin_detallada_total += conceptos['Otros Conceptos Admin']['total']
         
         # Calcular % Admin REAL sobre base constructiva
         admin_pct_real = (admin_detallada_total / base_constructiva_c1) if base_constructiva_c1 > 0 else 0
@@ -562,8 +571,9 @@ def obtener_totales_admin_imprevistos_logistica(cotizacion: dict, conceptos: Dic
     """
     Extrae totales de Admin, Imprevistos y Logística para distribución por fases
     
-    Admin incluye: Personal Profesional + Personal Administrativo + Otros Admin
-    Estos se distribuirán proporcionalmente por duración de fases
+    Admin incluye: Personal Profesional (costos directos del proyecto)
+    NOTA: Personal Administrativo y Otros Conceptos Admin ya están cubiertos
+    por el % de Administración en el AIU, no se suman aquí.
     """
     totales = {
         'admin': 0,
@@ -575,11 +585,12 @@ def obtener_totales_admin_imprevistos_logistica(cotizacion: dict, conceptos: Dic
     if 'Personal Profesional' in conceptos:
         totales['admin'] += conceptos['Personal Profesional']['total']
     
-    if 'Personal Administrativo' in conceptos:
-        totales['admin'] += conceptos['Personal Administrativo']['total']
-    
-    if 'Otros Conceptos Admin' in conceptos:
-        totales['admin'] += conceptos['Otros Conceptos Admin']['total']
+    # COMENTADO: Ya incluidos en AIU, no se suman para evitar duplicación
+    # if 'Personal Administrativo' in conceptos:
+    #     totales['admin'] += conceptos['Personal Administrativo']['total']
+    # 
+    # if 'Otros Conceptos Admin' in conceptos:
+    #     totales['admin'] += conceptos['Otros Conceptos Admin']['total']
     
     # Obtener % de AIU de la configuración
     if 'config_aiu' in cotizacion:
