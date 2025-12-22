@@ -1927,22 +1927,8 @@ def render_paso_2_configurar_proyecto():
     
     if st.button("▶️ Generar Proyección", type="primary", use_container_width=True):
         # CRÍTICO: Sincronizar DENTRO del botón, ANTES del rerun
-        # para garantizar que los valores más recientes se guarden
-        
-        # Debug: Ver valores antes de sincronizar
-        st.write("🔍 DEBUG - Valores en session_state ANTES de sincronizar:")
-        for i in range(5):  # Asumiendo máximo 5 fases
-            key = f"dur_fase_{i}"
-            if key in st.session_state:
-                st.write(f"  {key} = {st.session_state[key]}")
-        
-        # Obtener fases actuales
-        fases_originales = st.session_state.get('fases_config_fcl', [])
-        st.write(f"\n🔍 DEBUG - fases_config_fcl ANTES:")
-        for i, f in enumerate(fases_originales):
-            st.write(f"  Fase {i}: {f.get('nombre')} = {f.get('duracion_semanas')} semanas")
-        
         # Crear COPIA PROFUNDA para forzar detección de cambios
+        fases_originales = st.session_state.get('fases_config_fcl', [])
         fases_actuales = copy.deepcopy(fases_originales)
         
         # Sincronizar desde widgets
@@ -1953,19 +1939,11 @@ def render_paso_2_configurar_proyecto():
                 if valor_widget is not None:
                     fases_actuales[i]['duracion_semanas'] = valor_widget
         
-        st.write(f"\n🔍 DEBUG - fases_actuales DESPUÉS de sincronizar:")
-        for i, f in enumerate(fases_actuales):
-            st.write(f"  Fase {i}: {f.get('nombre')} = {f.get('duracion_semanas')} semanas")
-        
         # Guardar explícitamente con DEEPCOPY
         st.session_state.fases_config_fcl = copy.deepcopy(fases_actuales)
         
-        st.write(f"\n🔍 DEBUG - Guardado en session_state.fases_config_fcl")
-        
         # Validar que todas las fases tengan duración
         if all([f.get('duracion_semanas') for f in fases_actuales]):
-            st.success(f"✅ Todas las fases validadas. Total: {sum([f['duracion_semanas'] for f in fases_actuales])} semanas")
-            st.write("⏳ Generando proyección...")
             # fecha_inicio ya está en session_state desde el widget
             st.session_state.paso_fcl = 3
             st.rerun()
@@ -2065,14 +2043,6 @@ def render_paso_3_proyeccion():
         hitos = st.session_state.get('hitos_fcl', [])
         contratos = st.session_state.get('contratos_fcl', {})
         
-        # DEBUG: Ver qué valores lee paso 3
-        st.write("🔍 DEBUG PASO 3 - Valores leídos de session_state:")
-        st.write(f"Total fases: {len(fases)}")
-        for i, f in enumerate(fases):
-            st.write(f"  Fase {i}: {f.get('nombre')} = {f.get('duracion_semanas')} semanas")
-        st.write(f"Total semanas: {sum([f.get('duracion_semanas', 0) for f in fases])}")
-        st.markdown("---")
-        
         # Fecha de inicio: manejar múltiples fuentes
         if 'fecha_inicio_fcl' in st.session_state:
             fecha_inicio = st.session_state.fecha_inicio_fcl
@@ -2101,10 +2071,11 @@ def render_paso_3_proyeccion():
         else:
             totales_aiu = st.session_state.totales_aiu_fcl
         
-        # Generar proyección (forzar si viene de modo edición)
-        regenerar = st.session_state.get('modo_edicion', False)
+        # Generar proyección SIEMPRE (no cachear)
+        # Esto garantiza que cualquier cambio en duraciones se refleje
+        regenerar = True  # Forzar regeneración siempre
         
-        if 'proyeccion_df' not in st.session_state or regenerar:
+        if True:  # Siempre regenerar
             with st.spinner("Generando proyección..."):
                 # Obtener configuración de distribución
                 config_dist = st.session_state.get('distribucion_temporal', {
@@ -2126,12 +2097,9 @@ def render_paso_3_proyeccion():
                 )
                 st.session_state.proyeccion_df = proyeccion_df
                 
-                # Si era regeneración, mostrar mensaje pero NO limpiar flags aún
-                # (se necesitan para exportar)
-                if regenerar:
+                # Mostrar mensaje si viene de modo edición
+                if st.session_state.get('modo_edicion', False):
                     st.success("✅ Proyección regenerada con nuevos parámetros")
-        else:
-            proyeccion_df = st.session_state.proyeccion_df
         
         df = proyeccion_df
     
