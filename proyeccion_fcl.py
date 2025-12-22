@@ -28,6 +28,7 @@ import streamlit as st
 import pandas as pd
 import json
 import sqlite3
+import copy
 from datetime import datetime, timedelta
 from typing import Dict, List, Tuple
 import plotly.graph_objects as go
@@ -1927,7 +1928,24 @@ def render_paso_2_configurar_proyecto():
     if st.button("▶️ Generar Proyección", type="primary", use_container_width=True):
         # CRÍTICO: Sincronizar DENTRO del botón, ANTES del rerun
         # para garantizar que los valores más recientes se guarden
-        fases_actuales = st.session_state.get('fases_config_fcl', [])
+        
+        # Debug: Ver valores antes de sincronizar
+        st.write("🔍 DEBUG - Valores en session_state ANTES de sincronizar:")
+        for i in range(5):  # Asumiendo máximo 5 fases
+            key = f"dur_fase_{i}"
+            if key in st.session_state:
+                st.write(f"  {key} = {st.session_state[key]}")
+        
+        # Obtener fases actuales
+        fases_originales = st.session_state.get('fases_config_fcl', [])
+        st.write(f"\n🔍 DEBUG - fases_config_fcl ANTES:")
+        for i, f in enumerate(fases_originales):
+            st.write(f"  Fase {i}: {f.get('nombre')} = {f.get('duracion_semanas')} semanas")
+        
+        # Crear COPIA PROFUNDA para forzar detección de cambios
+        fases_actuales = copy.deepcopy(fases_originales)
+        
+        # Sincronizar desde widgets
         for i in range(len(fases_actuales)):
             key_widget = f"dur_fase_{i}"
             if key_widget in st.session_state:
@@ -1935,11 +1953,19 @@ def render_paso_2_configurar_proyecto():
                 if valor_widget is not None:
                     fases_actuales[i]['duracion_semanas'] = valor_widget
         
-        # Guardar explícitamente ANTES del rerun
-        st.session_state.fases_config_fcl = fases_actuales
+        st.write(f"\n🔍 DEBUG - fases_actuales DESPUÉS de sincronizar:")
+        for i, f in enumerate(fases_actuales):
+            st.write(f"  Fase {i}: {f.get('nombre')} = {f.get('duracion_semanas')} semanas")
+        
+        # Guardar explícitamente con DEEPCOPY
+        st.session_state.fases_config_fcl = copy.deepcopy(fases_actuales)
+        
+        st.write(f"\n🔍 DEBUG - Guardado en session_state.fases_config_fcl")
         
         # Validar que todas las fases tengan duración
         if all([f.get('duracion_semanas') for f in fases_actuales]):
+            st.success(f"✅ Todas las fases validadas. Total: {sum([f['duracion_semanas'] for f in fases_actuales])} semanas")
+            st.write("⏳ Generando proyección...")
             # fecha_inicio ya está en session_state desde el widget
             st.session_state.paso_fcl = 3
             st.rerun()
@@ -2038,6 +2064,14 @@ def render_paso_3_proyeccion():
         fases = st.session_state.get('fases_config_fcl', [])
         hitos = st.session_state.get('hitos_fcl', [])
         contratos = st.session_state.get('contratos_fcl', {})
+        
+        # DEBUG: Ver qué valores lee paso 3
+        st.write("🔍 DEBUG PASO 3 - Valores leídos de session_state:")
+        st.write(f"Total fases: {len(fases)}")
+        for i, f in enumerate(fases):
+            st.write(f"  Fase {i}: {f.get('nombre')} = {f.get('duracion_semanas')} semanas")
+        st.write(f"Total semanas: {sum([f.get('duracion_semanas', 0) for f in fases])}")
+        st.markdown("---")
         
         # Fecha de inicio: manejar múltiples fuentes
         if 'fecha_inicio_fcl' in st.session_state:
