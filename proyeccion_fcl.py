@@ -1637,6 +1637,12 @@ def render_paso_2_configurar_proyecto():
     
     duraciones_actualizadas = False
     
+    # Inicializar keys de session_state para cada fase si no existen
+    for i, fase in enumerate(fases):
+        key_duracion = f"dur_fase_{i}"
+        if key_duracion not in st.session_state:
+            st.session_state[key_duracion] = fase['duracion_semanas'] if fase['duracion_semanas'] else 4
+    
     # Tabla de configuración de fases
     for i, fase in enumerate(fases):
         with st.container():
@@ -1648,16 +1654,21 @@ def render_paso_2_configurar_proyecto():
                     st.caption(f"Incluye: {', '.join(fase['conceptos'][:2])}{'...' if len(fase['conceptos']) > 2 else ''}")
             
             with col2:
-                duracion = st.number_input(
+                # Widget SIN value= parameter (lee automáticamente de session_state)
+                st.number_input(
                     "Semanas",
                     min_value=1,
                     max_value=52,
-                    value=fase['duracion_semanas'] if fase['duracion_semanas'] else 4,
                     key=f"dur_fase_{i}",
                     label_visibility="collapsed"
                 )
-                if duracion != fase['duracion_semanas']:
-                    fases[i]['duracion_semanas'] = duracion
+                
+                # Leer valor actualizado desde session_state
+                duracion_nueva = st.session_state[f"dur_fase_{i}"]
+                
+                # Actualizar estructura de fases si cambió
+                if duracion_nueva != fase['duracion_semanas']:
+                    fases[i]['duracion_semanas'] = duracion_nueva
                     duraciones_actualizadas = True
             
             with col3:
@@ -1675,8 +1686,15 @@ def render_paso_2_configurar_proyecto():
             
             st.markdown("---")
     
-    if duraciones_actualizadas:
-        st.session_state.fases_config_fcl = fases
+    # CRÍTICO: Sincronizar SIEMPRE los valores actuales de los widgets
+    # de vuelta a fases_config_fcl para que paso 3 use valores correctos
+    for i, fase in enumerate(fases):
+        valor_actual_widget = st.session_state.get(f"dur_fase_{i}")
+        if valor_actual_widget is not None:
+            fases[i]['duracion_semanas'] = valor_actual_widget
+    
+    # Guardar cambios en session_state
+    st.session_state.fases_config_fcl = fases
     
     st.markdown("---")
     
