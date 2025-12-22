@@ -1215,13 +1215,18 @@ def render_paso_2_configurar_proyecto():
                 }
             }
         
-        # Precargar fases desde proyección
-        if 'fases_config_fcl' not in st.session_state:
-            st.session_state.fases_config_fcl = config_guardada.get('fases', [])
+        # Precargar fases desde proyección (SOLO SI NO EXISTEN)
+        # CORRECCIÓN: No precargar automáticamente para permitir que el usuario
+        # modifique las duraciones sin que se sobrescriban con los valores del JSON.
+        # Los controles de UI usarán los valores del JSON como defaults iniciales.
+        # if 'fases_config_fcl' not in st.session_state:
+        #     st.session_state.fases_config_fcl = config_guardada.get('fases', [])
         
-        # Precargar hitos desde proyección
-        if 'hitos_fcl' not in st.session_state:
-            st.session_state.hitos_fcl = config_guardada.get('hitos', [])
+        # Precargar hitos desde proyección (SOLO SI NO EXISTEN)
+        # CORRECCIÓN: Comentado para permitir modificaciones del usuario.
+        # Los hitos se inicializarán desde el JSON cuando sea necesario.
+        # if 'hitos_fcl' not in st.session_state:
+        #     st.session_state.hitos_fcl = config_guardada.get('hitos', [])
         
         # Precargar distribución temporal
         if 'distribucion_temporal' not in st.session_state:
@@ -1604,7 +1609,21 @@ def render_paso_2_configurar_proyecto():
     
     # Generar configuración default si no existe
     if 'fases_config_fcl' not in st.session_state:
-        fases = generar_configuracion_fases_default(conceptos)
+        # Si venimos de modo edición con proyección cargada, usar esas duraciones como defaults
+        if st.session_state.get('modo_edicion', False) and 'proyeccion_para_editar' in st.session_state:
+            proy_data = st.session_state.proyeccion_para_editar
+            config_guardada = proy_data.get('configuracion', {})
+            fases_json = config_guardada.get('fases', [])
+            if fases_json:
+                # Usar fases del JSON como inicialización
+                fases = fases_json
+            else:
+                # Si no hay fases en JSON, generar defaults
+                fases = generar_configuracion_fases_default(conceptos)
+        else:
+            # Flujo normal: generar desde conceptos
+            fases = generar_configuracion_fases_default(conceptos)
+        
         st.session_state.fases_config_fcl = fases
     
     fases = st.session_state.fases_config_fcl
@@ -1825,7 +1844,21 @@ def render_paso_2_configurar_proyecto():
     """)
     
     if 'hitos_fcl' not in st.session_state:
-        hitos = configurar_hitos_default(contratos['contrato_1'], contratos['contrato_2'])
+        # Si venimos de modo edición con proyección cargada, usar esos hitos como defaults
+        if st.session_state.get('modo_edicion', False) and 'proyeccion_para_editar' in st.session_state:
+            proy_data = st.session_state.proyeccion_para_editar
+            config_guardada = proy_data.get('configuracion', {})
+            hitos_json = config_guardada.get('hitos', [])
+            if hitos_json:
+                # Usar hitos del JSON como inicialización
+                hitos = hitos_json
+            else:
+                # Si no hay hitos en JSON, generar defaults
+                hitos = configurar_hitos_default(contratos['contrato_1'], contratos['contrato_2'])
+        else:
+            # Flujo normal: generar desde contratos
+            hitos = configurar_hitos_default(contratos['contrato_1'], contratos['contrato_2'])
+        
         st.session_state.hitos_fcl = hitos
     
     hitos = st.session_state.hitos_fcl
