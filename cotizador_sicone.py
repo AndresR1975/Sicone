@@ -2012,7 +2012,7 @@ def render_sidebar():
             st.download_button(
                 label="📤 Export",
                 data=json_data,
-                file_name=f"Cot_{st.session_state.proyecto.nombre.replace(' ', '_')}_{pd.Timestamp.now().strftime('%Y%m%d')}.json",
+                file_name=f"SICONE_{st.session_state.proyecto.nombre.replace(' ', '_')}_Cotizacion_{pd.Timestamp.now().strftime('%Y%m%d')}.json",
                 mime="application/json",
                 use_container_width=True,
                 help="Exportar a JSON"
@@ -2853,7 +2853,7 @@ def render_tab_exportar():
         st.download_button(
             label="📥 Descargar Cotización Excel",
             data=excel_file,
-            file_name=f"Cotizacion_SICONE_{st.session_state.proyecto.nombre.replace(' ', '_')}_{pd.Timestamp.now().strftime('%Y%m%d')}.xlsx",
+            file_name=f"SICONE_{st.session_state.proyecto.nombre.replace(' ', '_')}_Cotizacion_{pd.Timestamp.now().strftime('%Y%m%d')}.xlsx",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
             type="primary"
         )
@@ -2932,7 +2932,7 @@ def main():
             st.download_button(
                 label="📥 Exportar a Excel",
                 data=excel_file,
-                file_name=f"Cotizacion_SICONE_{st.session_state.proyecto.nombre.replace(' ', '_')}_{pd.Timestamp.now().strftime('%Y%m%d')}.xlsx",
+                file_name=f"SICONE_{st.session_state.proyecto.nombre.replace(' ', '_')}_Cotizacion_{pd.Timestamp.now().strftime('%Y%m%d')}.xlsx",
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                 type="primary",
                 use_container_width=True
