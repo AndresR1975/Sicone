@@ -2,9 +2,15 @@
 SICONE - Módulo de Ejecución Real FCL
 Análisis de FCL Real Ejecutado vs FCL Planeado
 
-Versión: 2.3.2
+Versión: 2.3.3
 Fecha: Diciembre 2024
 Autor: AI-MindNovation
+
+CORRECCIONES v2.3.3:
+- ✅ FIX CRÍTICO: Bug semana_esperada en hitos con pagos parciales
+- ✅ Nueva función: calcular_semana_esperada_hito()
+- ✅ Cálculo correcto de semana_esperada desde fase_vinculada y momento
+- ✅ Alertas ahora muestran semanas de retraso correctas
 
 CORRECCIONES v2.3.2:
 - ✅ Cálculo correcto de semanas de retraso: semana_actual - semana_esperada
@@ -137,6 +143,53 @@ def calcular_semana_desde_fecha(fecha_inicio: date, fecha_evento: date) -> int:
     
     dias_transcurridos = (fecha_evento - fecha_inicio).days
     return max(1, (dias_transcurridos // 7) + 1)
+
+
+def calcular_semana_esperada_hito(hito: Dict, configuracion: Dict) -> int:
+    """
+    Calcula la semana esperada de un hito basándose en su fase vinculada y momento
+    
+    Args:
+        hito: Dict con información del hito (fase_vinculada, momento)
+        configuracion: Dict con configuración de fases del proyecto
+    
+    Returns:
+        int: Semana esperada del hito
+    
+    Ejemplo:
+        hito = {
+            'fase_vinculada': 'Estructura, Mampostería y Complementarios',
+            'momento': 'inicio'
+        }
+        Resultado: semana_esperada = 25 (inicio de esa fase)
+    """
+    fase_vinculada = hito.get('fase_vinculada')
+    momento = hito.get('momento', 'inicio')
+    
+    if not fase_vinculada or 'fases' not in configuracion:
+        # Fallback: intentar usar semana_esperada del hito si existe
+        return hito.get('semana_esperada', 1)
+    
+    # Calcular en qué semana empieza cada fase
+    fases = configuracion['fases']
+    semana_actual_fase = 1
+    
+    for fase in fases:
+        if fase['nombre'] == fase_vinculada:
+            # Encontramos la fase
+            if momento == 'inicio':
+                return semana_actual_fase
+            elif momento == 'fin':
+                return semana_actual_fase + fase['duracion_semanas'] - 1
+            else:
+                # Por defecto, asumir inicio
+                return semana_actual_fase
+        
+        # Avanzar a la siguiente fase
+        semana_actual_fase += fase['duracion_semanas']
+    
+    # Si no se encontró la fase, intentar usar semana_esperada del hito
+    return hito.get('semana_esperada', 1)
 
 
 def formatear_moneda(valor: float) -> str:
@@ -1802,7 +1855,7 @@ def render_paso_2_ingresar_cartera():
                     'numero': hito['id'],
                     'descripcion': hito['nombre'],
                     'monto_esperado': monto_esperado,
-                    'semana_esperada': 1,  # TODO: calcular desde fase_vinculada
+                    'semana_esperada': calcular_semana_esperada_hito(hito, proyeccion.get('configuracion', {})),
                     'fecha_vencimiento': None,
                     'pagos': pagos_distribuidos,
                     'es_compartido': contrato_key == 'ambos',
