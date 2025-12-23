@@ -2,9 +2,15 @@
 SICONE - Módulo de Ejecución Real FCL
 Análisis de FCL Real Ejecutado vs FCL Planeado
 
-Versión: 2.3.3
+Versión: 2.3.4
 Fecha: Diciembre 2024
 Autor: AI-MindNovation
+
+CORRECCIONES v2.3.4:
+- ✅ CAMBIO DE LÓGICA DE NEGOCIO: Hitos de pago se evalúan contra FIN de fase
+- ✅ Razón: Empresas ejecutan con pagos parciales, solo paralizan sin pagos
+- ✅ Atraso se cuenta desde cuando debió completarse el pago (fin), no inicio
+- ✅ Ejemplo: Hito 3 con 96% pagado en fase de 12 sem → evaluar contra sem 36, no 25
 
 CORRECCIONES v2.3.3:
 - ✅ FIX CRÍTICO: Bug semana_esperada en hitos con pagos parciales
@@ -147,24 +153,33 @@ def calcular_semana_desde_fecha(fecha_inicio: date, fecha_evento: date) -> int:
 
 def calcular_semana_esperada_hito(hito: Dict, configuracion: Dict) -> int:
     """
-    Calcula la semana esperada de un hito basándose en su fase vinculada y momento
+    Calcula la semana esperada de un hito basándose en su fase vinculada
+    
+    LÓGICA DE NEGOCIO (v2.3.4):
+    Para el módulo de CARTERA (análisis de pagos), los hitos siempre se evalúan 
+    contra el FIN de su fase vinculada, independiente del campo 'momento'.
+    
+    Razón: Las empresas constructoras ejecutan obra con pagos parciales y solo
+    paralizan si NO hay pagos. Si hay pagos parciales (ej: 96%), la obra continúa.
+    Por lo tanto, el "atraso" se cuenta desde cuando debió COMPLETARSE el pago
+    (fin de fase), no desde cuando inició la fase.
     
     Args:
         hito: Dict con información del hito (fase_vinculada, momento)
         configuracion: Dict con configuración de fases del proyecto
     
     Returns:
-        int: Semana esperada del hito
+        int: Semana esperada del hito (siempre al fin de la fase)
     
     Ejemplo:
         hito = {
             'fase_vinculada': 'Estructura, Mampostería y Complementarios',
-            'momento': 'inicio'
+            'momento': 'inicio'  # Este campo se ignora para análisis de cartera
         }
-        Resultado: semana_esperada = 25 (inicio de esa fase)
+        Fase dura 12 semanas (sem 25-36)
+        Resultado: semana_esperada = 36 (fin de la fase)
     """
     fase_vinculada = hito.get('fase_vinculada')
-    momento = hito.get('momento', 'inicio')
     
     if not fase_vinculada or 'fases' not in configuracion:
         # Fallback: intentar usar semana_esperada del hito si existe
@@ -176,14 +191,9 @@ def calcular_semana_esperada_hito(hito: Dict, configuracion: Dict) -> int:
     
     for fase in fases:
         if fase['nombre'] == fase_vinculada:
-            # Encontramos la fase
-            if momento == 'inicio':
-                return semana_actual_fase
-            elif momento == 'fin':
-                return semana_actual_fase + fase['duracion_semanas'] - 1
-            else:
-                # Por defecto, asumir inicio
-                return semana_actual_fase
+            # Para análisis de CARTERA (pagos), siempre usar FIN de fase
+            # Los pagos se completan cuando termina la fase, no cuando inicia
+            return semana_actual_fase + fase['duracion_semanas'] - 1
         
         # Avanzar a la siguiente fase
         semana_actual_fase += fase['duracion_semanas']
