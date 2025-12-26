@@ -2631,6 +2631,50 @@ def main():
     st.title("💼 SICONE - Ejecución Real FCL")
     st.caption("Análisis de FCL Real Ejecutado vs FCL Planeado")
     
+    # ========================================================================
+    # SIDEBAR: INFORMACIÓN DE VERSIÓN Y CONFIGURACIÓN
+    # ========================================================================
+    with st.sidebar:
+        st.markdown("### 📌 Información del Sistema")
+        
+        # Versión
+        st.info("**Versión:** 2.3.6")
+        
+        # Estado de configuraciones críticas
+        with st.expander("🔧 Configuración Actual", expanded=False):
+            st.markdown("**Correcciones Activas:**")
+            st.markdown("✅ Filtro cuentas 7XXXXX")
+            st.markdown("✅ Reclasificación manual")
+            st.markdown("✅ Semanas esperadas (FIN fase)")
+            st.markdown("✅ Gastos fijos = $0 (default)")
+            
+            # Estado de reclasificaciones manuales
+            if 'reclasificaciones_manuales' in st.session_state:
+                num_reclass = len(st.session_state.reclasificaciones_manuales)
+                st.success(f"✅ {num_reclass} cuenta(s) reclasificada(s)")
+            else:
+                st.caption("ℹ️ Sin reclasificaciones manuales")
+        
+        # Notas de versión
+        with st.expander("📝 Notas v2.3.6", expanded=False):
+            st.markdown("""
+            **Correcciones 26-Dic-2024:**
+            
+            **Críticas:**
+            - Semanas esperadas basadas en FIN de fase
+            - Gastos fijos default = $0
+            - Solo procesa cuentas 7XXXXX
+            - Reclasificación manual activa
+            
+            **Bug Fixes:**
+            - Saldo correcto (sin gastos artificiales)
+            - Parser no incluye bancos/ingresos
+            - Cada hito evalúa su fase propia
+            """)
+        
+        st.markdown("---")
+        st.caption("AI-MindNovation © 2024")
+    
     # Inicializar paso si no existe
     if 'paso_ejecucion' not in st.session_state:
         st.session_state.paso_ejecucion = 1
