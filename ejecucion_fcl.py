@@ -2,9 +2,15 @@
 SICONE - Módulo de Ejecución Real FCL
 Análisis de FCL Real Ejecutado vs FCL Planeado
 
-Versión: 2.4.0
+Versión: 2.4.1
 Fecha: 26 Diciembre 2024
 Autor: AI-MindNovation
+
+BUGFIX v2.4.1 (26-Dic-2024 - 21:15):
+- 🐛 FIX: Error en exportación JSON (recomendacion_inversion eliminada)
+- ✅ NUEVO: JSON incluye análisis_hitos con ambos escenarios
+- ✅ MEJORADO: Try-catch para análisis de hitos en exportación
+- ✅ ACTUALIZADO: Docstring de calcular_metricas_tesoreria
 
 NUEVA FUNCIONALIDAD v2.4.0 (26-Dic-2024 - 20:45):
 - ✅ NUEVO: Análisis de Cobertura Financiera por Hitos
@@ -2794,13 +2800,14 @@ def main():
         st.markdown("### 📌 Información del Sistema")
         
         # Versión
-        st.info("**Versión:** 2.4.0")
+        st.info("**Versión:** 2.4.1")
         
         # Estado de configuraciones críticas
         with st.expander("🔧 Configuración Actual", expanded=False):
             st.markdown("**Funcionalidades:**")
             st.markdown("✅ Análisis por hitos (Conservador + Realista)")
             st.markdown("✅ Capacidad de financiamiento")
+            st.markdown("✅ Exportación JSON con análisis hitos")
             st.markdown("✅ Filtro cuentas 7XXXXX")
             st.markdown("✅ Comisiones por ventas → Admin")
             st.markdown("✅ Migración automática costos hitos")
@@ -2813,18 +2820,17 @@ def main():
                 st.caption("ℹ️ Sin reclasificaciones manuales")
         
         # Notas de versión
-        with st.expander("📝 Notas v2.4.0", expanded=False):
+        with st.expander("📝 Notas v2.4.1", expanded=False):
             st.markdown("""
-            **Nuevo 26-Dic-2024 (20:45):**
+            **Bugfix 26-Dic-2024 (21:15):**
             
-            **Análisis por Hitos:**
-            - Escenario Conservador (proyectado) ✓
-            - Escenario Realista (burn rate) ✓
-            - Capacidad de financiamiento ✓
-            - Cobertura hito actual + próximo ✓
+            **Correcciones:**
+            - Fix exportación JSON ✓
+            - JSON incluye análisis hitos ✓
             
-            **Eliminado:**
-            - Recomendación inversión (ahora multiproyecto)
+            **Base v2.4.0:**
+            - Análisis por hitos ✓
+            - Escenarios conservador + realista ✓
             """)
         
         st.markdown("---")
@@ -3095,7 +3101,15 @@ def calcular_metricas_tesoreria(proyeccion: Dict, egresos_data: Dict, contratos_
                                NOTA: Solo usar si hay gastos NO registrados en Excel
     
     Returns:
-        Dict con métricas semanales y recomendación de inversión
+        Dict con métricas semanales y capacidad de financiamiento
+        {
+            'metricas_semanales': [...],
+            'capacidad_financiamiento': {
+                'semanas_financiables': float,
+                'meses_financiables': float,
+                'tiene_margen_completo': bool
+            }
+        }
     """
     # Obtener egresos semanales
     egresos_semanales = egresos_data.get('egresos_semanales', [])
@@ -3103,9 +3117,11 @@ def calcular_metricas_tesoreria(proyeccion: Dict, egresos_data: Dict, contratos_
     if not egresos_semanales:
         return {
             'metricas_semanales': [],
-            'recomendacion_inversion': 0,
-            'min_excedente': 0,
-            'max_margen': 0
+            'capacidad_financiamiento': {
+                'semanas_financiables': 0,
+                'meses_financiables': 0,
+                'tiene_margen_completo': False
+            }
         }
     
     # Calcular TOTAL de ingresos reales ya cobrados (de todos los contratos)
@@ -4249,25 +4265,62 @@ def render_paso_5_analisis_egresos():
         }
     }
     
-    # Agregar métricas de tesorería (NUEVO en v5.0)
+    # Agregar métricas de tesorería (ACTUALIZADO en v2.4.0)
     analisis_completo['tesoreria'] = {
         'metricas_semanales': metricas_tesoreria['metricas_semanales'],
-        'recomendacion_inversion': metricas_tesoreria['recomendacion_inversion'],
-        'min_excedente_historico': metricas_tesoreria['min_excedente'],
-        'max_margen_historico': metricas_tesoreria['max_margen'],
+        'capacidad_financiamiento': metricas_tesoreria['capacidad_financiamiento'],
         'metadata': {
             'fecha_calculo': datetime.now().isoformat(),
             'semanas_analizadas': len(metricas_tesoreria['metricas_semanales']),
-            'periodo_margen_proteccion': 8  # semanas
+            'periodo_margen_proteccion': 8,  # semanas
+            'version_analisis': '2.4.0'  # Nueva versión con análisis por hitos
         }
     }
+    
+    # Agregar análisis de hitos si está disponible (NUEVO en v2.4.0)
+    try:
+        hito_actual, hito_proximo = identificar_hitos_actuales(proyeccion, contratos_cartera)
+        
+        if hito_actual:
+            # Última métrica
+            ultima_metrica = metricas_tesoreria['metricas_semanales'][-1]
+            
+            # Analizar hito actual
+            analisis_hito = analizar_cobertura_hito(
+                hito_actual,
+                ultima_metrica['saldo_final_real'],
+                ultima_metrica['burn_rate_acum'],
+                semana_actual,
+                proyeccion,
+                egresos_data
+            )
+            
+            # Analizar próximo hito si existe
+            analisis_proximo = None
+            if hito_proximo:
+                analisis_proximo = analizar_cobertura_proximo_hito(
+                    analisis_hito,
+                    hito_proximo,
+                    ultima_metrica['saldo_final_real']
+                )
+            
+            # Agregar al JSON
+            analisis_completo['analisis_hitos'] = {
+                'hito_actual': analisis_hito,
+                'hito_proximo': analisis_proximo
+            }
+    except Exception as e:
+        # Si falla el análisis de hitos, no bloquear la exportación
+        analisis_completo['analisis_hitos'] = {
+            'error': f"No se pudo generar análisis de hitos: {str(e)}"
+        }
     
     json_str = json.dumps(analisis_completo, indent=2, default=str)
     
     nombre_archivo = f"SICONE_{proyeccion['proyecto']['nombre']}_Completo_{datetime.now().strftime('%Y%m%d')}.json"
     
     st.download_button(
-        label="📥 Descargar JSON Completo (v5.0)",
+        label="📥 Descargar JSON Completo (v2.4.0)",
         data=json_str,
         file_name=nombre_archivo,
         mime="application/json",
