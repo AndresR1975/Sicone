@@ -2,9 +2,18 @@
 SICONE - Módulo de Ejecución Real FCL
 Análisis de FCL Real Ejecutado vs FCL Planeado
 
-Versión: 2.3.5
-Fecha: Diciembre 2024
+Versión: 2.3.6
+Fecha: 26 Diciembre 2024
 Autor: AI-MindNovation
+
+CORRECCIONES CRÍTICAS v2.3.6 (26-Dic-2024):
+- ✅ RECUPERADO: Función calcular_semana_esperada_hito (v2.3.4)
+- ✅ CRÍTICO: Lógica de semanas esperadas restaurada (evalúa contra FIN de fase)
+- ✅ CRÍTICO: Gastos fijos mensuales default = $0 (antes $50M inflaba egresos)
+- ✅ CRÍTICO: Filtro para procesar SOLO cuentas 7XXXXX (costos)
+- ✅ CRÍTICO: Reclasificación manual de cuentas recuperada
+- ✅ BUG FIX: Saldo correcto (Ingresos - Egresos sin gastos artificiales)
+- ✅ VALIDACIÓN: Hitos muestran semanas de atraso diferentes según su fase
 
 CORRECCIONES v2.3.5 (26-Dic-2024):
 - ✅ CRÍTICO: Recuperada funcionalidad de reclasificación manual de cuentas
@@ -144,6 +153,57 @@ def calcular_semana_desde_fecha(fecha_inicio: date, fecha_evento: date) -> int:
     
     dias_transcurridos = (fecha_evento - fecha_inicio).days
     return max(1, (dias_transcurridos // 7) + 1)
+
+
+def calcular_semana_esperada_hito(hito: Dict, configuracion: Dict) -> int:
+    """
+    Calcula la semana esperada de un hito basándose en su fase vinculada
+    
+    LÓGICA DE NEGOCIO (v2.3.4):
+    Para el módulo de CARTERA (análisis de pagos), los hitos siempre se evalúan 
+    contra el FIN de su fase vinculada, independiente del campo 'momento'.
+    
+    Razón: Las empresas constructoras ejecutan obra con pagos parciales y solo
+    paralizan si NO hay pagos. Si hay pagos parciales (ej: 96%), la obra continúa.
+    Por lo tanto, el "atraso" se cuenta desde cuando debió COMPLETARSE el pago
+    (fin de fase), no desde cuando inició la fase.
+    
+    Args:
+        hito: Dict con información del hito (fase_vinculada, momento)
+        configuracion: Dict con configuración de fases del proyecto
+    
+    Returns:
+        int: Semana esperada del hito (siempre al fin de la fase)
+    
+    Ejemplo:
+        hito = {
+            'fase_vinculada': 'Estructura, Mampostería y Complementarios',
+            'momento': 'inicio'  # Este campo se ignora para análisis de cartera
+        }
+        Fase dura 12 semanas (sem 25-36)
+        Resultado: semana_esperada = 36 (fin de la fase)
+    """
+    fase_vinculada = hito.get('fase_vinculada')
+    
+    if not fase_vinculada or 'fases' not in configuracion:
+        # Fallback: intentar usar semana_esperada del hito si existe
+        return hito.get('semana_esperada', 1)
+    
+    # Calcular en qué semana empieza cada fase
+    fases = configuracion['fases']
+    semana_actual_fase = 1
+    
+    for fase in fases:
+        if fase['nombre'] == fase_vinculada:
+            # Para análisis de CARTERA (pagos), siempre usar FIN de fase
+            # Los pagos se completan cuando termina la fase, no cuando inicia
+            return semana_actual_fase + fase['duracion_semanas'] - 1
+        
+        # Avanzar a la siguiente fase
+        semana_actual_fase += fase['duracion_semanas']
+    
+    # Si no se encontró la fase, intentar usar semana_esperada del hito
+    return hito.get('semana_esperada', 1)
 
 
 def formatear_moneda(valor: float) -> str:
@@ -1828,7 +1888,7 @@ def render_paso_2_ingresar_cartera():
                     'numero': hito['id'],
                     'descripcion': hito['nombre'],
                     'monto_esperado': monto_esperado,
-                    'semana_esperada': 1,  # TODO: calcular desde fase_vinculada
+                    'semana_esperada': calcular_semana_esperada_hito(hito, proyeccion['configuracion']),
                     'fecha_vencimiento': None,
                     'pagos': pagos_distribuidos,
                     'es_compartido': contrato_key == 'ambos',
@@ -2823,7 +2883,7 @@ def generar_alertas_egresos(comparacion: Dict, umbral_alerta: float = 10.0) -> L
     return alertas
 
 
-def calcular_metricas_tesoreria(proyeccion: Dict, egresos_data: Dict, contratos_cartera: List[Dict], semana_actual: int, gastos_fijos_mensuales: float = 50_000_000) -> Dict:
+def calcular_metricas_tesoreria(proyeccion: Dict, egresos_data: Dict, contratos_cartera: List[Dict], semana_actual: int, gastos_fijos_mensuales: float = 0) -> Dict:
     """
     Calcula métricas de tesorería semanales para gestión de caja
     
@@ -2832,7 +2892,8 @@ def calcular_metricas_tesoreria(proyeccion: Dict, egresos_data: Dict, contratos_
         egresos_data: Diccionario con datos de egresos reales
         contratos_cartera: Lista de contratos con su cartera
         semana_actual: Semana actual del proyecto
-        gastos_fijos_mensuales: Gastos fijos mensuales de la empresa (default: $50M)
+        gastos_fijos_mensuales: Gastos fijos mensuales adicionales (default: $0)
+                               NOTA: Solo usar si hay gastos NO registrados en Excel
     
     Returns:
         Dict con métricas semanales y recomendación de inversión
