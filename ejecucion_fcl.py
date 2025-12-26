@@ -2,9 +2,17 @@
 SICONE - Módulo de Ejecución Real FCL
 Análisis de FCL Real Ejecutado vs FCL Planeado
 
-Versión: 2.3.10
+Versión: 2.4.0
 Fecha: 26 Diciembre 2024
 Autor: AI-MindNovation
+
+NUEVA FUNCIONALIDAD v2.4.0 (26-Dic-2024 - 20:45):
+- ✅ NUEVO: Análisis de Cobertura Financiera por Hitos
+- ✅ NUEVO: Escenarios Conservador (proyectado) y Realista (burn rate)
+- ✅ NUEVO: Capacidad de Financiamiento (semanas/meses)
+- ✅ ELIMINADO: Recomendación de Inversión (ahora es multiproyecto)
+- ✅ MEJORA: Migración automática de costo_esperado_hito
+- ✅ MEJORA: Análisis de cobertura de hito actual y próximo
 
 CORRECCIONES CRÍTICAS v2.3.10 (26-Dic-2024 - 20:15):
 - ✅ FIX FINAL: "Comisiones por ventas" agregado a tabla de clasificación
@@ -1091,6 +1099,59 @@ def parse_excel_egresos(
 # COMPONENTES DE INTERFAZ - PASO 1: CARGAR PROYECCIÓN
 # ============================================================================
 
+def migrar_costos_esperados_hitos(proyeccion: Dict) -> Dict:
+    """
+    Agrega costo_esperado_hito a cada hito si no existe.
+    Calcula basándose en la fase vinculada.
+    
+    Args:
+        proyeccion: Diccionario de proyección
+        
+    Returns:
+        Dict: Proyección con costos esperados agregados
+    """
+    if 'hitos' not in proyeccion or not proyeccion['hitos']:
+        return proyeccion
+    
+    for hito in proyeccion['hitos']:
+        # Si ya tiene costo_esperado_hito, no hacer nada
+        if 'costo_esperado_hito' in hito and hito['costo_esperado_hito'] > 0:
+            continue
+        
+        # Buscar fase vinculada
+        fase_nombre = hito.get('fase_vinculada')
+        
+        if not fase_nombre or 'fases' not in proyeccion:
+            # Sin fase, usar 0 como default
+            hito['costo_esperado_hito'] = 0
+            continue
+        
+        # Encontrar la fase
+        fase = next((f for f in proyeccion['fases'] if f['nombre'] == fase_nombre), None)
+        
+        if not fase:
+            hito['costo_esperado_hito'] = 0
+            continue
+        
+        # Calcular costo de la fase basándose en proyección semanal
+        semana_inicio = fase.get('semana_inicio', 1)
+        semana_fin = fase.get('semana_fin', 1)
+        
+        costo_fase = 0
+        
+        if 'proyeccion_semanal' in proyeccion:
+            for semana_data in proyeccion['proyeccion_semanal']:
+                semana = semana_data.get('semana', 0)
+                
+                if semana_inicio <= semana <= semana_fin:
+                    # Sumar todos los egresos de la semana
+                    costo_fase += semana_data.get('egresos', 0)
+        
+        hito['costo_esperado_hito'] = costo_fase
+    
+    return proyeccion
+
+
 def render_paso_1_cargar_proyeccion():
     """Paso 1: Cargar JSON de proyección"""
     
@@ -1182,6 +1243,11 @@ def render_paso_1_cargar_proyeccion():
             
             # Guardar en session_state
             st.session_state.proyeccion_cartera = proyeccion_data
+            
+            # MIGRACIÓN AUTOMÁTICA: Agregar costo_esperado_hito si no existe
+            st.session_state.proyeccion_cartera = migrar_costos_esperados_hitos(
+                st.session_state.proyeccion_cartera
+            )
             
             # Si es JSON v3.0 con datos de cartera, cargarlos también
             if proyeccion_data.get('version') == '3.0' and 'cartera' in proyeccion_data:
@@ -2728,17 +2794,16 @@ def main():
         st.markdown("### 📌 Información del Sistema")
         
         # Versión
-        st.info("**Versión:** 2.3.10")
+        st.info("**Versión:** 2.4.0")
         
         # Estado de configuraciones críticas
         with st.expander("🔧 Configuración Actual", expanded=False):
-            st.markdown("**Correcciones Activas:**")
+            st.markdown("**Funcionalidades:**")
+            st.markdown("✅ Análisis por hitos (Conservador + Realista)")
+            st.markdown("✅ Capacidad de financiamiento")
             st.markdown("✅ Filtro cuentas 7XXXXX")
-            st.markdown("✅ Comisiones por ventas → Admin (TABLA)")
-            st.markdown("✅ Reclasificación manual disponible")
-            st.markdown("✅ Semanas esperadas (FIN fase)")
-            st.markdown("✅ Gastos fijos = $0")
-            st.markdown("✅ Inversión >= $0")
+            st.markdown("✅ Comisiones por ventas → Admin")
+            st.markdown("✅ Migración automática costos hitos")
             
             # Estado de reclasificaciones manuales
             if 'reclasificaciones_manuales' in st.session_state:
@@ -2748,18 +2813,18 @@ def main():
                 st.caption("ℹ️ Sin reclasificaciones manuales")
         
         # Notas de versión
-        with st.expander("📝 Notas v2.3.10", expanded=False):
+        with st.expander("📝 Notas v2.4.0", expanded=False):
             st.markdown("""
-            **Correcciones 26-Dic-2024 (20:15):**
+            **Nuevo 26-Dic-2024 (20:45):**
             
-            **Fix Final:**
-            - "Comisiones por ventas" en tabla ✓
-            - Sin Clasificar = $0 automático ✓
+            **Análisis por Hitos:**
+            - Escenario Conservador (proyectado) ✓
+            - Escenario Realista (burn rate) ✓
+            - Capacidad de financiamiento ✓
+            - Cobertura hito actual + próximo ✓
             
-            **v2.3.9 (Base):**
-            - Reprocesamiento validado
-            - Alertas visibles
-            - Inversión >= $0
+            **Eliminado:**
+            - Recomendación inversión (ahora multiproyecto)
             """)
         
         st.markdown("---")
@@ -3142,27 +3207,271 @@ def calcular_metricas_tesoreria(proyeccion: Dict, egresos_data: Dict, contratos_
         })
     
     
-    # 5. Recomendación para Inversión Temporal (valor único)
-    # CORRECCIÓN: La recomendación nunca debe ser negativa
-    # Si es negativa, significa que no se puede invertir nada (= 0)
+    # 5. Capacidad de Financiamiento (reemplaza Recomendación de Inversión)
+    # Muestra cuántas semanas se pueden financiar con saldo actual
     if metricas_semanales:
-        min_excedente = min(m['excedente_invertible'] for m in metricas_semanales)
-        max_margen = max(m['margen_proteccion'] for m in metricas_semanales)
+        # Última métrica (estado actual)
+        ultima_metrica = metricas_semanales[-1]
+        saldo_actual = ultima_metrica['saldo_final_real']
+        burn_rate_actual = ultima_metrica['burn_rate_acum']
+        margen_proteccion_actual = ultima_metrica['margen_proteccion']
         
-        # CRÍTICO: Nunca mostrar recomendación negativa
-        # Negativo significa "no invertir" = $0
-        recomendacion_inversion = max(0, min_excedente)
+        # Semanas que se pueden financiar con saldo actual
+        if burn_rate_actual > 0:
+            semanas_financiables = saldo_actual / burn_rate_actual
+            meses_financiables = semanas_financiables / 4.33
+        else:
+            semanas_financiables = 0
+            meses_financiables = 0
+        
+        # Estado del margen de protección
+        tiene_margen_completo = saldo_actual >= margen_proteccion_actual
     else:
-        min_excedente = 0
-        max_margen = 0
-        recomendacion_inversion = 0
+        semanas_financiables = 0
+        meses_financiables = 0
+        tiene_margen_completo = False
     
     return {
         'metricas_semanales': metricas_semanales,
-        'recomendacion_inversion': recomendacion_inversion,
-        'min_excedente': min_excedente,
-        'max_margen': max_margen
+        'capacidad_financiamiento': {
+            'semanas_financiables': semanas_financiables,
+            'meses_financiables': meses_financiables,
+            'tiene_margen_completo': tiene_margen_completo
+        }
     }
+
+
+def estimar_semanas_faltantes_hito(hito: Dict, semana_actual: int, proyeccion: Dict) -> float:
+    """
+    Estima semanas faltantes para completar un hito
+    
+    Args:
+        hito: Diccionario con datos del hito
+        semana_actual: Semana actual del proyecto
+        proyeccion: Diccionario con toda la proyección
+        
+    Returns:
+        float: Semanas estimadas faltantes
+    """
+    # Buscar fase vinculada al hito
+    fase_nombre = hito.get('fase_vinculada')
+    
+    if not fase_nombre or 'fases' not in proyeccion:
+        # Sin fase vinculada, usar % faltante con burn rate promedio
+        avance = hito.get('avance_porcentaje', 0)
+        faltante = (100 - avance) / 100
+        # Estimar 10 semanas por defecto si no hay datos
+        return faltante * 10
+    
+    # Buscar la fase
+    fase = next((f for f in proyeccion['fases'] if f['nombre'] == fase_nombre), None)
+    
+    if not fase:
+        # Sin datos de fase, usar estimación conservadora
+        avance = hito.get('avance_porcentaje', 0)
+        faltante = (100 - avance) / 100
+        return faltante * 10
+    
+    # Obtener semana fin de la fase
+    semana_fin = fase.get('semana_fin', semana_actual + 10)
+    
+    # Calcular semanas faltantes
+    semanas_faltantes = max(0, semana_fin - semana_actual)
+    
+    return semanas_faltantes
+
+
+def analizar_cobertura_hito(
+    hito: Dict,
+    saldo_actual: float,
+    burn_rate_actual: float,
+    semana_actual: int,
+    proyeccion: Dict,
+    egresos_data: Dict
+) -> Dict:
+    """
+    Analiza la cobertura financiera de un hito con dos escenarios:
+    - Conservador: Usa costos proyectados (mantiene márgenes ocultos)
+    - Realista: Usa burn rate actual (refleja eficiencia real)
+    
+    Args:
+        hito: Diccionario con datos del hito
+        saldo_actual: Saldo disponible actual
+        burn_rate_actual: Gasto promedio semanal actual
+        semana_actual: Semana actual del proyecto
+        proyeccion: Diccionario completo de proyección
+        egresos_data: Datos de egresos reales
+        
+    Returns:
+        Dict con análisis de cobertura en ambos escenarios
+    """
+    # Obtener avance del hito (de pagos)
+    avance_hito = hito.get('avance_porcentaje', 0)
+    faltante_hito = 100 - avance_hito
+    
+    # Costo total proyectado del hito
+    costo_total_proyectado = hito.get('costo_esperado_hito', 0)
+    
+    # ======================================
+    # ESCENARIO CONSERVADOR (Proyectado)
+    # ======================================
+    costo_ejecutado_estimado = costo_total_proyectado * (avance_hito / 100)
+    necesidad_conservadora = costo_total_proyectado - costo_ejecutado_estimado
+    cubre_conservador = saldo_actual >= necesidad_conservadora
+    
+    # ======================================
+    # ESCENARIO REALISTA (Burn Rate)
+    # ======================================
+    semanas_faltantes = estimar_semanas_faltantes_hito(hito, semana_actual, proyeccion)
+    necesidad_realista = semanas_faltantes * burn_rate_actual
+    cubre_realista = saldo_actual >= necesidad_realista
+    
+    return {
+        'nombre_hito': hito.get('nombre', 'N/A'),
+        'numero_hito': hito.get('numero', 0),
+        'avance_porcentaje': avance_hito,
+        'faltante_porcentaje': faltante_hito,
+        'conservador': {
+            'costo_total': costo_total_proyectado,
+            'costo_ejecutado': costo_ejecutado_estimado,
+            'necesidad': necesidad_conservadora,
+            'cubre': cubre_conservador,
+            'excedente_o_deficit': saldo_actual - necesidad_conservadora
+        },
+        'realista': {
+            'semanas_faltantes': semanas_faltantes,
+            'necesidad': necesidad_realista,
+            'cubre': cubre_realista,
+            'excedente_o_deficit': saldo_actual - necesidad_realista
+        }
+    }
+
+
+def analizar_cobertura_proximo_hito(
+    hito_actual_analisis: Dict,
+    hito_proximo: Dict,
+    saldo_actual: float
+) -> Dict:
+    """
+    Analiza cobertura del próximo hito después de completar el actual
+    
+    Args:
+        hito_actual_analisis: Análisis del hito actual (de analizar_cobertura_hito)
+        hito_proximo: Diccionario con datos del próximo hito
+        saldo_actual: Saldo disponible actual
+        
+    Returns:
+        Dict con análisis de cobertura del próximo hito
+    """
+    if not hito_proximo:
+        return {
+            'tiene_proximo': False,
+            'nombre_hito': 'N/A',
+            'conservador': {'cobertura': 0, 'saldo_restante': 0},
+            'realista': {'cobertura': 0, 'saldo_restante': 0}
+        }
+    
+    # Costo proyectado del próximo hito
+    costo_proximo = hito_proximo.get('costo_esperado_hito', 0)
+    
+    # ======================================
+    # ESCENARIO CONSERVADOR
+    # ======================================
+    saldo_post_actual_conservador = hito_actual_analisis['conservador']['excedente_o_deficit']
+    if saldo_post_actual_conservador < 0:
+        # Déficit en hito actual
+        cobertura_conservador = 0
+    else:
+        if costo_proximo > 0:
+            cobertura_conservador = (saldo_post_actual_conservador / costo_proximo) * 100
+        else:
+            cobertura_conservador = 100
+    
+    # ======================================
+    # ESCENARIO REALISTA
+    # ======================================
+    saldo_post_actual_realista = hito_actual_analisis['realista']['excedente_o_deficit']
+    if saldo_post_actual_realista < 0:
+        # Déficit en hito actual
+        cobertura_realista = 0
+    else:
+        if costo_proximo > 0:
+            cobertura_realista = (saldo_post_actual_realista / costo_proximo) * 100
+        else:
+            cobertura_realista = 100
+    
+    return {
+        'tiene_proximo': True,
+        'nombre_hito': hito_proximo.get('nombre', 'N/A'),
+        'numero_hito': hito_proximo.get('numero', 0),
+        'costo_proyectado': costo_proximo,
+        'conservador': {
+            'saldo_restante': max(0, saldo_post_actual_conservador),
+            'cobertura_porcentaje': min(100, cobertura_conservador),
+            'deficit': max(0, -saldo_post_actual_conservador)
+        },
+        'realista': {
+            'saldo_restante': max(0, saldo_post_actual_realista),
+            'cobertura_porcentaje': min(100, cobertura_realista),
+            'deficit': max(0, -saldo_post_actual_realista)
+        }
+    }
+
+
+def identificar_hitos_actuales(proyeccion: Dict, contratos_cartera: List[Dict]) -> tuple:
+    """
+    Identifica el hito actual y el próximo hito basándose en pagos recibidos
+    
+    Args:
+        proyeccion: Diccionario con proyección completa
+        contratos_cartera: Lista de contratos con pagos
+        
+    Returns:
+        tuple: (hito_actual, hito_proximo) o (None, None) si no hay hitos
+    """
+    if 'hitos' not in proyeccion or not proyeccion['hitos']:
+        return None, None
+    
+    hitos = proyeccion['hitos']
+    
+    # Calcular avance de cada hito basado en pagos
+    for hito in hitos:
+        pagos_hito = hito.get('pagos', [])
+        total_esperado = sum(pago.get('monto', 0) for pago in pagos_hito)
+        total_pagado = sum(pago.get('monto', 0) for pago in pagos_hito if pago.get('pagado', False))
+        
+        if total_esperado > 0:
+            avance = (total_pagado / total_esperado) * 100
+        else:
+            avance = 0
+        
+        hito['avance_porcentaje'] = avance
+    
+    # Encontrar hito actual (último con avance > 0 y < 100)
+    hito_actual = None
+    for hito in reversed(hitos):
+        avance = hito.get('avance_porcentaje', 0)
+        if 0 < avance < 100:
+            hito_actual = hito
+            break
+    
+    # Si no hay hito en progreso, usar el primero sin completar
+    if not hito_actual:
+        for hito in hitos:
+            if hito.get('avance_porcentaje', 0) < 100:
+                hito_actual = hito
+                break
+    
+    # Encontrar próximo hito (siguiente sin completar)
+    hito_proximo = None
+    if hito_actual:
+        idx_actual = hitos.index(hito_actual)
+        for hito in hitos[idx_actual + 1:]:
+            if hito.get('avance_porcentaje', 0) < 100:
+                hito_proximo = hito
+                break
+    
+    return hito_actual, hito_proximo
 
 
 def render_grafica_egresos_acumulados(proyeccion_df: pd.DataFrame, egresos_data: Dict, semana_actual: int):
@@ -3412,10 +3721,16 @@ def render_alertas_egresos(alertas: List[Dict]):
                 st.info(f"**{alerta['categoria']}**: {alerta['mensaje']}")
 
 
-def render_kpis_tesoreria(metricas_tesoreria: Dict):
-    """Renderiza KPIs de tesorería y gestión de caja"""
+def render_kpis_tesoreria(
+    metricas_tesoreria: Dict, 
+    proyeccion: Dict, 
+    contratos_cartera: List[Dict], 
+    egresos_data: Dict, 
+    semana_actual: int
+):
+    """Renderiza KPIs de tesorería y análisis de cobertura financiera por hitos"""
     
-    st.subheader("💰 Métricas de Tesorería")
+    st.subheader("💰 Análisis de Cobertura Financiera")
     
     metricas = metricas_tesoreria['metricas_semanales']
     if not metricas:
@@ -3424,8 +3739,14 @@ def render_kpis_tesoreria(metricas_tesoreria: Dict):
     
     # Última semana con datos
     ultima_metrica = metricas[-1]
+    capacidad = metricas_tesoreria['capacidad_financiamiento']
     
-    col1, col2, col3, col4 = st.columns(4)
+    # ============================================
+    # SECCIÓN 1: MÉTRICAS GENERALES
+    # ============================================
+    st.markdown("#### 📍 Capacidad General")
+    
+    col1, col2, col3 = st.columns(3)
     
     with col1:
         st.metric(
@@ -3442,33 +3763,201 @@ def render_kpis_tesoreria(metricas_tesoreria: Dict):
         )
     
     with col3:
+        semanas = capacidad['semanas_financiables']
+        meses = capacidad['meses_financiables']
+        st.metric(
+            "📅 Puede Financiar",
+            f"{semanas:.1f} semanas",
+            delta=f"{meses:.1f} meses",
+            help="Tiempo que se puede financiar con saldo actual al burn rate actual"
+        )
+    
+    # Estado del margen de protección
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        margen = ultima_metrica['margen_proteccion']
         st.metric(
             "🛡️ Margen de Protección",
-            formatear_moneda(ultima_metrica['margen_proteccion']),
+            formatear_moneda(margen),
             help="Reserva de seguridad (8 semanas de burn rate)"
         )
     
-    with col4:
-        recom = metricas_tesoreria['recomendacion_inversion']
-        color_delta = "normal" if recom >= 0 else "inverse"
-        st.metric(
-            "💎 Recomendación de Inversión",
-            formatear_moneda(recom),
-            help="Monto seguro para inversión temporal (MIN(Excedente) - MAX(Margen))"
-        )
+    with col2:
+        if capacidad['tiene_margen_completo']:
+            st.success("✅ Margen de protección cubierto")
+        else:
+            st.warning("⚠️ Margen de protección parcial")
     
-    # Nota informativa sobre la recomendación
+    # ============================================
+    # SECCIÓN 2: ANÁLISIS POR HITOS
+    # ============================================
     st.markdown("---")
     
-    if recom > 0:
-        st.success(f"✅ **Monto disponible para inversión:** {formatear_moneda(recom)}")
-        st.caption("Este valor se calcula como el mínimo excedente histórico menos el máximo margen de protección, garantizando liquidez en el peor escenario.")
-    elif recom < 0:
-        st.error(f"⚠️ **Alerta de Liquidez:** Déficit proyectado de {formatear_moneda(abs(recom))}")
-        st.caption("Se recomienda gestionar cobros o ajustar egresos para mejorar la liquidez.")
+    # Identificar hitos
+    hito_actual, hito_proximo = identificar_hitos_actuales(proyeccion, contratos_cartera)
+    
+    if not hito_actual:
+        st.info("ℹ️ No se identificó hito actual. Análisis disponible cuando haya hitos en progreso.")
+        return
+    
+    # Analizar cobertura del hito actual
+    analisis_hito = analizar_cobertura_hito(
+        hito_actual,
+        ultima_metrica['saldo_final_real'],
+        ultima_metrica['burn_rate_acum'],
+        semana_actual,
+        proyeccion,
+        egresos_data
+    )
+    
+    # Renderizar análisis del hito actual
+    st.markdown(f"#### 📌 Hito Actual: {analisis_hito['nombre_hito']}")
+    
+    col1, col2, col3 = st.columns(3)
+    
+    with col1:
+        st.metric(
+            "Avance",
+            f"{analisis_hito['avance_porcentaje']:.1f}%",
+            help="Basado en pagos recibidos"
+        )
+    
+    with col2:
+        st.metric(
+            "Faltante",
+            f"{analisis_hito['faltante_porcentaje']:.1f}%"
+        )
+    
+    with col3:
+        costo_total = analisis_hito['conservador']['costo_total']
+        st.metric(
+            "Costo Proyectado Total",
+            formatear_moneda(costo_total)
+        )
+    
+    # Dos escenarios
+    st.markdown("##### 💡 Escenarios de Cobertura")
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        st.markdown("**🔒 Escenario CONSERVADOR** (Costos Proyectados)")
+        necesidad_cons = analisis_hito['conservador']['necesidad']
+        cubre_cons = analisis_hito['conservador']['cubre']
+        
+        st.metric(
+            "Necesidad Estimada",
+            formatear_moneda(necesidad_cons),
+            help="Basado en costos proyectados originales (mantiene márgenes)"
+        )
+        
+        if cubre_cons:
+            excedente = analisis_hito['conservador']['excedente_o_deficit']
+            st.success(f"✅ Cubierto (Excedente: {formatear_moneda(excedente)})")
+        else:
+            deficit = abs(analisis_hito['conservador']['excedente_o_deficit'])
+            st.error(f"❌ Déficit: {formatear_moneda(deficit)}")
+    
+    with col2:
+        st.markdown("**⚡ Escenario REALISTA** (Burn Rate Actual)")
+        necesidad_real = analisis_hito['realista']['necesidad']
+        cubre_real = analisis_hito['realista']['cubre']
+        semanas_falt = analisis_hito['realista']['semanas_faltantes']
+        
+        st.metric(
+            "Necesidad Estimada",
+            formatear_moneda(necesidad_real),
+            delta=f"{semanas_falt:.1f} semanas",
+            help="Basado en burn rate actual y semanas estimadas faltantes"
+        )
+        
+        if cubre_real:
+            excedente = analisis_hito['realista']['excedente_o_deficit']
+            st.success(f"✅ Cubierto (Excedente: {formatear_moneda(excedente)})")
+        else:
+            deficit = abs(analisis_hito['realista']['excedente_o_deficit'])
+            st.error(f"❌ Déficit: {formatear_moneda(deficit)}")
+    
+    # Interpretación
+    st.markdown("---")
+    
+    if cubre_cons and cubre_real:
+        st.success("✅ **Situación Favorable:** El saldo actual cubre el hito en ambos escenarios.")
+    elif cubre_real and not cubre_cons:
+        st.warning("⚠️ **Situación Aceptable:** Cubierto con eficiencia actual, pero ajustado en escenario conservador.")
+        st.caption("Recomendación: Monitorear burn rate para mantener eficiencia.")
+    elif cubre_cons and not cubre_real:
+        st.warning("⚠️ **Atención:** Cubierto conservadoramente, pero burn rate actual indica posible déficit.")
+        st.caption("Recomendación: Revisar gastos recientes que puedan estar elevando el burn rate.")
     else:
-        st.info("ℹ️ **Sin excedente disponible para inversión** en este momento.")
-        st.caption("El proyecto mantiene los fondos necesarios para operación pero sin margen para inversiones temporales.")
+        st.error("❌ **Alerta Crítica:** Déficit en ambos escenarios.")
+        st.caption("Recomendación: Acelerar siguiente cobro o ajustar gastos urgentemente.")
+    
+    # ============================================
+    # SECCIÓN 3: PRÓXIMO HITO
+    # ============================================
+    if hito_proximo:
+        st.markdown("---")
+        
+        analisis_proximo = analizar_cobertura_proximo_hito(
+            analisis_hito,
+            hito_proximo,
+            ultima_metrica['saldo_final_real']
+        )
+        
+        st.markdown(f"#### 📊 Próximo Hito: {analisis_proximo['nombre_hito']}")
+        
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            st.markdown("**🔒 Escenario CONSERVADOR**")
+            cob_cons = analisis_proximo['conservador']['cobertura_porcentaje']
+            saldo_cons = analisis_proximo['conservador']['saldo_restante']
+            
+            st.metric(
+                "Cobertura Estimada",
+                f"{cob_cons:.1f}%",
+                delta=f"Saldo: {formatear_moneda(saldo_cons)}"
+            )
+            
+            if cob_cons >= 100:
+                st.success("✅ Próximo hito completamente cubierto")
+            elif cob_cons >= 50:
+                st.warning(f"⚠️ Cubre {cob_cons:.0f}% del próximo hito")
+            else:
+                st.error(f"❌ Solo cubre {cob_cons:.0f}% del próximo hito")
+        
+        with col2:
+            st.markdown("**⚡ Escenario REALISTA**")
+            cob_real = analisis_proximo['realista']['cobertura_porcentaje']
+            saldo_real = analisis_proximo['realista']['saldo_restante']
+            
+            st.metric(
+                "Cobertura Estimada",
+                f"{cob_real:.1f}%",
+                delta=f"Saldo: {formatear_moneda(saldo_real)}"
+            )
+            
+            if cob_real >= 100:
+                st.success("✅ Próximo hito completamente cubierto")
+            elif cob_real >= 50:
+                st.warning(f"⚠️ Cubre {cob_real:.0f}% del próximo hito")
+            else:
+                st.error(f"❌ Solo cubre {cob_real:.0f}% del próximo hito")
+    
+    # ============================================
+    # NOTA FINAL
+    # ============================================
+    st.markdown("---")
+    st.info("""
+    **ℹ️ Nota sobre Inversiones:**
+    
+    Este análisis es para un proyecto individual. Para decisiones de inversión temporal,
+    se recomienda usar el módulo de análisis multiproyecto que consolida excedentes
+    de todos los proyectos activos.
+    """)
+
 
 
 def render_grafica_tesoreria(metricas_tesoreria: Dict):
@@ -3639,8 +4128,14 @@ def render_paso_5_analisis_egresos():
         gastos_fijos_mensuales=gastos_fijos_mensuales
     )
     
-    # Renderizar KPIs de tesorería
-    render_kpis_tesoreria(metricas_tesoreria)
+    # Renderizar KPIs de tesorería con análisis de cobertura por hitos
+    render_kpis_tesoreria(
+        metricas_tesoreria,
+        proyeccion,
+        contratos_cartera,
+        egresos_data,
+        semana_actual
+    )
     
     st.markdown("---")
     
