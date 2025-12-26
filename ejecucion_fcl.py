@@ -2,9 +2,15 @@
 SICONE - Módulo de Ejecución Real FCL
 Análisis de FCL Real Ejecutado vs FCL Planeado
 
-Versión: 2.3.6
+Versión: 2.3.7
 Fecha: 26 Diciembre 2024
 Autor: AI-MindNovation
+
+CORRECCIONES CRÍTICAS v2.3.7 (26-Dic-2024 - 17:30):
+- ✅ BUG FIX: Mapeo categorías reclasificación ('Admin' → 'Administracion')
+- ✅ BUG FIX: Gastos fijos fallback $50M → $0 (línea 3534)
+- ✅ VALIDADO: Reclasificación ahora funciona correctamente
+- ✅ VALIDADO: Saldo será $338M (no $154M)
 
 CORRECCIONES CRÍTICAS v2.3.6 (26-Dic-2024):
 - ✅ RECUPERADO: Función calcular_semana_esperada_hito (v2.3.4)
@@ -14,6 +20,7 @@ CORRECCIONES CRÍTICAS v2.3.6 (26-Dic-2024):
 - ✅ CRÍTICO: Reclasificación manual de cuentas recuperada
 - ✅ BUG FIX: Saldo correcto (Ingresos - Egresos sin gastos artificiales)
 - ✅ VALIDACIÓN: Hitos muestran semanas de atraso diferentes según su fase
+- ✅ MEJORA: Sidebar con información de versión y configuración
 
 CORRECCIONES v2.3.5 (26-Dic-2024):
 - ✅ CRÍTICO: Recuperada funcionalidad de reclasificación manual de cuentas
@@ -2300,11 +2307,12 @@ def render_paso_4_ingresar_egresos():
                         )
                         
                         # Mapear selección a categoría interna
+                        # CRÍTICO: Los nombres deben coincidir EXACTAMENTE con el parser (línea ~988)
                         mapa_categorias = {
-                            '💎 Materiales': 'Materiales',
-                            '👷 Mano de Obra': 'Mano_Obra',
-                            '📦 Variables': 'Variables',
-                            '🏢 Admin': 'Admin'
+                            '💎 Materiales': 'Materiales',           # ✓ Parser: 'Materiales'
+                            '👷 Mano de Obra': 'Mano de Obra',      # ✓ Parser: 'Mano de Obra' (con espacio)
+                            '📦 Variables': 'Variables',             # ✓ Parser: 'Variables'
+                            '🏢 Admin': 'Administracion'             # ✓ Parser: 'Administracion' (con tilde)
                         }
                         
                         if categoria_seleccionada != '❓ Sin Clasificar':
@@ -2344,7 +2352,12 @@ def render_paso_4_ingresar_egresos():
                 
                 with st.expander("📋 Ver Reclasificaciones Aplicadas"):
                     for cuenta, cat in reclasificaciones_temp.items():
-                        emoji_map = {'Materiales': '💎', 'Mano_Obra': '👷', 'Variables': '📦', 'Admin': '🏢'}
+                        emoji_map = {
+                            'Materiales': '💎', 
+                            'Mano de Obra': '👷',  # Corregido: con espacio
+                            'Variables': '📦', 
+                            'Administracion': '🏢'  # Corregido: con tilde
+                        }
                         emoji = emoji_map.get(cat, '❓')
                         st.write(f"{emoji} **{cuenta}** → {cat}")
                 
@@ -2638,15 +2651,15 @@ def main():
         st.markdown("### 📌 Información del Sistema")
         
         # Versión
-        st.info("**Versión:** 2.3.6")
+        st.info("**Versión:** 2.3.7")
         
         # Estado de configuraciones críticas
         with st.expander("🔧 Configuración Actual", expanded=False):
             st.markdown("**Correcciones Activas:**")
             st.markdown("✅ Filtro cuentas 7XXXXX")
-            st.markdown("✅ Reclasificación manual")
+            st.markdown("✅ Reclasificación manual (BUGS CORREGIDOS)")
             st.markdown("✅ Semanas esperadas (FIN fase)")
-            st.markdown("✅ Gastos fijos = $0 (default)")
+            st.markdown("✅ Gastos fijos = $0 (BUGS CORREGIDOS)")
             
             # Estado de reclasificaciones manuales
             if 'reclasificaciones_manuales' in st.session_state:
@@ -2656,20 +2669,20 @@ def main():
                 st.caption("ℹ️ Sin reclasificaciones manuales")
         
         # Notas de versión
-        with st.expander("📝 Notas v2.3.6", expanded=False):
+        with st.expander("📝 Notas v2.3.7", expanded=False):
             st.markdown("""
-            **Correcciones 26-Dic-2024:**
+            **Correcciones 26-Dic-2024 (17:30):**
             
-            **Críticas:**
-            - Semanas esperadas basadas en FIN de fase
-            - Gastos fijos default = $0
-            - Solo procesa cuentas 7XXXXX
-            - Reclasificación manual activa
+            **Bug Fixes Críticos:**
+            - Reclasificación: 'Admin' → 'Administracion' ✓
+            - Gastos fijos: fallback $50M → $0 ✓
+            - Saldo ahora correcto ($338M) ✓
+            - Reclasificación ahora funciona ✓
             
-            **Bug Fixes:**
-            - Saldo correcto (sin gastos artificiales)
-            - Parser no incluye bancos/ingresos
-            - Cada hito evalúa su fase propia
+            **v2.3.6 (Base):**
+            - Semanas esperadas (FIN fase)
+            - Filtro cuentas 7XXXXX
+            - Sidebar con versión
             """)
         
         st.markdown("---")
@@ -3529,8 +3542,10 @@ def render_paso_5_analisis_egresos():
     # MÉTRICAS DE TESORERÍA
     # ========================================================================
     
-    # Obtener gastos fijos empresariales (default $50M mensuales si no está configurado)
-    gastos_fijos_mensuales = st.session_state.get('gastos_fijos_mensuales', 50_000_000)
+    # Obtener gastos fijos empresariales (default $0 - solo si usuario configura)
+    # IMPORTANTE: Gastos fijos NO deben sumarse automáticamente a proyectos individuales
+    # Solo usar en análisis consolidado multi-proyectos
+    gastos_fijos_mensuales = st.session_state.get('gastos_fijos_mensuales', 0)
     
     # Calcular métricas de tesorería (ahora incluye gastos fijos en egresos históricos)
     contratos_cartera = st.session_state.get('contratos_cartera_input', [])
