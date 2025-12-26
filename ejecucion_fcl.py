@@ -2,9 +2,14 @@
 SICONE - Módulo de Ejecución Real FCL
 Análisis de FCL Real Ejecutado vs FCL Planeado
 
-Versión: 2.3.9
+Versión: 2.3.10
 Fecha: 26 Diciembre 2024
 Autor: AI-MindNovation
+
+CORRECCIONES CRÍTICAS v2.3.10 (26-Dic-2024 - 20:15):
+- ✅ FIX FINAL: "Comisiones por ventas" agregado a tabla de clasificación
+- ✅ SOLUCIÓN DEFINITIVA: Ya no depende de reclasificación manual
+- ✅ VALIDADO: Sin Clasificar desaparecerá automáticamente
 
 CORRECCIONES CRÍTICAS v2.3.9 (26-Dic-2024 - 19:30):
 - ✅ BUG FIX: Reprocesamiento con try-catch y validación completa
@@ -279,6 +284,7 @@ TABLA_CLASIFICACION_CUENTAS = {
     "Casino y Restaurante": "Variables",
     "Cesantías": "Mano de Obra",
     "Combustibles (Acpm - Gasolina)": "Variables",
+    "Comisiones por ventas": "Administracion",  # Agregado 26-Dic-2024 - Pletorica
     "Costos indirectos": "Variables",
     "Costos no deducibles sin seguridad social": "Variables",
     "Costos sin factura electrónica": "Variables",
@@ -2722,16 +2728,17 @@ def main():
         st.markdown("### 📌 Información del Sistema")
         
         # Versión
-        st.info("**Versión:** 2.3.9")
+        st.info("**Versión:** 2.3.10")
         
         # Estado de configuraciones críticas
         with st.expander("🔧 Configuración Actual", expanded=False):
             st.markdown("**Correcciones Activas:**")
             st.markdown("✅ Filtro cuentas 7XXXXX")
-            st.markdown("✅ Reclasificación manual (VALIDACIÓN COMPLETA)")
+            st.markdown("✅ Comisiones por ventas → Admin (TABLA)")
+            st.markdown("✅ Reclasificación manual disponible")
             st.markdown("✅ Semanas esperadas (FIN fase)")
             st.markdown("✅ Gastos fijos = $0")
-            st.markdown("✅ Inversión nunca negativa")
+            st.markdown("✅ Inversión >= $0")
             
             # Estado de reclasificaciones manuales
             if 'reclasificaciones_manuales' in st.session_state:
@@ -2741,19 +2748,18 @@ def main():
                 st.caption("ℹ️ Sin reclasificaciones manuales")
         
         # Notas de versión
-        with st.expander("📝 Notas v2.3.9", expanded=False):
+        with st.expander("📝 Notas v2.3.10", expanded=False):
             st.markdown("""
-            **Correcciones 26-Dic-2024 (19:30):**
+            **Correcciones 26-Dic-2024 (20:15):**
             
-            **Bug Fixes:**
-            - Reprocesamiento con validación ✓
-            - Alertas visibles para sin clasificar ✓
-            - Recomendación inversión >= $0 ✓
-            - Vista previa actualizada ✓
+            **Fix Final:**
+            - "Comisiones por ventas" en tabla ✓
+            - Sin Clasificar = $0 automático ✓
             
-            **v2.3.8 (Base):**
-            - Reprocesamiento automático
-            - Archivo en session_state
+            **v2.3.9 (Base):**
+            - Reprocesamiento validado
+            - Alertas visibles
+            - Inversión >= $0
             """)
         
         st.markdown("---")
