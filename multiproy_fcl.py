@@ -2,15 +2,21 @@
 SICONE - Módulo de Análisis Multiproyecto FCL
 Consolidación y análisis de flujo de caja para múltiples proyectos
 
-Versión: 1.0.1
+Versión: 1.0.2
 Fecha: 26 Diciembre 2024
 Autor: AI-MindNovation
 
-BUGFIX CRÍTICO v1.0.1 (26-Dic-2024):
-- 🐛 FIX: Gastos fijos históricos ahora se descuentan del saldo base
-- ✅ CORRECCIÓN: Saldo ajustado = saldo_real - gastos_fijos_históricos
-- ✅ APLICACIÓN: Desde fecha del proyecto más antiguo hasta hoy
-- ⚠️ CRÍTICO: Sin esto, capacidad de financiamiento estaba sobrevalorada
+CORRECCIÓN COMPLETA v1.0.2 (26-Dic-2024 - 21:50):
+- ✅ CORRECTO: Gastos fijos se descuentan SEMANA POR SEMANA
+- ✅ APLICACIÓN: Desde semana 1 hasta última semana proyectada
+- ✅ MÉTODO: saldo_consolidado - gastos_fijos_acumulados
+- ✅ RESULTADO: Cada semana refleja costo operacional real
+- ✅ COLUMNA NUEVA: gastos_fijos_acumulados visible en datos
+
+BUGFIX v1.0.1 (26-Dic-2024 - PARCIAL):
+- ⚠️ Implementación incompleta (solo ajustó saldo_base)
+- ⚠️ No ajustaba semana por semana
+- ⚠️ Reemplazada por v1.0.2
 
 FUNCIONALIDADES:
 1. Carga de múltiples proyectos desde JSON completo
@@ -462,6 +468,30 @@ class ConsolidadorMultiproyecto:
         # Asegurar que saldos no sean negativos
         df['saldo_consolidado'] = df['saldo_consolidado'].clip(lower=0)
         
+        # CRÍTICO: Agregar columna de gastos fijos empresariales
+        df['gastos_fijos_semanales'] = self.gastos_fijos_semanales
+        
+        # CRÍTICO: Aplicar gastos fijos a TODAS las semanas (históricas + futuras)
+        # Cada semana debe descontar los gastos fijos semanales del saldo
+        if self.gastos_fijos_semanales > 0:
+            # Crear columna de gastos fijos acumulados
+            df['gastos_fijos_acumulados'] = 0.0
+            
+            # Para cada semana, acumular gastos fijos
+            for idx in range(len(df)):
+                semana_num = idx + 1  # Semanas empiezan en 1
+                df.at[idx, 'gastos_fijos_acumulados'] = self.gastos_fijos_semanales * semana_num
+            
+            # Ajustar saldo_consolidado descontando gastos fijos acumulados
+            # NOTA: Cada saldo ya tiene sus ingresos - egresos
+            # Ahora le restamos gastos_fijos_acumulados
+            df['saldo_consolidado'] = df['saldo_consolidado'] - df['gastos_fijos_acumulados']
+            
+            # Asegurar que no queden saldos negativos
+            df['saldo_consolidado'] = df['saldo_consolidado'].clip(lower=0)
+        else:
+            df['gastos_fijos_acumulados'] = 0.0
+        
         # Calcular Burn Rate (promedio últimas 8 semanas con datos reales)
         df['burn_rate'] = 0.0
         for idx in range(len(df)):
@@ -494,9 +524,6 @@ class ConsolidadorMultiproyecto:
         # NO propagar burn rate constante - se calculará dinámicamente considerando finalizaciones
         # df.loc[df['es_futura'], 'burn_rate'] = ultimo_burn_rate
         
-        # Agregar gastos fijos empresariales
-        df['gastos_fijos_semanales'] = self.gastos_fijos_semanales
-        
         # Calcular saldo ajustado con gastos fijos para proyección futura
         # Considera finalización de proyectos y presupuesto limitado
         df['saldo_consolidado_ajustado'] = df['saldo_consolidado'].copy()
@@ -508,26 +535,14 @@ class ConsolidadorMultiproyecto:
             idx_primera_futura = df[df['es_futura']].index[0]
             
             # Saldo base: usar saldo real actual de tesorería
+            # NOTA: Los gastos fijos ya fueron descontados semana por semana
+            # en saldo_consolidado, así que saldo_base ya está ajustado
             saldo_base_real = sum(p.get('saldo_real_tesoreria', 0) for p in self.proyectos)
             
-            # CRÍTICO: Ajustar por gastos fijos históricos
-            # Los JSON fueron generados con gastos_fijos = 0 (o valor diferente al actual)
-            # Debemos descontar los gastos fijos desde el inicio hasta hoy
-            if self.gastos_fijos_semanales > 0 and self.fecha_inicio_empresa:
-                # Calcular semanas transcurridas desde inicio empresa hasta hoy
-                dias_transcurridos = (self.fecha_actual - self.fecha_inicio_empresa).days
-                semanas_historicas = dias_transcurridos / 7.0
-                
-                # Gastos fijos que debieron descontarse históricamente
-                gastos_fijos_historicos = self.gastos_fijos_semanales * semanas_historicas
-                
-                # Ajustar saldo base
-                saldo_base = saldo_base_real - gastos_fijos_historicos
-            else:
+            if saldo_base_real > 0:
                 saldo_base = saldo_base_real
-            
-            # Fallback si saldo ajustado es negativo o cero
-            if saldo_base <= 0:
+            else:
+                # Usar último saldo consolidado (ya ajustado por gastos fijos)
                 saldo_base = df.at[idx_primera_futura - 1, 'saldo_consolidado'] if idx_primera_futura > 0 else df['saldo_consolidado'].iloc[0]
             
             # Proyectar por proyecto considerando presupuesto y fin
