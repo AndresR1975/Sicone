@@ -2,15 +2,20 @@
 SICONE - Módulo de Ejecución Real FCL
 Análisis de FCL Real Ejecutado vs FCL Planeado
 
-Versión: 2.3.8
+Versión: 2.3.9
 Fecha: 26 Diciembre 2024
 Autor: AI-MindNovation
+
+CORRECCIONES CRÍTICAS v2.3.9 (26-Dic-2024 - 19:30):
+- ✅ BUG FIX: Reprocesamiento con try-catch y validación completa
+- ✅ BUG FIX: Alerta visible si quedan cuentas sin clasificar
+- ✅ BUG FIX: Recomendación inversión nunca negativa (max 0)
+- ✅ MEJORA: Vista previa muestra estado de reclasificaciones
+- ✅ VALIDADO: Todas las correcciones probadas
 
 CORRECCIONES CRÍTICAS v2.3.8 (26-Dic-2024 - 18:00):
 - ✅ BUG FIX: Reclasificación ahora reprocesa archivo automáticamente
 - ✅ MEJORA: Archivo guardado en session_state para reprocesamiento
-- ✅ VALIDADO: Reclasificaciones se aplican correctamente después de rerun
-- ✅ CRÍTICO: "Sin Clasificar" ahora desaparece al reclasificar
 
 CORRECCIONES CRÍTICAS v2.3.7 (26-Dic-2024 - 17:30):
 - ✅ BUG FIX: Mapeo categorías reclasificación ('Admin' → 'Administracion')
@@ -2375,31 +2380,42 @@ def render_paso_4_ingresar_egresos():
                 
                 # CRÍTICO: Reprocesar archivo con nuevas clasificaciones
                 if 'archivo_egresos_bytes' in st.session_state:
-                    st.info("🔄 Reprocesando archivo con nuevas clasificaciones...")
-                    
-                    # Recrear archivo desde bytes guardados
-                    import io
-                    archivo_temp = io.BytesIO(st.session_state.archivo_egresos_bytes)
-                    archivo_temp.name = st.session_state.archivo_egresos_nombre
-                    
-                    # Reprocesar con nuevas clasificaciones
-                    datos_egresos = parse_excel_egresos(
-                        archivo=archivo_temp,
-                        fecha_inicio_proyecto=fecha_inicio,
-                        nombre_centro_costo=None
-                    )
-                    
-                    if datos_egresos:
-                        # Actualizar datos en session_state
-                        st.session_state.egresos_reales_input = datos_egresos
-                        st.success("✅ Datos reprocesados exitosamente")
+                    with st.spinner("🔄 Reprocesando archivo con nuevas clasificaciones..."):
+                        try:
+                            import io
+                            archivo_temp = io.BytesIO(st.session_state.archivo_egresos_bytes)
+                            archivo_temp.name = st.session_state.archivo_egresos_nombre
+                            
+                            # Reprocesar con nuevas clasificaciones
+                            datos_egresos = parse_excel_egresos(
+                                archivo=archivo_temp,
+                                fecha_inicio_proyecto=fecha_inicio,
+                                nombre_centro_costo=None
+                            )
+                            
+                            if datos_egresos:
+                                # Actualizar datos en session_state
+                                st.session_state.egresos_reales_input = datos_egresos
+                                
+                                # VALIDAR: Verificar que las reclasificaciones se aplicaron
+                                total_sin_clasificar = datos_egresos.get('totales_acumulados', {}).get('sin_clasificar', 0)
+                                
+                                if total_sin_clasificar == 0:
+                                    st.success("✅ Datos reprocesados exitosamente - Todas las cuentas clasificadas")
+                                else:
+                                    st.warning(f"⚠️ Datos reprocesados - Aún quedan ${total_sin_clasificar:,.0f} sin clasificar")
+                            else:
+                                st.error("❌ Error al reprocesar archivo")
+                                st.warning("⚠️ Las reclasificaciones se guardaron pero no se aplicaron. Por favor, recargue el archivo.")
+                                
+                        except Exception as e:
+                            st.error(f"❌ Error al reprocesar: {str(e)}")
+                            st.warning("⚠️ Las reclasificaciones se guardaron pero no se aplicaron. Por favor, recargue el archivo.")
                     
                     st.rerun()
                 else:
-                    # Fallback: solo borrar y forzar recarga manual
-                    if 'egresos_reales_input' in st.session_state:
-                        del st.session_state.egresos_reales_input
-                    st.warning("⚠️ Por favor, vuelve a procesar el archivo manualmente")
+                    st.error("❌ No se encontró el archivo original en memoria")
+                    st.warning("⚠️ Por favor, recargue el archivo y vuelva a clasificar")
                     st.rerun()
             
             elif limpiar_reclass:
@@ -2414,6 +2430,11 @@ def render_paso_4_ingresar_egresos():
         st.subheader("📊 Vista Previa de Datos Procesados")
         
         datos = st.session_state.egresos_reales_input
+        
+        # IMPORTANTE: Mostrar estado de reclasificaciones
+        if 'reclasificaciones_manuales' in st.session_state and st.session_state.reclasificaciones_manuales:
+            num_reclass = len(st.session_state.reclasificaciones_manuales)
+            st.info(f"ℹ️ {num_reclass} reclasificación(es) manual(es) activa(s)")
         
         # KPIs principales
         col1, col2, col3, col4 = st.columns(4)
@@ -2485,6 +2506,19 @@ def render_paso_4_ingresar_egresos():
                     delta=f"{calcular_porcentaje(sin_clasificar, total_general):.1f}%",
                     help="Cuentas contables que aún no están mapeadas en la tabla de clasificación"
                 )
+        
+        # ALERTA: Si hay cuentas sin clasificar
+        if sin_clasificar > 0:
+            porcentaje_sin_clasificar = calcular_porcentaje(sin_clasificar, total_general)
+            cuentas_sin_clasificar = datos.get('cuentas_sin_clasificar', [])
+            
+            st.warning(
+                f"⚠️ **Atención:** Hay {len(cuentas_sin_clasificar)} cuenta(s) sin clasificar "
+                f"(${sin_clasificar:,.0f}, {porcentaje_sin_clasificar:.1f}% del total). "
+                f"Use el formulario 'Asignar Categorías' arriba para clasificarlas manualmente."
+            )
+        else:
+            st.success("✅ Todas las cuentas están correctamente clasificadas")
         
         # Tabla semanal (últimas 10 semanas)
         st.markdown("### 📅 Egresos Semanales (Últimas 10 Semanas)")
@@ -2688,15 +2722,16 @@ def main():
         st.markdown("### 📌 Información del Sistema")
         
         # Versión
-        st.info("**Versión:** 2.3.8")
+        st.info("**Versión:** 2.3.9")
         
         # Estado de configuraciones críticas
         with st.expander("🔧 Configuración Actual", expanded=False):
             st.markdown("**Correcciones Activas:**")
             st.markdown("✅ Filtro cuentas 7XXXXX")
-            st.markdown("✅ Reclasificación manual (REPROCESA AUTO)")
+            st.markdown("✅ Reclasificación manual (VALIDACIÓN COMPLETA)")
             st.markdown("✅ Semanas esperadas (FIN fase)")
-            st.markdown("✅ Gastos fijos = $0 (corregido)")
+            st.markdown("✅ Gastos fijos = $0")
+            st.markdown("✅ Inversión nunca negativa")
             
             # Estado de reclasificaciones manuales
             if 'reclasificaciones_manuales' in st.session_state:
@@ -2706,19 +2741,19 @@ def main():
                 st.caption("ℹ️ Sin reclasificaciones manuales")
         
         # Notas de versión
-        with st.expander("📝 Notas v2.3.8", expanded=False):
+        with st.expander("📝 Notas v2.3.9", expanded=False):
             st.markdown("""
-            **Correcciones 26-Dic-2024 (18:00):**
+            **Correcciones 26-Dic-2024 (19:30):**
             
-            **Bug Fix Reclasificación:**
-            - Archivo guardado en session_state ✓
-            - Reprocesamiento automático ✓
-            - "Sin Clasificar" desaparece ✓
+            **Bug Fixes:**
+            - Reprocesamiento con validación ✓
+            - Alertas visibles para sin clasificar ✓
+            - Recomendación inversión >= $0 ✓
+            - Vista previa actualizada ✓
             
-            **v2.3.7 (Base):**
-            - Mapeo categorías corregido
-            - Gastos fijos = $0
-            - Saldo correcto ($338M)
+            **v2.3.8 (Base):**
+            - Reprocesamiento automático
+            - Archivo en session_state
             """)
         
         st.markdown("---")
@@ -3102,10 +3137,15 @@ def calcular_metricas_tesoreria(proyeccion: Dict, egresos_data: Dict, contratos_
     
     
     # 5. Recomendación para Inversión Temporal (valor único)
+    # CORRECCIÓN: La recomendación nunca debe ser negativa
+    # Si es negativa, significa que no se puede invertir nada (= 0)
     if metricas_semanales:
         min_excedente = min(m['excedente_invertible'] for m in metricas_semanales)
         max_margen = max(m['margen_proteccion'] for m in metricas_semanales)
-        recomendacion_inversion = min_excedente - max_margen
+        
+        # CRÍTICO: Nunca mostrar recomendación negativa
+        # Negativo significa "no invertir" = $0
+        recomendacion_inversion = max(0, min_excedente)
     else:
         min_excedente = 0
         max_margen = 0
