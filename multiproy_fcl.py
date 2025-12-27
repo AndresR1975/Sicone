@@ -1774,6 +1774,17 @@ def main():
             st.error("❌ No se pudo obtener el estado actual")
             return
         
+        # GUARDAR DATOS PARA MÓDULO DE REPORTES
+        st.session_state.datos_reportes = {
+            'timestamp': datetime.now(),
+            'estado_caja': estado,
+            'proyectos': consolidador.proyectos,
+            'df_consolidado': consolidador.df_consolidado,
+            'gastos_fijos_mensuales': gastos_fijos_mensuales,
+            'semanas_futuro': semanas_futuro,
+            'semana_actual': consolidador.semana_actual_consolidada
+        }
+        
         # SIDEBAR: Métricas dinámicas
         with st.sidebar:
             st.markdown("---")
@@ -1833,6 +1844,34 @@ def main():
         # Sección de Inversiones Temporales
         if INVERSIONES_DISPONIBLES:
             render_inversiones_temporales(estado)
+        
+        st.markdown("---")
+        
+        # SECCIÓN DE REPORTES
+        st.markdown("### 📊 Generar Reportes Ejecutivos")
+        st.caption("Acceda al módulo de reportes con los datos consolidados actuales")
+        
+        col_rep1, col_rep2, col_rep3 = st.columns([2, 2, 1])
+        
+        with col_rep1:
+            if st.button("📄 Ver Reportes Ejecutivos", use_container_width=True, type="primary"):
+                st.session_state.modulo_actual = 'reportes'
+                st.rerun()
+        
+        with col_rep2:
+            # Mostrar edad de datos
+            if 'datos_reportes' in st.session_state:
+                edad = (datetime.now() - st.session_state.datos_reportes['timestamp']).total_seconds() / 60
+                if edad < 1:
+                    st.success(f"✅ Datos actualizados (hace {edad*60:.0f} segundos)")
+                else:
+                    st.info(f"ℹ️ Datos actualizados hace {edad:.0f} minutos")
+            else:
+                st.warning("⚠️ No hay datos guardados para reportes")
+        
+        with col_rep3:
+            st.caption("💡 Los reportes usan los datos consolidados actuales")
+
 
 
 if __name__ == "__main__":

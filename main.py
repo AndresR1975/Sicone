@@ -171,8 +171,8 @@ MODULOS_DISPONIBLES = {
         'nombre': 'Reportes',
         'icono': '📈',
         'descripcion': 'Reportes ejecutivos y análisis',
-        'estado': 'deshabilitado',
-        'version': 'v1.0 (próximamente)'
+        'estado': 'activo',  # Activado
+        'version': 'v1.0'
     }
 }
 
@@ -440,6 +440,45 @@ def render_modulo_multiproyecto():
         st.error(f"❌ Error inesperado: {e}")
         st.exception(e)
 
+def render_modulo_reportes():
+    """Renderiza el módulo de Reportes Ejecutivos"""
+    # Botón de regreso
+    with st.sidebar:
+        if st.button("◄ Volver al Inicio", use_container_width=True):
+            st.session_state.modulo_actual = None
+            st.rerun()
+        st.markdown("---")
+        st.markdown(f"👤 **Usuario:** {st.session_state.usuario_actual['nombre_completo']}")
+        st.caption(f"Rol: {st.session_state.usuario_actual['rol']}")
+    
+    # Importar y ejecutar el módulo de reportes
+    try:
+        import importlib
+        import sys
+        
+        # Recargar módulo para usar versión más reciente
+        if 'reportes_ejecutivos' in sys.modules:
+            import reportes_ejecutivos
+            importlib.reload(reportes_ejecutivos)
+        else:
+            import reportes_ejecutivos
+        
+        # Ejecutar
+        if hasattr(reportes_ejecutivos, 'main'):
+            reportes_ejecutivos.main()
+        else:
+            st.error("❌ Error: reportes_ejecutivos.py no tiene función main()")
+    
+    except ImportError as e:
+        st.error(f"❌ Error al importar el módulo de reportes: {e}")
+        st.info("**Solución:** Asegúrese de que `reportes_ejecutivos.py` esté en el mismo directorio que `main.py`")
+    except AttributeError:
+        st.error("❌ Error: El módulo `reportes_ejecutivos.py` no tiene una función `main()`")
+        st.info("**Solución:** Verifique que el archivo tiene la estructura correcta")
+    except Exception as e:
+        st.error(f"❌ Error inesperado: {e}")
+        st.exception(e)
+
 # ============================================================================
 # MAIN - PUNTO DE ENTRADA
 # ============================================================================
@@ -461,6 +500,8 @@ def main():
         render_modulo_flujo_caja()
     elif st.session_state.modulo_actual == 'multiproyecto':
         render_modulo_multiproyecto()
+    elif st.session_state.modulo_actual == 'reportes':
+        render_modulo_reportes()
     else:
         st.error(f"Módulo '{st.session_state.modulo_actual}' no reconocido")
         if st.button("Volver al inicio"):
