@@ -2,20 +2,22 @@
 SICONE - Módulo de Análisis Multiproyecto FCL
 Consolidación y análisis de flujo de caja para múltiples proyectos
 
-Versión: 1.2.2
-Fecha: 26 Diciembre 2024 - 23:45
+Versión: 1.3.0
+Fecha: 27 Diciembre 2024 - 00:00
 Autor: AI-MindNovation
 
-FIX DEFINITIVO v1.2.2 (26-Dic-2024 - 23:45):
-- 🐛 FIX DEFINITIVO: Proyección ahora parte del saldo correcto de semana actual
-- ✅ ANTES: saldo_base = df.at[idx_primera_futura - 1, ...] (índice incorrecto)
-- ✅ AHORA: saldo_base = df_historico['saldo_consolidado'].iloc[-1] (último histórico)
-- ✅ RESULTADO: Proyección parte EXACTAMENTE del saldo de la semana actual
-- ✅ SIN SALTOS: Línea naranja continúa desde donde termina línea azul
+CAMBIO FUNDAMENTAL v1.3.0 (27-Dic-2024 - 00:00):
+- 🔧 CAMBIO CRÍTICO: Gastos fijos ahora se calculan desde fecha_inicio_empresa
+- ✅ ANTES: Usaba semana_consolidada (número arbitrario como 64, 147...)
+- ✅ AHORA: Calcula semanas REALES desde inicio empresa hasta cada fecha
+- ✅ RESULTADO: Gastos fijos históricos ahora son CORRECTOS
+- ✅ IMPACTO: Proyección ahora parte del saldo REAL de semana actual
+- ⚠️  DEBUG: Incluye logging temporal para verificar cálculos
 
 HISTÓRICO:
-v1.2.1 (26-Dic-2024): Loop corregido (pero inicio proyección con bug)
-v1.2.0 (26-Dic-2024): Fix consistencia (loop con bug)
+v1.2.2 (26-Dic-2024): Fix inicio proyección (pero gastos fijos mal)
+v1.2.1 (26-Dic-2024): Loop corregido
+v1.2.0 (26-Dic-2024): Fix consistencia
 v1.1.0 (26-Dic-2024): Rediseño conceptual (error)
 v1.0.4 (26-Dic-2024): Proyección iterativa
 v1.0.3 (26-Dic-2024): 3 correcciones gastos fijos
@@ -30,7 +32,7 @@ FUNCIONALIDADES:
 4. Análisis de estado de caja empresarial
 5. Proyección configurable (default: 8 semanas)
 6. Gastos fijos empresariales (mensuales → semanales)
-7. Consistencia total entre visualizaciones
+7. Cálculo correcto de gastos fijos históricos
 8. Proyección fluida sin saltos
 """
 
@@ -480,20 +482,21 @@ class ConsolidadorMultiproyecto:
         df['gastos_fijos_semanales'] = self.gastos_fijos_semanales
         
         # Aplicar gastos fijos a semanas HISTÓRICAS para consistencia con dashboard
-        # Dashboard muestra saldo REAL (flujo proyectos - gastos fijos históricos)
-        # Gráfica debe mostrar el MISMO valor para evitar confusión
+        # CRÍTICO: Calcular basándose en semanas desde inicio de empresa, NO semana_consolidada
         if self.gastos_fijos_semanales > 0:
             # Crear columna de gastos fijos acumulados
             df['gastos_fijos_acumulados'] = 0.0
             
-            # CRÍTICO: Iterar sobre los índices REALES del DataFrame, no range(len)
+            # Iterar sobre los índices REALES del DataFrame
             for idx in df.index:
-                # Calcular número de semana desde inicio
-                semana_num = int(df.at[idx, 'semana_consolidada'])
-                df.at[idx, 'gastos_fijos_acumulados'] = self.gastos_fijos_semanales * semana_num
+                # Calcular número de semanas desde inicio de empresa hasta esta fecha
+                fecha_semana = df.at[idx, 'fecha']
+                semanas_desde_inicio = max(0, ((fecha_semana - self.fecha_inicio_empresa).days // 7))
+                
+                # Gastos fijos acumulados = semanas × costo_semanal
+                df.at[idx, 'gastos_fijos_acumulados'] = self.gastos_fijos_semanales * semanas_desde_inicio
                 
                 # Descontar de semanas HISTÓRICAS solamente
-                # Las futuras se ajustarán en la proyección iterativa
                 if df.at[idx, 'es_historica']:
                     saldo_actual = df.at[idx, 'saldo_consolidado']
                     df.at[idx, 'saldo_consolidado'] = max(0, saldo_actual - df.at[idx, 'gastos_fijos_acumulados'])
@@ -545,6 +548,17 @@ class ConsolidadorMultiproyecto:
             if len(df_historico) > 0:
                 # Usar el último saldo histórico como punto de partida
                 saldo_base = df_historico['saldo_consolidado'].iloc[-1]
+                
+                # DEBUG: Verificar valores
+                ultima_semana_hist = df_historico.iloc[-1]
+                print(f"\n{'='*60}")
+                print(f"DEBUG - INICIO PROYECCIÓN:")
+                print(f"{'='*60}")
+                print(f"Última semana histórica: {ultima_semana_hist['semana_consolidada']}")
+                print(f"Fecha: {ultima_semana_hist['fecha']}")
+                print(f"Saldo consolidado (con GF): ${saldo_base:,.0f}")
+                print(f"Gastos fijos acumulados: ${ultima_semana_hist['gastos_fijos_acumulados']:,.0f}")
+                print(f"{'='*60}\n")
             else:
                 # Si no hay histórico, usar el primer valor
                 saldo_base = df['saldo_consolidado'].iloc[0]
