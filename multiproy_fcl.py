@@ -2,17 +2,20 @@
 SICONE - Módulo de Análisis Multiproyecto FCL
 Consolidación y análisis de flujo de caja para múltiples proyectos
 
-Versión: 1.3.1
-Fecha: 27 Diciembre 2024 - 00:10
+Versión: 1.3.2
+Fecha: 27 Diciembre 2024 - 00:20
 Autor: AI-MindNovation
 
-BUGFIX v1.3.1 (27-Dic-2024 - 00:10):
-- 🐛 FIX: Error de tipo Timestamp vs datetime.date corregido
-- ✅ Conversión explícita a pd.Timestamp() para ambas fechas
-- ✅ Ahora la resta de fechas funciona correctamente
+FIX DEFINITIVO v1.3.2 (27-Dic-2024 - 00:20):
+- 🎯 FIX FINAL: Línea azul ahora solo muestra datos HISTÓRICOS (hasta hoy)
+- ✅ ANTES: Línea azul se dibujaba para TODAS las semanas (histórico + futuro)
+- ✅ AHORA: Línea azul SOLO hasta semana actual, línea naranja desde ahí
+- ✅ RESULTADO: Ya NO hay dos líneas en las semanas futuras
+- ✅ LÓGICA: Azul = histórico, Naranja = proyección (sin superposición)
 
 HISTÓRICO:
-v1.3.0 (27-Dic-2024): Cambio fundamental (error de tipo)
+v1.3.1 (27-Dic-2024): Fix error Timestamp
+v1.3.0 (27-Dic-2024): Cambio fundamental gastos fijos
 v1.2.2 (26-Dic-2024): Fix inicio proyección
 v1.2.1 (26-Dic-2024): Loop corregido
 v1.2.0 (26-Dic-2024): Fix consistencia
@@ -31,7 +34,7 @@ FUNCIONALIDADES:
 5. Proyección configurable (default: 8 semanas)
 6. Gastos fijos empresariales (mensuales → semanales)
 7. Cálculo correcto de gastos fijos históricos
-8. Proyección fluida sin saltos
+8. Líneas históricas vs proyección claramente separadas
 """
 
 import streamlit as st
@@ -886,10 +889,14 @@ def render_timeline_consolidado(consolidador: ConsolidadorMultiproyecto):
     # Crear figura
     fig = go.Figure()
     
-    # Línea de saldo consolidado
+    # Filtrar solo datos históricos para la línea azul
+    df_historico = df[df['es_historica']]
+    fechas_historicas = [fechas_py[i] for i in df_historico.index]
+    
+    # Línea de saldo consolidado (SOLO HISTÓRICO)
     fig.add_trace(go.Scatter(
-        x=fechas_py,
-        y=df['saldo_consolidado'],
+        x=fechas_historicas,
+        y=df_historico['saldo_consolidado'],
         mode='lines',
         name='Saldo Consolidado',
         line=dict(color='#1f77b4', width=3),
@@ -898,7 +905,7 @@ def render_timeline_consolidado(consolidador: ConsolidadorMultiproyecto):
                       'Saldo: $%{y:,.0f}<br>' +
                       '<i>(Incluye gastos fijos empresariales)</i><br>' +
                       '<extra></extra>',
-        customdata=df[['semana_consolidada']].values
+        customdata=df_historico[['semana_consolidada']].values
     ))
     
     # Línea de margen de protección
