@@ -2,18 +2,20 @@
 SICONE - Módulo de Análisis Multiproyecto FCL
 Consolidación y análisis de flujo de caja para múltiples proyectos
 
-Versión: 1.0.3
-Fecha: 26 Diciembre 2024 - 22:10
+Versión: 1.0.4
+Fecha: 26 Diciembre 2024 - 22:30
 Autor: AI-MindNovation
 
-CORRECCIÓN CRÍTICA v1.0.3 (26-Dic-2024 - 22:10):
-- 🐛 FIX CRÍTICO: Eliminado doble descuento de gastos fijos en semanas futuras
-- ✅ CORRECCIÓN: Saldo Total dashboard usa saldo_consolidado (ajustado)
-- ✅ CORRECCIÓN: Proyección usa último saldo histórico ajustado como base
-- ✅ RESULTADO: Proyección naranja ahora DEBAJO de saldo azul (correcto)
+BUGFIX CRÍTICO v1.0.4 (26-Dic-2024 - 22:30):
+- 🐛 FIX CRÍTICO: Salto anormal en primera semana proyectada corregido
+- ✅ CORRECCIÓN: Proyección ahora es ITERATIVA (semana por semana)
+- ✅ ANTES: saldo_base + todos_ingresos - todos_egresos (acumulativo)
+- ✅ AHORA: saldo[n] = saldo[n-1] + ingresos[n] - egresos[n] - gastos_fijos[n]
+- ✅ RESULTADO: Proyección fluida sin saltos artificiales
 
 HISTÓRICO:
-v1.0.2 (26-Dic-2024): Gastos fijos semana por semana (parcial - doble descuento)
+v1.0.3 (26-Dic-2024): 3 correcciones gastos fijos (dashboard, proyección, doble descuento)
+v1.0.2 (26-Dic-2024): Gastos fijos semana por semana (doble descuento)
 v1.0.1 (26-Dic-2024): Gastos fijos históricos (incompleto)
 v1.0.0 (10-Dic-2024): Versión inicial
 
@@ -540,6 +542,9 @@ class ConsolidadorMultiproyecto:
             saldos_proyectados_por_semana = []
             burn_rates_por_semana = []
             
+            # Iniciar con el último saldo histórico (ya ajustado por gastos fijos)
+            saldo_actual_proyeccion = saldo_base
+            
             for idx in df[df['es_futura']].index:
                 semana_consolidada = df.at[idx, 'semana_consolidada']
                 
@@ -581,22 +586,22 @@ class ConsolidadorMultiproyecto:
                 
                 burn_rates_por_semana.append(egresos_proyectos)
                 
-                # Calcular saldo proyectado
-                semanas_desde_hoy = idx - idx_primera_futura + 1
-                gastos_fijos_acum = self.gastos_fijos_semanales * semanas_desde_hoy
+                # Obtener ingresos de ESTA semana específica
+                ingresos_esta_semana = df.at[idx, 'ingresos_proy_total']
                 
-                # Usar egresos de proyectos activos (no el total proyectado que puede ser infinito)
-                egresos_reales_proyectados = sum(burn_rates_por_semana)
-                ingresos_proy_acum = df.loc[idx_primera_futura:idx, 'ingresos_proy_total'].sum()
-                
-                saldo_proyectado = (
-                    saldo_base + 
-                    ingresos_proy_acum - 
-                    egresos_reales_proyectados - 
-                    gastos_fijos_acum
+                # Calcular saldo proyectado de forma ITERATIVA
+                # Saldo esta semana = Saldo anterior + Ingresos - Egresos - Gastos fijos
+                saldo_actual_proyeccion = (
+                    saldo_actual_proyeccion + 
+                    ingresos_esta_semana - 
+                    egresos_proyectos - 
+                    self.gastos_fijos_semanales
                 )
                 
-                saldos_proyectados_por_semana.append(saldo_proyectado)
+                # No permitir saldos negativos
+                saldo_actual_proyeccion = max(0, saldo_actual_proyeccion)
+                
+                saldos_proyectados_por_semana.append(saldo_actual_proyeccion)
                 df.at[idx, 'burn_rate_proyectado'] = egresos_proyectos + self.gastos_fijos_semanales
             
             # Asignar saldos proyectados
