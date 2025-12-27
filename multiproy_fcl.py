@@ -2,24 +2,25 @@
 SICONE - Módulo de Análisis Multiproyecto FCL
 Consolidación y análisis de flujo de caja para múltiples proyectos
 
-Versión: 1.2.0
-Fecha: 26 Diciembre 2024 - 23:15
+Versión: 1.2.1
+Fecha: 26 Diciembre 2024 - 23:30
 Autor: AI-MindNovation
 
-FIX CRÍTICO v1.2.0 (26-Dic-2024 - 23:15):
-- 🐛 FIX CRÍTICO: Consistencia restaurada entre gráfica y dashboard
-- ✅ CORRECCIÓN: Línea histórica VUELVE a incluir gastos fijos descontados
-- ✅ PROBLEMA v1.1.0: Gráfica mostraba $2,474M vs Dashboard $1,504M (inconsistente)
-- ✅ SOLUCIÓN: Ambos ahora muestran $1,504M (saldo REAL con gastos fijos)
-- ✅ PROYECCIÓN: Mantiene cálculo iterativo sin saltos de v1.0.4
-- ✅ RESULTADO: Gráfica y dashboard consistentes, proyección fluida
+BUGFIX CRÍTICO v1.2.1 (26-Dic-2024 - 23:30):
+- 🐛 FIX CRÍTICO: Corrección de loop de iteración (for idx in df.index)
+- ✅ ANTES: for idx in range(len(df)) - accedía índices incorrectos
+- ✅ AHORA: for idx in df.index - usa índices reales del DataFrame
+- ✅ RESULTADO: Gastos fijos ahora SÍ se descuentan correctamente del histórico
+- ✅ PROYECCIÓN: Ahora parte del saldo correcto ($1,504M, no $2,474M)
+- ✅ CONSISTENCIA: Gráfica, proyección y dashboard todos muestran $1,504M
 
 HISTÓRICO:
-v1.1.0 (26-Dic-2024): Rediseño conceptual (ERROR - inconsistencia gráfica/dashboard)
-v1.0.4 (26-Dic-2024): Proyección iterativa (correcto pero salto persistía)
-v1.0.3 (26-Dic-2024): 3 correcciones gastos fijos (correcto pero redundante)
-v1.0.2 (26-Dic-2024): Gastos fijos semana por semana (doble descuento)
-v1.0.1 (26-Dic-2024): Gastos fijos históricos (incompleto)
+v1.2.0 (26-Dic-2024): Fix consistencia (pero loop con bug)
+v1.1.0 (26-Dic-2024): Rediseño conceptual (error - inconsistencia)
+v1.0.4 (26-Dic-2024): Proyección iterativa
+v1.0.3 (26-Dic-2024): 3 correcciones gastos fijos
+v1.0.2 (26-Dic-2024): Gastos fijos semana por semana
+v1.0.1 (26-Dic-2024): Gastos fijos históricos
 v1.0.0 (10-Dic-2024): Versión inicial
 
 FUNCIONALIDADES:
@@ -29,7 +30,7 @@ FUNCIONALIDADES:
 4. Análisis de estado de caja empresarial
 5. Proyección configurable (default: 8 semanas)
 6. Gastos fijos empresariales (mensuales → semanales)
-7. Consistencia entre visualizaciones
+7. Consistencia total entre visualizaciones
 """
 
 import streamlit as st
@@ -484,9 +485,10 @@ class ConsolidadorMultiproyecto:
             # Crear columna de gastos fijos acumulados
             df['gastos_fijos_acumulados'] = 0.0
             
-            # Para cada semana, calcular gastos fijos acumulados
-            for idx in range(len(df)):
-                semana_num = idx + 1
+            # CRÍTICO: Iterar sobre los índices REALES del DataFrame, no range(len)
+            for idx in df.index:
+                # Calcular número de semana desde inicio
+                semana_num = int(df.at[idx, 'semana_consolidada'])
                 df.at[idx, 'gastos_fijos_acumulados'] = self.gastos_fijos_semanales * semana_num
                 
                 # Descontar de semanas HISTÓRICAS solamente
