@@ -2,21 +2,21 @@
 SICONE - Módulo de Análisis Multiproyecto FCL
 Consolidación y análisis de flujo de caja para múltiples proyectos
 
-Versión: 1.2.1
-Fecha: 26 Diciembre 2024 - 23:30
+Versión: 1.2.2
+Fecha: 26 Diciembre 2024 - 23:45
 Autor: AI-MindNovation
 
-BUGFIX CRÍTICO v1.2.1 (26-Dic-2024 - 23:30):
-- 🐛 FIX CRÍTICO: Corrección de loop de iteración (for idx in df.index)
-- ✅ ANTES: for idx in range(len(df)) - accedía índices incorrectos
-- ✅ AHORA: for idx in df.index - usa índices reales del DataFrame
-- ✅ RESULTADO: Gastos fijos ahora SÍ se descuentan correctamente del histórico
-- ✅ PROYECCIÓN: Ahora parte del saldo correcto ($1,504M, no $2,474M)
-- ✅ CONSISTENCIA: Gráfica, proyección y dashboard todos muestran $1,504M
+FIX DEFINITIVO v1.2.2 (26-Dic-2024 - 23:45):
+- 🐛 FIX DEFINITIVO: Proyección ahora parte del saldo correcto de semana actual
+- ✅ ANTES: saldo_base = df.at[idx_primera_futura - 1, ...] (índice incorrecto)
+- ✅ AHORA: saldo_base = df_historico['saldo_consolidado'].iloc[-1] (último histórico)
+- ✅ RESULTADO: Proyección parte EXACTAMENTE del saldo de la semana actual
+- ✅ SIN SALTOS: Línea naranja continúa desde donde termina línea azul
 
 HISTÓRICO:
-v1.2.0 (26-Dic-2024): Fix consistencia (pero loop con bug)
-v1.1.0 (26-Dic-2024): Rediseño conceptual (error - inconsistencia)
+v1.2.1 (26-Dic-2024): Loop corregido (pero inicio proyección con bug)
+v1.2.0 (26-Dic-2024): Fix consistencia (loop con bug)
+v1.1.0 (26-Dic-2024): Rediseño conceptual (error)
 v1.0.4 (26-Dic-2024): Proyección iterativa
 v1.0.3 (26-Dic-2024): 3 correcciones gastos fijos
 v1.0.2 (26-Dic-2024): Gastos fijos semana por semana
@@ -31,6 +31,7 @@ FUNCIONALIDADES:
 5. Proyección configurable (default: 8 semanas)
 6. Gastos fijos empresariales (mensuales → semanales)
 7. Consistencia total entre visualizaciones
+8. Proyección fluida sin saltos
 """
 
 import streamlit as st
@@ -538,18 +539,21 @@ class ConsolidadorMultiproyecto:
         
         # Para semanas futuras, proyectar considerando finalizaciones
         if len(df[df['es_futura']]) > 0:
-            # Obtener índice de primera semana futura
-            idx_primera_futura = df[df['es_futura']].index[0]
-            
-            # Saldo base: usar último saldo consolidado (flujo de proyectos sin gastos fijos)
-            # La proyección descontará gastos fijos desde este punto en adelante
-            saldo_base = df.at[idx_primera_futura - 1, 'saldo_consolidado'] if idx_primera_futura > 0 else df['saldo_consolidado'].iloc[0]
+            # CRÍTICO: Obtener el saldo de la ÚLTIMA semana histórica
+            # (que ya tiene gastos fijos descontados)
+            df_historico = df[df['es_historica']]
+            if len(df_historico) > 0:
+                # Usar el último saldo histórico como punto de partida
+                saldo_base = df_historico['saldo_consolidado'].iloc[-1]
+            else:
+                # Si no hay histórico, usar el primer valor
+                saldo_base = df['saldo_consolidado'].iloc[0]
             
             # Proyectar por proyecto considerando presupuesto y fin
             saldos_proyectados_por_semana = []
             burn_rates_por_semana = []
             
-            # Iniciar con el último saldo histórico (flujo de proyectos)
+            # Iniciar con el último saldo histórico (ya incluye gastos fijos descontados)
             saldo_actual_proyeccion = saldo_base
             
             for idx in df[df['es_futura']].index:
