@@ -2,20 +2,18 @@
 SICONE - Módulo de Análisis Multiproyecto FCL
 Consolidación y análisis de flujo de caja para múltiples proyectos
 
-Versión: 1.3.0
-Fecha: 27 Diciembre 2024 - 00:00
+Versión: 1.3.1
+Fecha: 27 Diciembre 2024 - 00:10
 Autor: AI-MindNovation
 
-CAMBIO FUNDAMENTAL v1.3.0 (27-Dic-2024 - 00:00):
-- 🔧 CAMBIO CRÍTICO: Gastos fijos ahora se calculan desde fecha_inicio_empresa
-- ✅ ANTES: Usaba semana_consolidada (número arbitrario como 64, 147...)
-- ✅ AHORA: Calcula semanas REALES desde inicio empresa hasta cada fecha
-- ✅ RESULTADO: Gastos fijos históricos ahora son CORRECTOS
-- ✅ IMPACTO: Proyección ahora parte del saldo REAL de semana actual
-- ⚠️  DEBUG: Incluye logging temporal para verificar cálculos
+BUGFIX v1.3.1 (27-Dic-2024 - 00:10):
+- 🐛 FIX: Error de tipo Timestamp vs datetime.date corregido
+- ✅ Conversión explícita a pd.Timestamp() para ambas fechas
+- ✅ Ahora la resta de fechas funciona correctamente
 
 HISTÓRICO:
-v1.2.2 (26-Dic-2024): Fix inicio proyección (pero gastos fijos mal)
+v1.3.0 (27-Dic-2024): Cambio fundamental (error de tipo)
+v1.2.2 (26-Dic-2024): Fix inicio proyección
 v1.2.1 (26-Dic-2024): Loop corregido
 v1.2.0 (26-Dic-2024): Fix consistencia
 v1.1.0 (26-Dic-2024): Rediseño conceptual (error)
@@ -490,8 +488,9 @@ class ConsolidadorMultiproyecto:
             # Iterar sobre los índices REALES del DataFrame
             for idx in df.index:
                 # Calcular número de semanas desde inicio de empresa hasta esta fecha
-                fecha_semana = df.at[idx, 'fecha']
-                semanas_desde_inicio = max(0, ((fecha_semana - self.fecha_inicio_empresa).days // 7))
+                fecha_semana = pd.Timestamp(df.at[idx, 'fecha'])
+                fecha_inicio = pd.Timestamp(self.fecha_inicio_empresa)
+                semanas_desde_inicio = max(0, ((fecha_semana - fecha_inicio).days // 7))
                 
                 # Gastos fijos acumulados = semanas × costo_semanal
                 df.at[idx, 'gastos_fijos_acumulados'] = self.gastos_fijos_semanales * semanas_desde_inicio
