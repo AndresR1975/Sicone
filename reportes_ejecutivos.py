@@ -1,22 +1,22 @@
 """
 SICONE - Módulo de Reportes Ejecutivos
-Versión: 1.5.1
+Versión: 1.6.0
 Fecha: 28 Diciembre 2024
 Autor: Andrés Restrepo & Claude
 
-FIX v1.5.1 (28-Dic-2024):
-- 🐛 FIX: Timeline funciona sin proyeccion_semanal individual
-- 🐛 FIX: Pie vuelve a distribución por proyecto (datos disponibles)
-- ✅ Fuente tabla aumentada a 8pt (legible)
-- ✅ Pie de página reducido drásticamente
-- ✅ Gráficos cuadrados 2.8" × 2.8" mantienen funcionalidad
-- 📝 NOTA: Para datos históricos reales, consolidador debe pasar
-        proyeccion_semanal de cada proyecto individual
-
-DATOS SIMPLIFICADOS v1.5.1:
-- Timeline: Proyección lineal simple con burn_rate
-- Pie: Distribución de ejecutado por proyecto
-- Layout 2×1 optimizado para 1 página
+DATOS REALES v1.6.0 (28-Dic-2024):
+- ✅ Timeline con DATOS HISTÓRICOS REALES consolidados
+- ✅ Accede a proyecto['data']['proyeccion_semanal']
+- ✅ Consolida saldos de TODOS los proyectos por semana
+- ✅ Muestra VARIACIÓN REAL (picos y valles)
+- ✅ Pie con 4 CATEGORÍAS de gasto consolidadas:
+  * Mano de Obra (azul)
+  * Materiales (verde)
+  * Administración (naranja)
+  * Variables (morado) = Equipos + Imprevistos + Logística
+- ✅ Tabla con fuente 8pt (legible)
+- ✅ Pie de página compacto
+- 📐 Layout 2×1 optimizado para 1 página
 """
 
 import streamlit as st
@@ -287,8 +287,8 @@ def instalar_reportlab():
 
 def generar_grafico_timeline(datos: Dict) -> bytes:
     """
-    Genera gráfico de evolución temporal del saldo consolidado
-    VERSIÓN SIMPLIFICADA: Funciona con datos consolidados del multiproyecto
+    Genera gráfico de evolución temporal del saldo consolidado CON DATOS REALES
+    Consolida saldos de todos los proyectos por semana
     
     Args:
         datos: Diccionario con datos consolidados del multiproyecto
@@ -297,31 +297,94 @@ def generar_grafico_timeline(datos: Dict) -> bytes:
         bytes: Imagen PNG del gráfico
     """
     try:
-        # Extraer datos consolidados
-        saldo_total = datos.get('saldo_total', 0)
-        burn_rate = datos.get('burn_rate', 0)
-        semana_actual = datos.get('semana', 28)
+        proyectos = datos.get('proyectos', [])
         
-        if saldo_total == 0:
+        if not proyectos:
+            st.warning("⚠️ Timeline: No hay proyectos")
             return None
         
-        # PROYECCIÓN SIMPLE pero funcional
-        # Histórico: 6 semanas atrás
-        semanas_hist = list(range(-5, 1))  # -5, -4, -3, -2, -1, 0
-        saldos_hist = []
+        st.info(f"🔍 Timeline: Procesando {len(proyectos)} proyectos")
         
-        for i in semanas_hist:
-            # Saldo histórico aproximado
-            saldo = saldo_total + (burn_rate * abs(i))
-            saldos_hist.append(saldo)
+        # CONSOLIDAR saldos de todos los proyectos por semana
+        saldos_por_semana = {}  # {semana: saldo_total}
         
-        # Proyección: 6 semanas adelante
-        semanas_proy = list(range(0, 7))  # 0, 1, 2, 3, 4, 5, 6
-        saldos_proy = []
+        for proyecto in proyectos:
+            nombre = proyecto.get('nombre', 'Sin nombre')
+            
+            # Datos están en proyecto['data']
+            data = proyecto.get('data', {})
+            
+            if not data:
+                st.warning(f"⚠️ Timeline: Proyecto {nombre} no tiene 'data'")
+                continue
+            
+            proyeccion = data.get('proyeccion_semanal', [])
+            
+            if not proyeccion:
+                st.warning(f"⚠️ Timeline: Proyecto {nombre} no tiene 'proyeccion_semanal'")
+                continue
+            
+            st.success(f"✅ Timeline: Proyecto {nombre} tiene {len(proyeccion)} semanas")
+            
+            for semana_data in proyeccion:
+                num_semana = semana_data.get('Semana', 0)
+                saldo = semana_data.get('Saldo_Acumulado', 0)
+                
+                if num_semana not in saldos_por_semana:
+                    saldos_por_semana[num_semana] = 0
+                
+                saldos_por_semana[num_semana] += saldo
         
-        for i in semanas_proy:
-            saldo = max(0, saldo_total - (burn_rate * i))
-            saldos_proy.append(saldo)
+        st.info(f"📊 Timeline: Total {len(saldos_por_semana)} semanas consolidadas")
+        
+        # Si no hay datos históricos, usar proyección simple
+        if not saldos_por_semana:
+            st.warning("⚠️ Timeline: No hay saldos consolidados, usando proyección simple")
+            
+            estado_caja = datos.get('estado_caja', {})
+            saldo_total = estado_caja.get('saldo_total', 0)
+            burn_rate = estado_caja.get('burn_rate', 0)
+            
+            if saldo_total == 0:
+                st.error("❌ Timeline: No hay saldo_total")
+                return None
+            
+            # Proyección simple
+            semanas_hist = list(range(-5, 1))
+            saldos_hist = [saldo_total + (burn_rate * abs(i)) for i in semanas_hist]
+            
+            semanas_proy = list(range(0, 7))
+            saldos_proy = [max(0, saldo_total - (burn_rate * i)) for i in semanas_proy]
+        else:
+            # Usar datos reales
+            st.success(f"✅ Timeline: Usando datos reales consolidados")
+            
+            semanas_ordenadas = sorted(saldos_por_semana.keys())
+            
+            # Tomar últimas 6 semanas
+            inicio = max(0, len(semanas_ordenadas) - 6)
+            semanas_historicas = semanas_ordenadas[inicio:]
+            
+            # Convertir a semanas relativas
+            semanas_hist = []
+            saldos_hist = []
+            
+            for i, sem in enumerate(semanas_historicas):
+                semana_rel = i - len(semanas_historicas) + 1
+                semanas_hist.append(semana_rel)
+                saldos_hist.append(saldos_por_semana[sem])
+            
+            # Proyección futura
+            saldo_actual = saldos_hist[-1] if saldos_hist else 0
+            estado_caja = datos.get('estado_caja', {})
+            burn_rate = estado_caja.get('burn_rate', 0)
+            
+            semanas_proy = [0]
+            saldos_proy = [saldo_actual]
+            
+            for i in range(1, 7):
+                saldos_proy.append(max(0, saldo_actual - (burn_rate * i)))
+                semanas_proy.append(i)
         
         # Crear gráfico CUADRADO
         fig, ax = plt.subplots(figsize=(2.8, 2.8))
@@ -336,7 +399,7 @@ def generar_grafico_timeline(datos: Dict) -> bytes:
                 color='#f97316', linewidth=2, linestyle='--', marker='s', markersize=3,
                 label='Proyección', zorder=3)
         
-        # Línea vertical en "Hoy"
+        # Línea vertical "Hoy"
         ax.axvline(x=0, color='gray', linestyle=':', linewidth=1.2, alpha=0.7, 
                    label='Hoy', zorder=2)
         
@@ -350,7 +413,7 @@ def generar_grafico_timeline(datos: Dict) -> bytes:
         ax.grid(True, alpha=0.3, linestyle='--', linewidth=0.4)
         ax.legend(loc='upper right', fontsize=5, framealpha=0.95, ncol=1)
         
-        # Formato de moneda
+        # Formato moneda
         ax.yaxis.set_major_formatter(plt.FuncFormatter(
             lambda x, p: formatear_moneda(x) if UTILS_DISPONIBLE else f"${x/1e6:.0f}M"
         ))
@@ -368,10 +431,12 @@ def generar_grafico_timeline(datos: Dict) -> bytes:
         buf.seek(0)
         plt.close(fig)
         
+        st.success("✅ Timeline generado exitosamente")
+        
         return buf
         
     except Exception as e:
-        st.error(f"Error generando gráfico timeline: {e}")
+        st.error(f"❌ Error generando gráfico timeline: {e}")
         import traceback
         st.error(traceback.format_exc())
         return None
@@ -507,8 +572,8 @@ def generar_grafico_comparacion(datos: Dict) -> bytes:
 
 def generar_grafico_pie_gastos(datos: Dict) -> bytes:
     """
-    Genera pie chart de distribución de EJECUTADO por proyecto
-    VERSIÓN SIMPLIFICADA: Funciona con datos consolidados del multiproyecto
+    Genera pie chart de distribución por CATEGORÍAS DE GASTO CONSOLIDADAS
+    Suma categorías de todos los proyectos: Mano de Obra, Materiales, Administración, Variables
     
     Args:
         datos: Diccionario con datos consolidados del multiproyecto
@@ -520,23 +585,64 @@ def generar_grafico_pie_gastos(datos: Dict) -> bytes:
         proyectos = datos.get('proyectos', [])
         
         if not proyectos:
+            st.warning("⚠️ Pie: No hay proyectos")
             return None
         
-        # Preparar datos (ejecutado por proyecto)
-        nombres = []
-        ejecutados = []
-        colores = ['#3b82f6', '#22c55e', '#f97316', '#8b5cf6', '#ec4899', '#14b8a6']
+        st.info(f"🔍 Pie: Procesando {len(proyectos)} proyectos")
         
-        for p in proyectos:
-            nombre = p.get('nombre', 'Sin nombre')[:10]
-            ejecutado = p.get('ejecutado', 0)
+        # CONSOLIDAR categorías de todos los proyectos
+        categorias = {
+            'Mano de Obra': 0,
+            'Materiales': 0,
+            'Administración': 0,
+            'Variables': 0
+        }
+        
+        for proyecto in proyectos:
+            nombre = proyecto.get('nombre', 'Sin nombre')
             
-            if ejecutado > 0:
-                nombres.append(nombre)
-                ejecutados.append(ejecutado)
+            # Datos están en proyecto['data']
+            data = proyecto.get('data', {})
+            
+            if not data:
+                st.warning(f"⚠️ Pie: Proyecto {nombre} no tiene 'data'")
+                continue
+            
+            proyeccion = data.get('proyeccion_semanal', [])
+            
+            if not proyeccion:
+                st.warning(f"⚠️ Pie: Proyecto {nombre} no tiene 'proyeccion_semanal'")
+                continue
+            
+            st.success(f"✅ Pie: Proyecto {nombre} tiene {len(proyeccion)} semanas")
+            
+            # Sumar categorías de todas las semanas
+            for semana in proyeccion:
+                categorias['Mano de Obra'] += semana.get('Mano_Obra', 0)
+                categorias['Materiales'] += semana.get('Materiales', 0)
+                categorias['Administración'] += semana.get('Admin', 0)
+                categorias['Variables'] += (
+                    semana.get('Equipos', 0) +
+                    semana.get('Imprevistos', 0) +
+                    semana.get('Logistica', 0)
+                )
         
-        if not ejecutados or sum(ejecutados) == 0:
+        total_categorias = sum(categorias.values())
+        st.info(f"📊 Pie: Total consolidado = ${total_categorias:,.0f}")
+        
+        for cat, val in categorias.items():
+            if val > 0:
+                pct = (val / total_categorias) * 100
+                st.caption(f"  • {cat}: ${val:,.0f} ({pct:.1f}%)")
+        
+        if total_categorias == 0:
+            st.error("❌ Pie: No hay categorías con valores")
             return None
+        
+        # Preparar datos
+        nombres = list(categorias.keys())
+        valores = list(categorias.values())
+        colores = ['#3b82f6', '#22c55e', '#f97316', '#8b5cf6']  # Azul, Verde, Naranja, Morado
         
         # Crear gráfico CUADRADO
         fig, ax = plt.subplots(figsize=(2.8, 2.8))
@@ -546,7 +652,7 @@ def generar_grafico_pie_gastos(datos: Dict) -> bytes:
             return f'{pct:.1f}%' if pct > 3 else ''
         
         # Gráfico de pie
-        wedges, texts, autotexts = ax.pie(ejecutados, 
+        wedges, texts, autotexts = ax.pie(valores, 
                                            labels=None,
                                            autopct=formato_label,
                                            startangle=90,
@@ -555,7 +661,7 @@ def generar_grafico_pie_gastos(datos: Dict) -> bytes:
                                            wedgeprops={'edgecolor': 'white', 'linewidth': 1})
         
         # Título
-        ax.set_title('Distribución por Proyecto', 
+        ax.set_title('Categorías de Gasto', 
                     fontsize=8, fontweight='bold', pad=4)
         
         # Leyenda DENTRO
@@ -574,10 +680,12 @@ def generar_grafico_pie_gastos(datos: Dict) -> bytes:
         buf.seek(0)
         plt.close(fig)
         
+        st.success("✅ Pie generado exitosamente")
+        
         return buf
         
     except Exception as e:
-        st.error(f"Error generando gráfico pie: {e}")
+        st.error(f"❌ Error generando gráfico pie: {e}")
         import traceback
         st.error(traceback.format_exc())
         return None
