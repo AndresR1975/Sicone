@@ -1,24 +1,22 @@
 """
 SICONE - Módulo de Reportes Ejecutivos
-Versión: 1.3.2
+Versión: 1.4.0
 Fecha: 28 Diciembre 2024
 Autor: Andrés Restrepo & Claude
 
-MEJORAS v1.3.2 (28-Dic-2024):
-- 🎨 Timeline mejorado: Muestra semanas NEGATIVAS (pasado visible)
-- ✅ Eje X: -6 a +6 semanas (antes solo 0 a 6)
-- ✅ Línea vertical en "Hoy" (semana 0)
-- ✅ Marcadores más grandes y visibles
-- 🎨 Semáforo mejorado: Leyenda VERTICAL a la derecha
-- ✅ Líneas de referencia MÁS VISIBLES (sólidas, alpha 0.4)
-- ✅ 4 categorías en leyenda (Excedente, Estable, Alerta, Crítico)
-- 📊 Gráfico PIE implementado (opcional, comentado)
-- ✅ Distribución de gastos ejecutados por proyecto
-- ✅ Leyenda vertical a la derecha
+NUEVO LAYOUT v1.4.0 (28-Dic-2024):
+- 🎨 Layout 2×1: Timeline y Pie CUADRADOS lado a lado
+- ✅ Timeline: 3.2" × 3.2" (cuadrado)
+- ✅ Pie: 3.2" × 3.2" (cuadrado)
+- ✅ Ambos en misma fila (tabla 2 columnas)
+- ✅ Semáforo: Ancho completo debajo (horizontal)
+- ✅ Leyenda semáforo DENTRO del recuadro (upper right, 2 col)
+- ✅ Mejor aprovechamiento del espacio
+- ✅ Más impacto visual
 
-FIX v1.3.1 (28-Dic-2024):
-- 🐛 Corregido error de dimensiones en Timeline
-- 📐 Optimización para caber en 1 página
+MEJORAS v1.3.2 (28-Dic-2024):
+- Timeline con eje -6 a +6, línea "Hoy"
+- Semáforo con líneas más visibles
 """
 
 import streamlit as st
@@ -335,8 +333,8 @@ def generar_grafico_timeline(datos: Dict) -> bytes:
         semanas_proy = semanas[idx_actual:]  # Overlap en semana 0
         saldos_proy = saldos[idx_actual:]
         
-        # Crear gráfico
-        fig, ax = plt.subplots(figsize=(6.5, 1.8))
+        # Crear gráfico CUADRADO
+        fig, ax = plt.subplots(figsize=(3.2, 3.2))  # CUADRADO para layout 2×1
         
         # Línea histórica (azul)
         ax.plot(semanas_hist, saldos_hist, 
@@ -360,13 +358,13 @@ def generar_grafico_timeline(datos: Dict) -> bytes:
                         alpha=0.1, color='#f97316', zorder=0)
         
         # Formateo
-        ax.set_xlabel('Semanas (relativo a hoy)', fontsize=7, fontweight='bold')
+        ax.set_xlabel('Semanas', fontsize=7, fontweight='bold')
         ax.set_ylabel('Saldo', fontsize=7, fontweight='bold')
         ax.set_title('Evolución del Saldo', fontsize=9, fontweight='bold', pad=5)
         ax.grid(True, alpha=0.3, linestyle='--', linewidth=0.5)
-        ax.legend(loc='upper right', fontsize=6, framealpha=0.9, ncol=3)
+        ax.legend(loc='upper right', fontsize=6, framealpha=0.95, ncol=1)
         
-        # IMPORTANTE: Fijar límites del eje X para mostrar negativo y positivo
+        # IMPORTANTE: Fijar límites del eje X
         ax.set_xlim(-semanas_historicas - 0.5, semanas_futuras + 0.5)
         
         # Formato de moneda en eje Y
@@ -376,7 +374,7 @@ def generar_grafico_timeline(datos: Dict) -> bytes:
         
         # Reducir número de ticks
         ax.yaxis.set_major_locator(plt.MaxNLocator(5))
-        ax.xaxis.set_major_locator(plt.MaxNLocator(7))  # Mostrar -6, -3, 0, 3, 6
+        ax.xaxis.set_major_locator(plt.MaxNLocator(7))
         ax.tick_params(axis='both', labelsize=6)
         
         plt.tight_layout(pad=0.3)
@@ -477,23 +475,23 @@ def generar_grafico_semaforo(datos: Dict) -> bytes:
         ax.tick_params(axis='both', labelsize=6)
         ax.invert_yaxis()  # Primer proyecto arriba
         
-        # LEYENDA VERTICAL A LA DERECHA
+        # LEYENDA DENTRO DEL RECUADRO (esquina superior derecha)
         from matplotlib.patches import Patch
         legend_elements = [
-            Patch(facecolor='#22c55e', edgecolor='black', linewidth=0.5, label='Excedente (≥20s)'),
-            Patch(facecolor='#3b82f6', edgecolor='black', linewidth=0.5, label='Estable (≥10s)'),
-            Patch(facecolor='#f97316', edgecolor='black', linewidth=0.5, label='Alerta (≥5s)'),
-            Patch(facecolor='#dc2626', edgecolor='black', linewidth=0.5, label='Crítico (<5s)')
+            Patch(facecolor='#22c55e', edgecolor='black', linewidth=0.5, label='Exc (≥20s)'),
+            Patch(facecolor='#3b82f6', edgecolor='black', linewidth=0.5, label='Est (≥10s)'),
+            Patch(facecolor='#f97316', edgecolor='black', linewidth=0.5, label='Ale (≥5s)'),
+            Patch(facecolor='#dc2626', edgecolor='black', linewidth=0.5, label='Crí (<5s)')
         ]
         ax.legend(handles=legend_elements, 
-                 loc='center right',  # A la derecha
-                 bbox_to_anchor=(1.22, 0.5),  # Fuera del gráfico
+                 loc='upper right',  # DENTRO del gráfico
                  fontsize=6, 
-                 framealpha=0.9, 
-                 ncol=1,  # Vertical (1 columna)
-                 handlelength=1.5, 
-                 handletextpad=0.5,
-                 borderpad=0.8)
+                 framealpha=0.95, 
+                 ncol=2,  # 2 columnas para ahorrar espacio vertical
+                 handlelength=1, 
+                 handletextpad=0.4,
+                 columnspacing=1,
+                 borderpad=0.5)
         
         plt.tight_layout(pad=0.3)
         
@@ -546,7 +544,7 @@ def generar_grafico_pie_gastos(datos: Dict) -> bytes:
         colores_personalizados = ['#3b82f6', '#22c55e', '#f97316', '#8b5cf6', '#ec4899', '#14b8a6']
         
         for p in proyectos:
-            nombre = p.get('nombre', 'Sin nombre')[:12]
+            nombre = p.get('nombre', 'Sin nombre')[:10]  # Más corto
             ejecutado = p.get('ejecutado', 0)
             
             if ejecutado > 0:  # Solo incluir proyectos con gasto
@@ -556,37 +554,36 @@ def generar_grafico_pie_gastos(datos: Dict) -> bytes:
         if not ejecutados:
             return None
         
-        # Crear gráfico compacto
-        fig, ax = plt.subplots(figsize=(6.5, 2.2))
+        # Crear gráfico CUADRADO
+        fig, ax = plt.subplots(figsize=(3.2, 3.2))  # CUADRADO para layout 2×1
         
         # Calcular porcentajes
         total = sum(ejecutados)
         porcentajes = [(e/total)*100 for e in ejecutados]
         
-        # Función para formato de labels
-        def formato_label(pct, allvals):
-            absolute = int(pct/100.*sum(allvals))
-            return f'{pct:.1f}%\n{formatear_moneda(absolute) if UTILS_DISPONIBLE else f"${absolute/1e6:.0f}M"}'
+        # Función para formato de labels (solo porcentaje)
+        def formato_label(pct):
+            return f'{pct:.1f}%' if pct > 5 else ''  # Ocultar si muy pequeño
         
         # Gráfico de pie
         wedges, texts, autotexts = ax.pie(ejecutados, 
                                            labels=None,  # Labels en leyenda
-                                           autopct=lambda pct: formato_label(pct, ejecutados),
+                                           autopct=formato_label,
                                            startangle=90,
                                            colors=colores_personalizados[:len(nombres)],
-                                           textprops={'fontsize': 6, 'weight': 'bold'},
+                                           textprops={'fontsize': 6, 'weight': 'bold', 'color': 'white'},
                                            wedgeprops={'edgecolor': 'white', 'linewidth': 1.5})
         
         # Título
-        ax.set_title('Distribución de Gastos por Proyecto', 
-                    fontsize=9, fontweight='bold', pad=10)
+        ax.set_title('Distribución de Gastos', 
+                    fontsize=9, fontweight='bold', pad=5)
         
-        # Leyenda a la derecha vertical
+        # Leyenda DENTRO del gráfico (lado derecho)
         ax.legend(nombres, 
                  loc='center left',
-                 bbox_to_anchor=(1.05, 0.5),
+                 bbox_to_anchor=(0.9, 0.5),  # Dentro, a la derecha
                  fontsize=6,
-                 framealpha=0.9,
+                 framealpha=0.95,
                  ncol=1)
         
         plt.tight_layout(pad=0.3)
@@ -740,55 +737,50 @@ def generar_reporte_gerencial_pdf(datos: Dict) -> bytes:
     elements.append(Spacer(1, 0.15*inch))  # Reducido de 0.3
     
     # =================================================================
-    # GRÁFICOS EJECUTIVOS (Compactos para caber en 1 página)
+    # GRÁFICOS EJECUTIVOS (Layout 2×1: Timeline+Pie arriba, Semáforo abajo)
     # =================================================================
     
-    # Timeline - Evolución del saldo
+    # Generar gráficos Timeline y Pie
     timeline_img = generar_grafico_timeline(datos)
-    if timeline_img:
-        elements.append(Paragraph("EVOLUCIÓN DEL SALDO", ParagraphStyle(
-            'GraphHeader',
-            parent=styles['Heading2'],
-            fontSize=10,  # Reducido de 12
-            textColor=colors.HexColor('#1e40af'),
-            spaceAfter=4  # Reducido de 6
-        )))
-        img = Image(timeline_img, width=6.5*inch, height=1.6*inch)  # Reducido de 2.2
-        elements.append(img)
-        elements.append(Spacer(1, 0.1*inch))  # Reducido de 0.2
+    pie_img = generar_grafico_pie_gastos(datos)
     
-    # Semáforo - Estado por proyecto
+    # Layout 2×1: Timeline y Pie lado a lado (ambos cuadrados)
+    if timeline_img and pie_img:
+        # Crear tabla de 2 columnas para poner gráficos lado a lado
+        graficos_data = [[
+            Image(timeline_img, width=3.2*inch, height=3.2*inch),
+            Image(pie_img, width=3.2*inch, height=3.2*inch)
+        ]]
+        
+        tabla_graficos = Table(graficos_data, colWidths=[3.3*inch, 3.3*inch])
+        tabla_graficos.setStyle(TableStyle([
+            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+            ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+            ('LEFTPADDING', (0, 0), (-1, -1), 0),
+            ('RIGHTPADDING', (0, 0), (-1, -1), 0),
+        ]))
+        
+        elements.append(tabla_graficos)
+        elements.append(Spacer(1, 0.1*inch))
+    elif timeline_img:
+        # Solo Timeline
+        img = Image(timeline_img, width=3.2*inch, height=3.2*inch)
+        elements.append(img)
+        elements.append(Spacer(1, 0.1*inch))
+    elif pie_img:
+        # Solo Pie
+        img = Image(pie_img, width=3.2*inch, height=3.2*inch)
+        elements.append(img)
+        elements.append(Spacer(1, 0.1*inch))
+    
+    # Semáforo - Estado por proyecto (ancho completo, horizontal)
     semaforo_img = generar_grafico_semaforo(datos)
     if semaforo_img:
-        elements.append(Paragraph("ESTADO POR PROYECTO", ParagraphStyle(
-            'GraphHeader2',
-            parent=styles['Heading2'],
-            fontSize=10,  # Reducido de 12
-            textColor=colors.HexColor('#1e40af'),
-            spaceAfter=4  # Reducido de 6
-        )))
         num_proyectos = len(datos.get('proyectos', []))
-        altura_semaforo = min(2.2, num_proyectos * 0.35 + 0.4)  # Más compacto
+        altura_semaforo = min(2.2, num_proyectos * 0.35 + 0.4)
         img = Image(semaforo_img, width=6.5*inch, height=altura_semaforo*inch)
         elements.append(img)
-        elements.append(Spacer(1, 0.15*inch))  # Reducido de 0.3
-    
-    # Gráfico Pie - Distribución de gastos (OPCIONAL - comentado para mantener 1 página)
-    # DESCOMENTAR si deseas agregar el gráfico de pie (puede requerir 2 páginas)
-    """
-    pie_img = generar_grafico_pie_gastos(datos)
-    if pie_img:
-        elements.append(Paragraph("DISTRIBUCIÓN DE GASTOS", ParagraphStyle(
-            'GraphHeader3',
-            parent=styles['Heading2'],
-            fontSize=10,
-            textColor=colors.HexColor('#1e40af'),
-            spaceAfter=4
-        )))
-        img = Image(pie_img, width=6.5*inch, height=2.0*inch)
-        elements.append(img)
         elements.append(Spacer(1, 0.15*inch))
-    """
     
     # =================================================================
     # DETALLE DE PROYECTOS CON MANEJO SEGURO DE DATOS
