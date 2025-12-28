@@ -13,27 +13,43 @@ import pandas as pd
 from typing import Dict, List
 import io
 
-# Importar bibliotecas para PDF
-try:
-    from reportlab.lib.pagesizes import letter
-    from reportlab.lib.units import inch
-    from reportlab.lib import colors
-    from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, Image
-    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-    from reportlab.lib.enums import TA_CENTER, TA_LEFT, TA_RIGHT
-    PDF_DISPONIBLE = True
-except ImportError:
-    PDF_DISPONIBLE = False
-    st.warning("⚠️ reportlab no está instalado. Instalando...")
-    import subprocess
-    subprocess.check_call(["pip", "install", "reportlab", "--break-system-packages"])
-    from reportlab.lib.pagesizes import letter
-    from reportlab.lib.units import inch
-    from reportlab.lib import colors
-    from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, Image
-    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-    from reportlab.lib.enums import TA_CENTER, TA_LEFT, TA_RIGHT
-    PDF_DISPONIBLE = True
+# Variable global para verificar disponibilidad de PDF
+PDF_DISPONIBLE = False
+
+def verificar_reportlab():
+    """Verifica e instala reportlab si es necesario"""
+    global PDF_DISPONIBLE
+    
+    try:
+        from reportlab.lib.pagesizes import letter
+        PDF_DISPONIBLE = True
+        return True
+    except ImportError:
+        return False
+
+def instalar_reportlab():
+    """Instala reportlab"""
+    try:
+        import subprocess
+        st.info("📦 Instalando reportlab... (puede tomar 10-20 segundos)")
+        resultado = subprocess.run(
+            ["pip", "install", "reportlab", "--break-system-packages"],
+            capture_output=True,
+            text=True,
+            timeout=60
+        )
+        
+        if resultado.returncode == 0:
+            global PDF_DISPONIBLE
+            PDF_DISPONIBLE = True
+            st.success("✅ reportlab instalado exitosamente")
+            return True
+        else:
+            st.error(f"❌ Error al instalar: {resultado.stderr}")
+            return False
+    except Exception as e:
+        st.error(f"❌ Error en instalación: {str(e)}")
+        return False
 
 
 # ============================================================================
@@ -65,6 +81,17 @@ def generar_reporte_gerencial_pdf(datos: Dict) -> bytes:
     - Cuerpo: Timeline, Semáforo, Comparación, Pie de gastos
     - Pie: Alertas relevantes
     """
+    
+    # Importar reportlab aquí (lazy import)
+    try:
+        from reportlab.lib.pagesizes import letter
+        from reportlab.lib.units import inch
+        from reportlab.lib import colors
+        from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, Image
+        from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+        from reportlab.lib.enums import TA_CENTER, TA_LEFT, TA_RIGHT
+    except ImportError as e:
+        raise ImportError("reportlab no está instalado. Use el botón 'Instalar reportlab' primero.") from e
     
     # Crear buffer de memoria para el PDF
     buffer = io.BytesIO()
@@ -324,6 +351,27 @@ def main():
     st.markdown("# 📊 Reportes Ejecutivos")
     st.caption("Genere reportes profesionales con los datos consolidados")
     
+    # Verificar reportlab
+    if not verificar_reportlab():
+        st.warning("⚠️ La biblioteca 'reportlab' no está instalada")
+        st.info("📦 **reportlab** es necesaria para generar reportes PDF")
+        
+        if st.button("🔧 Instalar reportlab ahora", type="primary", use_container_width=True):
+            if instalar_reportlab():
+                st.success("✅ Instalación completada. Puede proceder a generar reportes.")
+                st.rerun()
+            else:
+                st.error("❌ No se pudo instalar reportlab automáticamente")
+                st.info("""
+                **Instalación manual:**
+                ```bash
+                pip install reportlab --break-system-packages
+                ```
+                Luego reinicie la aplicación.
+                """)
+        
+        st.stop()
+    
     # Verificar que existan datos
     if 'datos_reportes' not in st.session_state:
         st.warning("⚠️ No hay datos disponibles para generar reportes")
@@ -397,9 +445,13 @@ def main():
                         use_container_width=True
                     )
                     
+                except ImportError as e:
+                    st.error("❌ Error: reportlab no está instalado correctamente")
+                    st.info("Reinicie la aplicación y vuelva a intentar. Si el problema persiste, instale manualmente:\n```bash\npip install reportlab\n```")
                 except Exception as e:
                     st.error(f"❌ Error al generar reporte: {str(e)}")
-                    st.exception(e)
+                    with st.expander("🔍 Ver detalles del error"):
+                        st.exception(e)
     
     with col_tipo2:
         st.markdown("""
