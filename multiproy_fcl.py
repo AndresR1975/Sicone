@@ -2,9 +2,14 @@
 SICONE - Módulo de Análisis Multiproyecto FCL
 Consolidación y análisis de flujo de caja para múltiples proyectos
 
-Versión: 1.4.0
+Versión: 1.4.1
 Fecha: 28 Diciembre 2024
 Autor: AI-MindNovation
+
+FIX CRÍTICO v1.4.1 (28-Dic-2024):
+- 🐛 FIX: Nombre de clave correcto es 'contratos_cartera' no 'contratos'
+- ✅ Ahora sí cuenta hitos completados correctamente
+- ✅ % Avance funcionando con datos reales de cartera
 
 NUEVO v1.4.0 (28-Dic-2024):
 - ✅ Extracción de hitos desde configuración del proyecto
@@ -222,9 +227,10 @@ class ConsolidadorMultiproyecto:
                 # Contar hitos completados desde cartera (si existe)
                 hitos_completados = 0
                 
-                if 'cartera' in data and data['cartera'] and 'contratos' in data['cartera']:
+                # FIX v1.4.1: Clave correcta es 'contratos_cartera' no 'contratos'
+                if 'cartera' in data and data['cartera'] and 'contratos_cartera' in data['cartera']:
                     # Iterar contratos y sus hitos
-                    for contrato in data['cartera']['contratos']:
+                    for contrato in data['cartera']['contratos_cartera']:
                         if 'hitos' in contrato:
                             for hito_cartera in contrato['hitos']:
                                 monto_esperado = hito_cartera.get('monto_esperado', 0)
