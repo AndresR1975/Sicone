@@ -1,24 +1,22 @@
 """
 SICONE - Módulo de Reportes Ejecutivos
-Versión: 1.3.0
+Versión: 1.3.1
 Fecha: 28 Diciembre 2024
 Autor: Andrés Restrepo & Claude
 
+FIX CRÍTICO v1.3.1 (28-Dic-2024):
+- 🐛 FIX: Corregido error de dimensiones en gráfico Timeline
+- ✅ Lógica de arrays coordinados (evita shape mismatch)
+- 📐 Reducción de tamaños para caber en 1 página
+- 🎨 Timeline: 6.5" × 1.6" (antes 2.2")
+- 🎨 Semáforo: altura dinámica max 2.2" (antes 3"+)
+- 📝 Fuentes reducidas: 7pt tablas, 9-10pt títulos
+- 📏 Paddings y espacios optimizados
+- 🎯 DPI reducido a 120 (antes 150) para menor peso
+
 NUEVO v1.3.0 (28-Dic-2024):
 - 🎨 GRÁFICOS IMPLEMENTADOS: Timeline y Semáforo
-- ✅ Timeline: Evolución del saldo (histórico vs proyección)
-- ✅ Semáforo: Estado financiero por proyecto con colores
 - ✅ Gráficos ubicados ANTES de la tabla (visual-first)
-- ✅ Matplotlib integrado con backend Agg
-- ✅ Auto-ajuste de tamaños según número de proyectos
-- ✅ Formato profesional con colores corporativos
-
-CAMBIOS v1.2.1:
-- ✅ Tabla actualizada con % Avance ponderado
-- ✅ Eliminación de campo Estado (redundante)
-
-CAMBIOS v1.2.0:
-- ✅ Formato de cifras colombiano (MM en lugar de B para mil millones)
 """
 
 import streamlit as st
@@ -303,68 +301,77 @@ def generar_grafico_timeline(datos: Dict) -> bytes:
         semana_actual = datos.get('semana', 0)
         burn_rate = datos.get('burn_rate', 0)
         
-        # Generar datos para timeline (últimas 8 semanas + 8 futuras)
-        semanas_historicas = min(8, semana_actual)
-        semanas_futuras = 8
+        # Generar datos simplificados (últimas 6 semanas + 6 futuras para ahorrar espacio)
+        semanas_historicas = min(6, max(1, semana_actual))  # Mínimo 1 para evitar arrays vacíos
+        semanas_futuras = 6
         
-        # Semanas en eje X
-        semanas = list(range(-semanas_historicas + 1, semanas_futuras + 1))
+        # Crear arrays coordinados
+        semanas = []
+        saldos = []
+        tipos = []  # 'hist' o 'proy'
         
-        # Saldo histórico (simplificado - en producción vendría de datos reales)
-        saldos_historicos = []
+        # Datos históricos
         for i in range(-semanas_historicas + 1, 1):
-            # Saldo histórico = saldo actual - (burn_rate × semanas desde entonces)
-            saldo_hist = saldo_total + (burn_rate * abs(i))
-            saldos_historicos.append(saldo_hist)
+            semanas.append(i)
+            saldo = saldo_total + (burn_rate * abs(i))
+            saldos.append(saldo)
+            tipos.append('hist')
         
-        # Saldo proyectado
-        saldos_proyectados = [saldo_total]
-        for i in range(1, semanas_futuras + 1):
-            saldo_proy = saldo_total - (burn_rate * i)
-            saldos_proyectados.append(max(0, saldo_proy))  # No negativo
+        # Datos proyectados (incluye semana actual como punto de conexión)
+        for i in range(0, semanas_futuras + 1):
+            if i == 0 and len(semanas) > 0:
+                continue  # Ya incluimos la semana 0
+            semanas.append(i)
+            saldo = max(0, saldo_total - (burn_rate * i))
+            saldos.append(saldo)
+            tipos.append('proy')
         
-        # Crear gráfico
-        fig, ax = plt.subplots(figsize=(7, 3))
+        # Separar datos para graficar
+        idx_corte = semanas_historicas
+        semanas_hist = semanas[:idx_corte]
+        saldos_hist = saldos[:idx_corte]
+        semanas_proy = semanas[idx_corte-1:]  # Overlap en último punto
+        saldos_proy = saldos[idx_corte-1:]
+        
+        # Crear gráfico más compacto
+        fig, ax = plt.subplots(figsize=(6.5, 1.8))  # Reducido de 3
         
         # Línea histórica (azul)
-        semanas_hist = semanas[:semanas_historicas]
-        ax.plot(semanas_hist, saldos_historicos, 
-                color='#3b82f6', linewidth=2.5, marker='o', markersize=4,
-                label='Histórico', zorder=3)
+        if len(semanas_hist) > 0:
+            ax.plot(semanas_hist, saldos_hist, 
+                    color='#3b82f6', linewidth=2, marker='o', markersize=3,
+                    label='Histórico', zorder=3)
         
         # Línea proyección (naranja)
-        semanas_proy = semanas[semanas_historicas-1:]  # Overlap en semana actual
-        ax.plot(semanas_proy, saldos_proyectados, 
-                color='#f97316', linewidth=2.5, linestyle='--', marker='s', markersize=4,
-                label='Proyección', zorder=3)
+        if len(semanas_proy) > 0:
+            ax.plot(semanas_proy, saldos_proy, 
+                    color='#f97316', linewidth=2, linestyle='--', marker='s', markersize=3,
+                    label='Proyección', zorder=3)
         
         # Línea en cero
-        ax.axhline(y=0, color='red', linestyle=':', linewidth=1, alpha=0.5, zorder=1)
+        ax.axhline(y=0, color='red', linestyle=':', linewidth=0.8, alpha=0.5, zorder=1)
         
-        # Sombreado de área positiva
-        ax.fill_between(semanas, 0, saldos_historicos + saldos_proyectados[1:], 
-                        alpha=0.1, color='#3b82f6', zorder=0)
-        
-        # Formateo
-        ax.set_xlabel('Semanas (relativo a hoy)', fontsize=9, fontweight='bold')
-        ax.set_ylabel('Saldo ($COP)', fontsize=9, fontweight='bold')
-        ax.set_title('Evolución del Saldo Consolidado', fontsize=11, fontweight='bold', pad=10)
-        ax.grid(True, alpha=0.3, linestyle='--', linewidth=0.5)
-        ax.legend(loc='upper right', fontsize=8, framealpha=0.9)
+        # Formateo compacto
+        ax.set_xlabel('Semanas (relativo a hoy)', fontsize=7, fontweight='bold')
+        ax.set_ylabel('Saldo', fontsize=7, fontweight='bold')
+        ax.set_title('Evolución del Saldo', fontsize=9, fontweight='bold', pad=5)
+        ax.grid(True, alpha=0.2, linestyle='--', linewidth=0.5)
+        ax.legend(loc='upper right', fontsize=6, framealpha=0.9)
         
         # Formato de moneda en eje Y
         ax.yaxis.set_major_formatter(plt.FuncFormatter(
             lambda x, p: formatear_moneda(x) if UTILS_DISPONIBLE else f"${x/1e6:.0f}M"
         ))
         
-        # Ajustar límites
-        ax.set_xlim(semanas[0] - 0.5, semanas[-1] + 0.5)
+        # Reducir número de ticks para ahorrar espacio
+        ax.yaxis.set_major_locator(plt.MaxNLocator(4))
+        ax.tick_params(axis='both', labelsize=6)
         
-        plt.tight_layout()
+        plt.tight_layout(pad=0.3)
         
         # Guardar a bytes
         buf = io.BytesIO()
-        plt.savefig(buf, format='png', dpi=150, bbox_inches='tight', facecolor='white')
+        plt.savefig(buf, format='png', dpi=120, bbox_inches='tight', facecolor='white')
         buf.seek(0)
         plt.close(fig)
         
@@ -372,6 +379,8 @@ def generar_grafico_timeline(datos: Dict) -> bytes:
         
     except Exception as e:
         st.error(f"Error generando gráfico timeline: {e}")
+        import traceback
+        st.error(traceback.format_exc())
         return None
 
 def generar_grafico_semaforo(datos: Dict) -> bytes:
@@ -396,7 +405,7 @@ def generar_grafico_semaforo(datos: Dict) -> bytes:
         colores = []
         
         for p in proyectos:
-            nombre = p.get('nombre', 'Sin nombre')[:15]  # Truncar nombres largos
+            nombre = p.get('nombre', 'Sin nombre')[:12]  # Más corto
             saldo = p.get('saldo_real_tesoreria', 0)
             burn_rate = p.get('burn_rate_real', 0)
             
@@ -420,45 +429,57 @@ def generar_grafico_semaforo(datos: Dict) -> bytes:
             coberturas.append(min(cobertura, 100))  # Cap para visualización
             colores.append(color)
         
-        # Crear gráfico
-        fig, ax = plt.subplots(figsize=(7, len(proyectos) * 0.4 + 0.5))
+        # Crear gráfico más compacto
+        altura = min(2.5, len(proyectos) * 0.35 + 0.4)  # Reducido
+        fig, ax = plt.subplots(figsize=(6.5, altura))
         
-        # Barras horizontales
+        # Barras horizontales más delgadas
         y_pos = np.arange(len(nombres))
-        bars = ax.barh(y_pos, coberturas, color=colores, height=0.6, edgecolor='white', linewidth=1.5)
+        bars = ax.barh(y_pos, coberturas, color=colores, height=0.5, 
+                      edgecolor='white', linewidth=1)
         
-        # Etiquetas
+        # Etiquetas más pequeñas
         ax.set_yticks(y_pos)
-        ax.set_yticklabels(nombres, fontsize=9)
-        ax.set_xlabel('Cobertura (semanas)', fontsize=9, fontweight='bold')
-        ax.set_title('Estado Financiero por Proyecto', fontsize=11, fontweight='bold', pad=10)
+        ax.set_yticklabels(nombres, fontsize=7)
+        ax.set_xlabel('Cobertura (semanas)', fontsize=7, fontweight='bold')
+        ax.set_title('Estado Financiero por Proyecto', fontsize=9, fontweight='bold', pad=5)
         
-        # Líneas de referencia
-        ax.axvline(x=20, color='#22c55e', linestyle=':', linewidth=1.5, alpha=0.6, label='Excedente (20s)')
-        ax.axvline(x=10, color='#3b82f6', linestyle=':', linewidth=1.5, alpha=0.6, label='Estable (10s)')
-        ax.axvline(x=5, color='#f97316', linestyle=':', linewidth=1.5, alpha=0.6, label='Alerta (5s)')
+        # Líneas de referencia más sutiles
+        ax.axvline(x=20, color='#22c55e', linestyle=':', linewidth=1, alpha=0.5)
+        ax.axvline(x=10, color='#3b82f6', linestyle=':', linewidth=1, alpha=0.5)
+        ax.axvline(x=5, color='#f97316', linestyle=':', linewidth=1, alpha=0.5)
         
-        # Agregar valores en las barras
+        # Valores en las barras más pequeños
         for i, (bar, cob) in enumerate(zip(bars, coberturas)):
             width = bar.get_width()
-            label_x = width + 1 if width < 80 else width - 3
+            label_x = width + 1 if width < 80 else width - 2
             ax.text(label_x, bar.get_y() + bar.get_height()/2, 
                    f'{cob:.1f}s', 
                    ha='left' if width < 80 else 'right',
-                   va='center', fontsize=8, fontweight='bold',
+                   va='center', fontsize=6, fontweight='bold',
                    color='black' if width < 80 else 'white')
         
-        # Formateo
+        # Formateo compacto
         ax.set_xlim(0, 105)
-        ax.grid(axis='x', alpha=0.3, linestyle='--', linewidth=0.5)
-        ax.legend(loc='lower right', fontsize=7, framealpha=0.9, ncol=3)
+        ax.grid(axis='x', alpha=0.2, linestyle='--', linewidth=0.5)
+        ax.tick_params(axis='both', labelsize=6)
         ax.invert_yaxis()  # Primer proyecto arriba
         
-        plt.tight_layout()
+        # Leyenda más compacta
+        from matplotlib.patches import Patch
+        legend_elements = [
+            Patch(facecolor='#22c55e', label='Exc (20s+)'),
+            Patch(facecolor='#3b82f6', label='Est (10s+)'),
+            Patch(facecolor='#f97316', label='Ale (5s+)')
+        ]
+        ax.legend(handles=legend_elements, loc='lower right', fontsize=6, 
+                 framealpha=0.9, ncol=3, handlelength=1, handletextpad=0.5)
+        
+        plt.tight_layout(pad=0.3)
         
         # Guardar a bytes
         buf = io.BytesIO()
-        plt.savefig(buf, format='png', dpi=150, bbox_inches='tight', facecolor='white')
+        plt.savefig(buf, format='png', dpi=120, bbox_inches='tight', facecolor='white')
         buf.seek(0)
         plt.close(fig)
         
@@ -466,6 +487,8 @@ def generar_grafico_semaforo(datos: Dict) -> bytes:
         
     except Exception as e:
         st.error(f"Error generando gráfico semáforo: {e}")
+        import traceback
+        st.error(traceback.format_exc())
         return None
 
 def generar_grafico_comparacion(datos: Dict) -> bytes:
@@ -626,41 +649,41 @@ def generar_reporte_gerencial_pdf(datos: Dict) -> bytes:
     ]))
     
     elements.append(tabla_metricas)
-    elements.append(Spacer(1, 0.3*inch))
+    elements.append(Spacer(1, 0.15*inch))  # Reducido de 0.3
     
     # =================================================================
-    # GRÁFICOS EJECUTIVOS
+    # GRÁFICOS EJECUTIVOS (Compactos para caber en 1 página)
     # =================================================================
     
     # Timeline - Evolución del saldo
     timeline_img = generar_grafico_timeline(datos)
     if timeline_img:
-        elements.append(Paragraph("EVOLUCIÓN DEL SALDO CONSOLIDADO", ParagraphStyle(
+        elements.append(Paragraph("EVOLUCIÓN DEL SALDO", ParagraphStyle(
             'GraphHeader',
             parent=styles['Heading2'],
-            fontSize=12,
+            fontSize=10,  # Reducido de 12
             textColor=colors.HexColor('#1e40af'),
-            spaceAfter=6
+            spaceAfter=4  # Reducido de 6
         )))
-        img = Image(timeline_img, width=6.5*inch, height=2.2*inch)
+        img = Image(timeline_img, width=6.5*inch, height=1.6*inch)  # Reducido de 2.2
         elements.append(img)
-        elements.append(Spacer(1, 0.2*inch))
+        elements.append(Spacer(1, 0.1*inch))  # Reducido de 0.2
     
     # Semáforo - Estado por proyecto
     semaforo_img = generar_grafico_semaforo(datos)
     if semaforo_img:
-        elements.append(Paragraph("ESTADO FINANCIERO POR PROYECTO", ParagraphStyle(
+        elements.append(Paragraph("ESTADO POR PROYECTO", ParagraphStyle(
             'GraphHeader2',
             parent=styles['Heading2'],
-            fontSize=12,
+            fontSize=10,  # Reducido de 12
             textColor=colors.HexColor('#1e40af'),
-            spaceAfter=6
+            spaceAfter=4  # Reducido de 6
         )))
         num_proyectos = len(datos.get('proyectos', []))
-        altura_semaforo = max(1.5, num_proyectos * 0.4 + 0.5)
+        altura_semaforo = min(2.2, num_proyectos * 0.35 + 0.4)  # Más compacto
         img = Image(semaforo_img, width=6.5*inch, height=altura_semaforo*inch)
         elements.append(img)
-        elements.append(Spacer(1, 0.3*inch))
+        elements.append(Spacer(1, 0.15*inch))  # Reducido de 0.3
     
     # =================================================================
     # DETALLE DE PROYECTOS CON MANEJO SEGURO DE DATOS
@@ -671,9 +694,9 @@ def generar_reporte_gerencial_pdf(datos: Dict) -> bytes:
     elements.append(Paragraph("DETALLE POR PROYECTO", ParagraphStyle(
         'SectionHeader',
         parent=styles['Heading2'],
-        fontSize=14,
+        fontSize=10,  # Reducido de 14
         textColor=colors.HexColor('#1e40af'),
-        spaceAfter=8
+        spaceAfter=4  # Reducido de 8
     )))
     
     # Tabla de proyectos con campos optimizados
@@ -728,19 +751,19 @@ def generar_reporte_gerencial_pdf(datos: Dict) -> bytes:
         ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
         ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
         ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-        ('FONTSIZE', (0, 0), (-1, 0), 8),
-        ('BOTTOMPADDING', (0, 0), (-1, 0), 6),
+        ('FONTSIZE', (0, 0), (-1, 0), 7),  # Reducido de 8
+        ('BOTTOMPADDING', (0, 0), (-1, 0), 3),  # Reducido de 6
         ('BACKGROUND', (0, 1), (-1, -1), colors.HexColor('#f0f9ff')),
         ('FONTNAME', (0, 1), (-1, -1), 'Helvetica'),
-        ('FONTSIZE', (0, 1), (-1, -1), 8),
+        ('FONTSIZE', (0, 1), (-1, -1), 7),  # Reducido de 8
         ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
         ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-        ('TOPPADDING', (0, 0), (-1, -1), 4),
-        ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
+        ('TOPPADDING', (0, 0), (-1, -1), 2),  # Reducido de 4
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 2),  # Reducido de 4
     ]))
     
     elements.append(tabla_proyectos)
-    elements.append(Spacer(1, 0.2*inch))
+    elements.append(Spacer(1, 0.1*inch))  # Reducido de 0.2
     
     # =================================================================
     # ALERTAS
