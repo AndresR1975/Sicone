@@ -485,49 +485,53 @@ def generar_reporte_gerencial_pdf(datos: Dict) -> bytes:
         spaceAfter=8
     )))
     
-    # Tabla de proyectos con extracción segura de datos
-    proyectos_data = [['Proyecto', 'Estado', 'Presupuesto', 'Ejecutado', 'Saldo', 'Avance']]
+    # Tabla de proyectos con campos optimizados
+    # CAMBIO v1.2.1: Eliminamos Estado (todos son ACTIVO), agregamos % Avance desde hitos
+    # Incluimos: Ejecutado, Saldo, Burn Rate, Cobertura, % Avance
+    proyectos_data = [['Proyecto', 'Ejecutado', 'Saldo', 'Burn Rate', 'Cobertura', '% Avance']]
     
     for p in proyectos:
-        # Extraer valores de forma segura (probando diferentes nombres de claves)
+        # Extraer valores de forma segura usando los nombres reales del consolidador
         if UTILS_DISPONIBLE:
             nombre = obtener_valor_seguro(p, 'nombre', 'Sin nombre', str)
-            estado_proy = obtener_valor_seguro(p, 'estado', 'N/A', str)
             
-            # Presupuesto - probar múltiples claves posibles
-            presupuesto = (obtener_valor_seguro(p, 'presupuesto_total', None, float) or
-                          obtener_valor_seguro(p, 'presupuesto', None, float) or
-                          obtener_valor_seguro(p, 'costo_total', None, float) or 0)
+            # Campos que existen en el consolidador
+            ejecutado = obtener_valor_seguro(p, 'ejecutado', 0, float)
+            saldo = obtener_valor_seguro(p, 'saldo_real_tesoreria', 0, float)
+            burn_rate = obtener_valor_seguro(p, 'burn_rate_real', 0, float)
             
-            # Ejecutado
-            ejecutado = (obtener_valor_seguro(p, 'ejecutado', None, float) or
-                        obtener_valor_seguro(p, 'costo_acumulado', None, float) or 0)
+            # NUEVO v1.2.1: % Avance desde hitos (agregado en multiproy_fcl.py)
+            avance_hitos = obtener_valor_seguro(p, 'avance_hitos_pct', 0, float)
             
-            # Saldo
-            saldo = (obtener_valor_seguro(p, 'saldo_real_tesoreria', None, float) or
-                    obtener_valor_seguro(p, 'saldo', None, float) or
-                    obtener_valor_seguro(p, 'saldo_tesoreria', None, float) or 0)
+            # Calcular cobertura (semanas)
+            if burn_rate > 0:
+                cobertura = saldo / burn_rate
+                cobertura_str = f"{cobertura:.1f}s"
+            else:
+                cobertura_str = "∞"
         else:
             # Versión sin utils
             nombre = p.get('nombre', 'Sin nombre')[:30]
-            estado_proy = p.get('estado', 'N/A')
-            presupuesto = p.get('presupuesto_total', 0) or p.get('presupuesto', 0) or 0
-            ejecutado = p.get('ejecutado', 0) or p.get('costo_acumulado', 0) or 0
-            saldo = p.get('saldo_real_tesoreria', 0) or p.get('saldo', 0) or 0
-        
-        # Calcular avance
-        avance = (ejecutado / presupuesto * 100) if presupuesto > 0 else 0
+            ejecutado = p.get('ejecutado', 0)
+            saldo = p.get('saldo_real_tesoreria', 0)
+            burn_rate = p.get('burn_rate_real', 0)
+            avance_hitos = p.get('avance_hitos_pct', 0)
+            
+            if burn_rate > 0:
+                cobertura_str = f"{saldo / burn_rate:.1f}s"
+            else:
+                cobertura_str = "∞"
         
         proyectos_data.append([
-            nombre[:30],  # Truncar nombres largos
-            estado_proy,
-            formatear_moneda(presupuesto),
+            nombre[:28],  # Truncar nombres largos
             formatear_moneda(ejecutado),
             formatear_moneda(saldo),
-            f"{avance:.1f}%"
+            formatear_moneda(burn_rate) + "/s",  # Por semana
+            cobertura_str,
+            f"{avance_hitos:.1f}%"
         ])
     
-    tabla_proyectos = Table(proyectos_data, colWidths=[2.0*inch, 0.9*inch, 1.1*inch, 1.1*inch, 1.1*inch, 0.8*inch])
+    tabla_proyectos = Table(proyectos_data, colWidths=[2.0*inch, 1.3*inch, 1.3*inch, 1.1*inch, 0.9*inch, 0.8*inch])
     tabla_proyectos.setStyle(TableStyle([
         ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#3b82f6')),
         ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
@@ -869,10 +873,11 @@ def main():
         df_proyectos = pd.DataFrame([
             {
                 'Nombre': p.get('nombre', 'Sin nombre'),
-                'Estado': p.get('estado', 'N/A'),
-                'Presupuesto': p.get('presupuesto_total', 0) or p.get('presupuesto', 0),
-                'Ejecutado': p.get('ejecutado', 0) or p.get('costo_acumulado', 0),
-                'Saldo': p.get('saldo_real_tesoreria', 0) or p.get('saldo', 0)
+                'Ejecutado': p.get('ejecutado', 0),
+                'Saldo': p.get('saldo_real_tesoreria', 0),
+                'Burn Rate': p.get('burn_rate_real', 0),
+                '% Avance': p.get('avance_hitos_pct', 0),
+                'Hitos': f"{p.get('hitos_completados', 0)}/{p.get('hitos_totales', 0)}"
             }
             for p in datos['proyectos']
         ])
