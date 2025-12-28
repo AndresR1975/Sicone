@@ -28,27 +28,53 @@ def verificar_reportlab():
         return False
 
 def instalar_reportlab():
-    """Instala reportlab"""
+    """Instala reportlab con feedback detallado"""
     try:
         import subprocess
-        st.info("📦 Instalando reportlab... (puede tomar 10-20 segundos)")
+        import sys
+        
+        # Crear contenedor de estado
+        status_container = st.empty()
+        progress_bar = st.progress(0)
+        
+        status_container.info("📦 Descargando reportlab...")
+        progress_bar.progress(25)
+        
+        # Intentar instalación
         resultado = subprocess.run(
-            ["pip", "install", "reportlab", "--break-system-packages"],
+            [sys.executable, "-m", "pip", "install", "reportlab", "--break-system-packages"],
             capture_output=True,
             text=True,
-            timeout=60
+            timeout=120
         )
         
+        progress_bar.progress(75)
+        
         if resultado.returncode == 0:
-            global PDF_DISPONIBLE
-            PDF_DISPONIBLE = True
-            st.success("✅ reportlab instalado exitosamente")
-            return True
+            status_container.success("✅ reportlab instalado correctamente")
+            progress_bar.progress(100)
+            
+            # Verificar que realmente se instaló
+            try:
+                import importlib
+                importlib.import_module('reportlab')
+                global PDF_DISPONIBLE
+                PDF_DISPONIBLE = True
+                return True
+            except ImportError:
+                status_container.error("⚠️ Instalado pero no se puede importar. Intente reiniciar la aplicación.")
+                return False
         else:
-            st.error(f"❌ Error al instalar: {resultado.stderr}")
+            status_container.error(f"❌ Error en instalación")
+            with st.expander("Ver detalles del error"):
+                st.code(resultado.stderr)
             return False
+            
+    except subprocess.TimeoutExpired:
+        st.error("⏱️ Timeout: La instalación tomó demasiado tiempo")
+        return False
     except Exception as e:
-        st.error(f"❌ Error en instalación: {str(e)}")
+        st.error(f"❌ Error inesperado: {str(e)}")
         return False
 
 
@@ -356,19 +382,67 @@ def main():
         st.warning("⚠️ La biblioteca 'reportlab' no está instalada")
         st.info("📦 **reportlab** es necesaria para generar reportes PDF")
         
-        if st.button("🔧 Instalar reportlab ahora", type="primary", use_container_width=True):
-            if instalar_reportlab():
-                st.success("✅ Instalación completada. Puede proceder a generar reportes.")
-                st.rerun()
-            else:
-                st.error("❌ No se pudo instalar reportlab automáticamente")
-                st.info("""
-                **Instalación manual:**
-                ```bash
-                pip install reportlab --break-system-packages
-                ```
-                Luego reinicie la aplicación.
-                """)
+        st.markdown("---")
+        
+        col_inst1, col_inst2 = st.columns(2)
+        
+        with col_inst1:
+            st.markdown("### 🔧 Instalación Automática")
+            st.caption("Intenta instalar reportlab automáticamente")
+            
+            if st.button("🚀 Instalar reportlab ahora", type="primary", use_container_width=True):
+                if instalar_reportlab():
+                    st.balloons()
+                    st.success("✅ ¡Instalación exitosa! Recargando módulo...")
+                    import time
+                    time.sleep(2)
+                    st.rerun()
+                else:
+                    st.warning("⚠️ La instalación automática falló. Use el método manual.")
+        
+        with col_inst2:
+            st.markdown("### 📝 Instalación Manual")
+            st.caption("Si la automática falla, use este método")
+            
+            st.code("""
+# En su terminal:
+pip install reportlab --break-system-packages
+
+# O si usa entorno virtual:
+source venv/bin/activate  # Linux/Mac
+pip install reportlab
+
+# Luego reinicie la aplicación
+            """, language="bash")
+            
+            st.info("💡 **Después de instalar manualmente:**\n1. Detenga la aplicación (Ctrl+C)\n2. Reinicie con `streamlit run main.py`")
+            
+            st.markdown("")
+            if st.button("🔄 Verificar si ya está instalado", use_container_width=True):
+                if verificar_reportlab():
+                    st.success("✅ ¡reportlab está instalado! Recargando módulo...")
+                    import time
+                    time.sleep(1)
+                    st.rerun()
+                else:
+                    st.error("❌ Aún no está instalado. Complete la instalación manual primero.")
+        
+        st.markdown("---")
+        
+        # Diagnóstico
+        with st.expander("🔍 Información de Diagnóstico"):
+            import sys
+            st.write("**Python executable:**", sys.executable)
+            st.write("**Python version:**", sys.version)
+            
+            # Intentar ver si pip funciona
+            try:
+                import subprocess
+                result = subprocess.run([sys.executable, "-m", "pip", "--version"], 
+                                      capture_output=True, text=True, timeout=5)
+                st.write("**pip version:**", result.stdout)
+            except:
+                st.error("❌ pip no está disponible o no funciona")
         
         st.stop()
     
