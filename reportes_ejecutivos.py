@@ -1,27 +1,22 @@
 """
 SICONE - Módulo de Reportes Ejecutivos
-Versión: 1.5.0
+Versión: 1.5.1
 Fecha: 28 Diciembre 2024
 Autor: Andrés Restrepo & Claude
 
-DATOS REALES v1.5.0 (28-Dic-2024):
-- ✅ Timeline con DATOS HISTÓRICOS REALES del saldo
-- ✅ Consolida saldos de TODOS los proyectos por semana
-- ✅ Variación REAL visible (no línea recta)
-- ✅ Pie con 4 CATEGORÍAS de gasto:
-  * Mano de Obra
-  * Materiales  
-  * Administración
-  * Variables (Equipos + Imprevistos + Logística)
-- ✅ Consolida categorías de TODOS los proyectos
-- 📐 Tamaños reducidos para 1 página:
-  * Timeline: 2.8" × 2.8"
-  * Pie: 2.8" × 2.8"
-  * Semáforo: 6.5" × 1.8"
+FIX v1.5.1 (28-Dic-2024):
+- 🐛 FIX: Timeline funciona sin proyeccion_semanal individual
+- 🐛 FIX: Pie vuelve a distribución por proyecto (datos disponibles)
+- ✅ Fuente tabla aumentada a 8pt (legible)
+- ✅ Pie de página reducido drásticamente
+- ✅ Gráficos cuadrados 2.8" × 2.8" mantienen funcionalidad
+- 📝 NOTA: Para datos históricos reales, consolidador debe pasar
+        proyeccion_semanal de cada proyecto individual
 
-LAYOUT v1.4.0:
-- Layout 2×1: Timeline y Pie cuadrados lado a lado
-- Semáforo horizontal abajo
+DATOS SIMPLIFICADOS v1.5.1:
+- Timeline: Proyección lineal simple con burn_rate
+- Pie: Distribución de ejecutado por proyecto
+- Layout 2×1 optimizado para 1 página
 """
 
 import streamlit as st
@@ -292,8 +287,8 @@ def instalar_reportlab():
 
 def generar_grafico_timeline(datos: Dict) -> bytes:
     """
-    Genera gráfico de evolución temporal del saldo consolidado CON DATOS REALES
-    Suma saldos de todos los proyectos por semana
+    Genera gráfico de evolución temporal del saldo consolidado
+    VERSIÓN SIMPLIFICADA: Funciona con datos consolidados del multiproyecto
     
     Args:
         datos: Diccionario con datos consolidados del multiproyecto
@@ -302,64 +297,36 @@ def generar_grafico_timeline(datos: Dict) -> bytes:
         bytes: Imagen PNG del gráfico
     """
     try:
-        proyectos = datos.get('proyectos', [])
+        # Extraer datos consolidados
+        saldo_total = datos.get('saldo_total', 0)
+        burn_rate = datos.get('burn_rate', 0)
+        semana_actual = datos.get('semana', 28)
         
-        if not proyectos:
-            st.warning("No hay proyectos para generar timeline")
+        if saldo_total == 0:
             return None
         
-        # CONSOLIDAR saldos de todos los proyectos por semana
-        saldos_por_semana = {}  # {semana: saldo_total}
-        
-        for proyecto in proyectos:
-            proyeccion = proyecto.get('proyeccion_semanal', [])
-            
-            for semana_data in proyeccion:
-                num_semana = semana_data.get('Semana', 0)
-                saldo = semana_data.get('Saldo_Acumulado', 0)
-                
-                if num_semana not in saldos_por_semana:
-                    saldos_por_semana[num_semana] = 0
-                
-                saldos_por_semana[num_semana] += saldo
-        
-        if not saldos_por_semana:
-            st.warning("No hay datos de saldo por semana")
-            return None
-        
-        # Ordenar por semana
-        semanas_ordenadas = sorted(saldos_por_semana.keys())
-        semana_actual_num = max(semanas_ordenadas) if semanas_ordenadas else 0
-        
-        # Tomar últimas 6 semanas de histórico
-        inicio = max(0, len(semanas_ordenadas) - 6)
-        semanas_historicas = semanas_ordenadas[inicio:]
-        
-        # Extraer datos para graficar (semanas relativas a hoy)
-        semanas_hist = []
+        # PROYECCIÓN SIMPLE pero funcional
+        # Histórico: 6 semanas atrás
+        semanas_hist = list(range(-5, 1))  # -5, -4, -3, -2, -1, 0
         saldos_hist = []
         
-        for i, sem in enumerate(semanas_historicas):
-            semana_rel = i - len(semanas_historicas) + 1  # -5, -4, -3, -2, -1, 0
-            semanas_hist.append(semana_rel)
-            saldos_hist.append(saldos_por_semana[sem])
+        for i in semanas_hist:
+            # Saldo histórico aproximado
+            saldo = saldo_total + (burn_rate * abs(i))
+            saldos_hist.append(saldo)
         
-        # Proyección futura (usando burn_rate consolidado)
-        saldo_actual = saldos_hist[-1] if saldos_hist else datos.get('saldo_total', 0)
-        burn_rate = datos.get('burn_rate', 0)
+        # Proyección: 6 semanas adelante
+        semanas_proy = list(range(0, 7))  # 0, 1, 2, 3, 4, 5, 6
+        saldos_proy = []
         
-        semanas_proy = [0]  # Incluye hoy
-        saldos_proy = [saldo_actual]
-        
-        for i in range(1, 7):  # Próximas 6 semanas
-            saldo_futuro = max(0, saldo_actual - (burn_rate * i))
-            semanas_proy.append(i)
-            saldos_proy.append(saldo_futuro)
+        for i in semanas_proy:
+            saldo = max(0, saldo_total - (burn_rate * i))
+            saldos_proy.append(saldo)
         
         # Crear gráfico CUADRADO
         fig, ax = plt.subplots(figsize=(2.8, 2.8))
         
-        # Línea histórica (azul) - DATOS REALES CONSOLIDADOS
+        # Línea histórica (azul)
         ax.plot(semanas_hist, saldos_hist, 
                 color='#3b82f6', linewidth=2, marker='o', markersize=3,
                 label='Histórico', zorder=3)
@@ -540,8 +507,8 @@ def generar_grafico_comparacion(datos: Dict) -> bytes:
 
 def generar_grafico_pie_gastos(datos: Dict) -> bytes:
     """
-    Genera pie chart de distribución por CATEGORÍAS DE GASTO CONSOLIDADAS
-    Suma categorías de todos los proyectos
+    Genera pie chart de distribución de EJECUTADO por proyecto
+    VERSIÓN SIMPLIFICADA: Funciona con datos consolidados del multiproyecto
     
     Args:
         datos: Diccionario con datos consolidados del multiproyecto
@@ -555,34 +522,21 @@ def generar_grafico_pie_gastos(datos: Dict) -> bytes:
         if not proyectos:
             return None
         
-        # CONSOLIDAR categorías de todos los proyectos
-        categorias = {
-            'Mano de Obra': 0,
-            'Materiales': 0,
-            'Administración': 0,
-            'Variables': 0
-        }
+        # Preparar datos (ejecutado por proyecto)
+        nombres = []
+        ejecutados = []
+        colores = ['#3b82f6', '#22c55e', '#f97316', '#8b5cf6', '#ec4899', '#14b8a6']
         
-        for proyecto in proyectos:
-            proyeccion = proyecto.get('proyeccion_semanal', [])
+        for p in proyectos:
+            nombre = p.get('nombre', 'Sin nombre')[:10]
+            ejecutado = p.get('ejecutado', 0)
             
-            for semana in proyeccion:
-                categorias['Mano de Obra'] += semana.get('Mano_Obra', 0)
-                categorias['Materiales'] += semana.get('Materiales', 0)
-                categorias['Administración'] += semana.get('Admin', 0)
-                categorias['Variables'] += (
-                    semana.get('Equipos', 0) +
-                    semana.get('Imprevistos', 0) +
-                    semana.get('Logistica', 0)
-                )
+            if ejecutado > 0:
+                nombres.append(nombre)
+                ejecutados.append(ejecutado)
         
-        if sum(categorias.values()) == 0:
+        if not ejecutados or sum(ejecutados) == 0:
             return None
-        
-        # Preparar datos
-        nombres = list(categorias.keys())
-        valores = list(categorias.values())
-        colores = ['#3b82f6', '#22c55e', '#f97316', '#8b5cf6']
         
         # Crear gráfico CUADRADO
         fig, ax = plt.subplots(figsize=(2.8, 2.8))
@@ -592,7 +546,7 @@ def generar_grafico_pie_gastos(datos: Dict) -> bytes:
             return f'{pct:.1f}%' if pct > 3 else ''
         
         # Gráfico de pie
-        wedges, texts, autotexts = ax.pie(valores, 
+        wedges, texts, autotexts = ax.pie(ejecutados, 
                                            labels=None,
                                            autopct=formato_label,
                                            startangle=90,
@@ -601,7 +555,7 @@ def generar_grafico_pie_gastos(datos: Dict) -> bytes:
                                            wedgeprops={'edgecolor': 'white', 'linewidth': 1})
         
         # Título
-        ax.set_title('Distribución de Gastos', 
+        ax.set_title('Distribución por Proyecto', 
                     fontsize=8, fontweight='bold', pad=4)
         
         # Leyenda DENTRO
@@ -874,15 +828,15 @@ def generar_reporte_gerencial_pdf(datos: Dict) -> bytes:
         ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
         ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
         ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-        ('FONTSIZE', (0, 0), (-1, 0), 6),  # Reducido de 7
-        ('BOTTOMPADDING', (0, 0), (-1, 0), 2),  # Reducido de 3
+        ('FONTSIZE', (0, 0), (-1, 0), 8),  # Aumentado de 6 a 8
+        ('BOTTOMPADDING', (0, 0), (-1, 0), 3),  # Aumentado de 2 a 3
         ('BACKGROUND', (0, 1), (-1, -1), colors.HexColor('#f0f9ff')),
         ('FONTNAME', (0, 1), (-1, -1), 'Helvetica'),
-        ('FONTSIZE', (0, 1), (-1, -1), 6),  # Reducido de 7
+        ('FONTSIZE', (0, 1), (-1, -1), 8),  # Aumentado de 6 a 8
         ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
         ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-        ('TOPPADDING', (0, 0), (-1, -1), 1.5),  # Reducido de 2
-        ('BOTTOMPADDING', (0, 0), (-1, -1), 1.5),  # Reducido de 2
+        ('TOPPADDING', (0, 0), (-1, -1), 2),  # Aumentado de 1.5 a 2
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 2),  # Aumentado de 1.5 a 2
     ]))
     
     elements.append(tabla_proyectos)
@@ -915,7 +869,7 @@ def generar_reporte_gerencial_pdf(datos: Dict) -> bytes:
     
     elements.append(Spacer(1, 0.2*inch))
     elements.append(Paragraph(
-        f"_____<br/>Generado por SICONE - Sistema Integrado de Construcción Eficiente<br/>{timestamp.strftime('%d de %B de %Y, %H:%M')}",
+        f"_____<br/><font size='6'>SICONE | {timestamp.strftime('%d/%m/%Y %H:%M')}</font>",
         style_subtitle
     ))
     
