@@ -1,22 +1,24 @@
 """
 SICONE - Módulo de Reportes Ejecutivos
-Versión: 1.3.1
+Versión: 1.3.2
 Fecha: 28 Diciembre 2024
 Autor: Andrés Restrepo & Claude
 
-FIX CRÍTICO v1.3.1 (28-Dic-2024):
-- 🐛 FIX: Corregido error de dimensiones en gráfico Timeline
-- ✅ Lógica de arrays coordinados (evita shape mismatch)
-- 📐 Reducción de tamaños para caber en 1 página
-- 🎨 Timeline: 6.5" × 1.6" (antes 2.2")
-- 🎨 Semáforo: altura dinámica max 2.2" (antes 3"+)
-- 📝 Fuentes reducidas: 7pt tablas, 9-10pt títulos
-- 📏 Paddings y espacios optimizados
-- 🎯 DPI reducido a 120 (antes 150) para menor peso
+MEJORAS v1.3.2 (28-Dic-2024):
+- 🎨 Timeline mejorado: Muestra semanas NEGATIVAS (pasado visible)
+- ✅ Eje X: -6 a +6 semanas (antes solo 0 a 6)
+- ✅ Línea vertical en "Hoy" (semana 0)
+- ✅ Marcadores más grandes y visibles
+- 🎨 Semáforo mejorado: Leyenda VERTICAL a la derecha
+- ✅ Líneas de referencia MÁS VISIBLES (sólidas, alpha 0.4)
+- ✅ 4 categorías en leyenda (Excedente, Estable, Alerta, Crítico)
+- 📊 Gráfico PIE implementado (opcional, comentado)
+- ✅ Distribución de gastos ejecutados por proyecto
+- ✅ Leyenda vertical a la derecha
 
-NUEVO v1.3.0 (28-Dic-2024):
-- 🎨 GRÁFICOS IMPLEMENTADOS: Timeline y Semáforo
-- ✅ Gráficos ubicados ANTES de la tabla (visual-first)
+FIX v1.3.1 (28-Dic-2024):
+- 🐛 Corregido error de dimensiones en Timeline
+- 📐 Optimización para caber en 1 página
 """
 
 import streamlit as st
@@ -301,70 +303,80 @@ def generar_grafico_timeline(datos: Dict) -> bytes:
         semana_actual = datos.get('semana', 0)
         burn_rate = datos.get('burn_rate', 0)
         
-        # Generar datos simplificados (últimas 6 semanas + 6 futuras para ahorrar espacio)
-        semanas_historicas = min(6, max(1, semana_actual))  # Mínimo 1 para evitar arrays vacíos
+        # Generar datos (6 semanas atrás + 6 adelante)
+        semanas_historicas = 6
         semanas_futuras = 6
         
-        # Crear arrays coordinados
+        # Construir arrays coordinados
         semanas = []
         saldos = []
-        tipos = []  # 'hist' o 'proy'
         
-        # Datos históricos
-        for i in range(-semanas_historicas + 1, 1):
+        # Histórico (semanas NEGATIVAS)
+        for i in range(-semanas_historicas, 0):
             semanas.append(i)
-            saldo = saldo_total + (burn_rate * abs(i))
-            saldos.append(saldo)
-            tipos.append('hist')
+            # Saldo histórico = saldo actual + (burn_rate × semanas desde entonces)
+            saldo_hist = saldo_total + (burn_rate * abs(i))
+            saldos.append(saldo_hist)
         
-        # Datos proyectados (incluye semana actual como punto de conexión)
-        for i in range(0, semanas_futuras + 1):
-            if i == 0 and len(semanas) > 0:
-                continue  # Ya incluimos la semana 0
+        # Semana actual (0)
+        semanas.append(0)
+        saldos.append(saldo_total)
+        
+        # Proyección (semanas POSITIVAS)
+        for i in range(1, semanas_futuras + 1):
             semanas.append(i)
-            saldo = max(0, saldo_total - (burn_rate * i))
-            saldos.append(saldo)
-            tipos.append('proy')
+            saldo_proy = max(0, saldo_total - (burn_rate * i))
+            saldos.append(saldo_proy)
         
-        # Separar datos para graficar
-        idx_corte = semanas_historicas
-        semanas_hist = semanas[:idx_corte]
-        saldos_hist = saldos[:idx_corte]
-        semanas_proy = semanas[idx_corte-1:]  # Overlap en último punto
-        saldos_proy = saldos[idx_corte-1:]
+        # Separar para graficar
+        idx_actual = semanas_historicas  # Índice de semana 0
+        semanas_hist = semanas[:idx_actual + 1]  # Incluye semana 0
+        saldos_hist = saldos[:idx_actual + 1]
+        semanas_proy = semanas[idx_actual:]  # Overlap en semana 0
+        saldos_proy = saldos[idx_actual:]
         
-        # Crear gráfico más compacto
-        fig, ax = plt.subplots(figsize=(6.5, 1.8))  # Reducido de 3
+        # Crear gráfico
+        fig, ax = plt.subplots(figsize=(6.5, 1.8))
         
         # Línea histórica (azul)
-        if len(semanas_hist) > 0:
-            ax.plot(semanas_hist, saldos_hist, 
-                    color='#3b82f6', linewidth=2, marker='o', markersize=3,
-                    label='Histórico', zorder=3)
+        ax.plot(semanas_hist, saldos_hist, 
+                color='#3b82f6', linewidth=2.5, marker='o', markersize=4,
+                label='Histórico', zorder=3)
         
         # Línea proyección (naranja)
-        if len(semanas_proy) > 0:
-            ax.plot(semanas_proy, saldos_proy, 
-                    color='#f97316', linewidth=2, linestyle='--', marker='s', markersize=3,
-                    label='Proyección', zorder=3)
+        ax.plot(semanas_proy, saldos_proy, 
+                color='#f97316', linewidth=2.5, linestyle='--', marker='s', markersize=4,
+                label='Proyección', zorder=3)
+        
+        # Línea vertical en semana actual
+        ax.axvline(x=0, color='gray', linestyle=':', linewidth=1.5, alpha=0.7, 
+                   label='Hoy', zorder=2)
         
         # Línea en cero
-        ax.axhline(y=0, color='red', linestyle=':', linewidth=0.8, alpha=0.5, zorder=1)
+        ax.axhline(y=0, color='red', linestyle=':', linewidth=1, alpha=0.5, zorder=1)
         
-        # Formateo compacto
+        # Área sombreada para proyección
+        ax.fill_between(semanas_proy, 0, saldos_proy, 
+                        alpha=0.1, color='#f97316', zorder=0)
+        
+        # Formateo
         ax.set_xlabel('Semanas (relativo a hoy)', fontsize=7, fontweight='bold')
         ax.set_ylabel('Saldo', fontsize=7, fontweight='bold')
         ax.set_title('Evolución del Saldo', fontsize=9, fontweight='bold', pad=5)
-        ax.grid(True, alpha=0.2, linestyle='--', linewidth=0.5)
-        ax.legend(loc='upper right', fontsize=6, framealpha=0.9)
+        ax.grid(True, alpha=0.3, linestyle='--', linewidth=0.5)
+        ax.legend(loc='upper right', fontsize=6, framealpha=0.9, ncol=3)
+        
+        # IMPORTANTE: Fijar límites del eje X para mostrar negativo y positivo
+        ax.set_xlim(-semanas_historicas - 0.5, semanas_futuras + 0.5)
         
         # Formato de moneda en eje Y
         ax.yaxis.set_major_formatter(plt.FuncFormatter(
             lambda x, p: formatear_moneda(x) if UTILS_DISPONIBLE else f"${x/1e6:.0f}M"
         ))
         
-        # Reducir número de ticks para ahorrar espacio
-        ax.yaxis.set_major_locator(plt.MaxNLocator(4))
+        # Reducir número de ticks
+        ax.yaxis.set_major_locator(plt.MaxNLocator(5))
+        ax.xaxis.set_major_locator(plt.MaxNLocator(7))  # Mostrar -6, -3, 0, 3, 6
         ax.tick_params(axis='both', labelsize=6)
         
         plt.tight_layout(pad=0.3)
@@ -430,7 +442,7 @@ def generar_grafico_semaforo(datos: Dict) -> bytes:
             colores.append(color)
         
         # Crear gráfico más compacto
-        altura = min(2.5, len(proyectos) * 0.35 + 0.4)  # Reducido
+        altura = min(2.5, len(proyectos) * 0.35 + 0.4)
         fig, ax = plt.subplots(figsize=(6.5, altura))
         
         # Barras horizontales más delgadas
@@ -444,12 +456,12 @@ def generar_grafico_semaforo(datos: Dict) -> bytes:
         ax.set_xlabel('Cobertura (semanas)', fontsize=7, fontweight='bold')
         ax.set_title('Estado Financiero por Proyecto', fontsize=9, fontweight='bold', pad=5)
         
-        # Líneas de referencia más sutiles
-        ax.axvline(x=20, color='#22c55e', linestyle=':', linewidth=1, alpha=0.5)
-        ax.axvline(x=10, color='#3b82f6', linestyle=':', linewidth=1, alpha=0.5)
-        ax.axvline(x=5, color='#f97316', linestyle=':', linewidth=1, alpha=0.5)
+        # Líneas de referencia MÁS VISIBLES
+        ax.axvline(x=20, color='#22c55e', linestyle='-', linewidth=2, alpha=0.4, zorder=1)
+        ax.axvline(x=10, color='#3b82f6', linestyle='-', linewidth=2, alpha=0.4, zorder=1)
+        ax.axvline(x=5, color='#f97316', linestyle='-', linewidth=2, alpha=0.4, zorder=1)
         
-        # Valores en las barras más pequeños
+        # Valores en las barras
         for i, (bar, cob) in enumerate(zip(bars, coberturas)):
             width = bar.get_width()
             label_x = width + 1 if width < 80 else width - 2
@@ -465,19 +477,27 @@ def generar_grafico_semaforo(datos: Dict) -> bytes:
         ax.tick_params(axis='both', labelsize=6)
         ax.invert_yaxis()  # Primer proyecto arriba
         
-        # Leyenda más compacta
+        # LEYENDA VERTICAL A LA DERECHA
         from matplotlib.patches import Patch
         legend_elements = [
-            Patch(facecolor='#22c55e', label='Exc (20s+)'),
-            Patch(facecolor='#3b82f6', label='Est (10s+)'),
-            Patch(facecolor='#f97316', label='Ale (5s+)')
+            Patch(facecolor='#22c55e', edgecolor='black', linewidth=0.5, label='Excedente (≥20s)'),
+            Patch(facecolor='#3b82f6', edgecolor='black', linewidth=0.5, label='Estable (≥10s)'),
+            Patch(facecolor='#f97316', edgecolor='black', linewidth=0.5, label='Alerta (≥5s)'),
+            Patch(facecolor='#dc2626', edgecolor='black', linewidth=0.5, label='Crítico (<5s)')
         ]
-        ax.legend(handles=legend_elements, loc='lower right', fontsize=6, 
-                 framealpha=0.9, ncol=3, handlelength=1, handletextpad=0.5)
+        ax.legend(handles=legend_elements, 
+                 loc='center right',  # A la derecha
+                 bbox_to_anchor=(1.22, 0.5),  # Fuera del gráfico
+                 fontsize=6, 
+                 framealpha=0.9, 
+                 ncol=1,  # Vertical (1 columna)
+                 handlelength=1.5, 
+                 handletextpad=0.5,
+                 borderpad=0.8)
         
         plt.tight_layout(pad=0.3)
         
-        # Guardar a bytes
+        # Guardar a bytes con espacio extra para leyenda
         buf = io.BytesIO()
         plt.savefig(buf, format='png', dpi=120, bbox_inches='tight', facecolor='white')
         buf.seek(0)
@@ -506,7 +526,7 @@ def generar_grafico_comparacion(datos: Dict) -> bytes:
 
 def generar_grafico_pie_gastos(datos: Dict) -> bytes:
     """
-    FASE 2: Genera pie chart de distribución de gastos
+    Genera pie chart de distribución de gastos ejecutados por proyecto
     
     Args:
         datos: Diccionario con datos consolidados
@@ -514,8 +534,76 @@ def generar_grafico_pie_gastos(datos: Dict) -> bytes:
     Returns:
         bytes: Imagen PNG del gráfico
     """
-    # Placeholder - será implementado en Fase 2
-    return None
+    try:
+        proyectos = datos.get('proyectos', [])
+        
+        if not proyectos:
+            return None
+        
+        # Preparar datos
+        nombres = []
+        ejecutados = []
+        colores_personalizados = ['#3b82f6', '#22c55e', '#f97316', '#8b5cf6', '#ec4899', '#14b8a6']
+        
+        for p in proyectos:
+            nombre = p.get('nombre', 'Sin nombre')[:12]
+            ejecutado = p.get('ejecutado', 0)
+            
+            if ejecutado > 0:  # Solo incluir proyectos con gasto
+                nombres.append(nombre)
+                ejecutados.append(ejecutado)
+        
+        if not ejecutados:
+            return None
+        
+        # Crear gráfico compacto
+        fig, ax = plt.subplots(figsize=(6.5, 2.2))
+        
+        # Calcular porcentajes
+        total = sum(ejecutados)
+        porcentajes = [(e/total)*100 for e in ejecutados]
+        
+        # Función para formato de labels
+        def formato_label(pct, allvals):
+            absolute = int(pct/100.*sum(allvals))
+            return f'{pct:.1f}%\n{formatear_moneda(absolute) if UTILS_DISPONIBLE else f"${absolute/1e6:.0f}M"}'
+        
+        # Gráfico de pie
+        wedges, texts, autotexts = ax.pie(ejecutados, 
+                                           labels=None,  # Labels en leyenda
+                                           autopct=lambda pct: formato_label(pct, ejecutados),
+                                           startangle=90,
+                                           colors=colores_personalizados[:len(nombres)],
+                                           textprops={'fontsize': 6, 'weight': 'bold'},
+                                           wedgeprops={'edgecolor': 'white', 'linewidth': 1.5})
+        
+        # Título
+        ax.set_title('Distribución de Gastos por Proyecto', 
+                    fontsize=9, fontweight='bold', pad=10)
+        
+        # Leyenda a la derecha vertical
+        ax.legend(nombres, 
+                 loc='center left',
+                 bbox_to_anchor=(1.05, 0.5),
+                 fontsize=6,
+                 framealpha=0.9,
+                 ncol=1)
+        
+        plt.tight_layout(pad=0.3)
+        
+        # Guardar a bytes
+        buf = io.BytesIO()
+        plt.savefig(buf, format='png', dpi=120, bbox_inches='tight', facecolor='white')
+        buf.seek(0)
+        plt.close(fig)
+        
+        return buf
+        
+    except Exception as e:
+        st.error(f"Error generando gráfico pie: {e}")
+        import traceback
+        st.error(traceback.format_exc())
+        return None
 
 
 # ============================================================================
@@ -684,6 +772,23 @@ def generar_reporte_gerencial_pdf(datos: Dict) -> bytes:
         img = Image(semaforo_img, width=6.5*inch, height=altura_semaforo*inch)
         elements.append(img)
         elements.append(Spacer(1, 0.15*inch))  # Reducido de 0.3
+    
+    # Gráfico Pie - Distribución de gastos (OPCIONAL - comentado para mantener 1 página)
+    # DESCOMENTAR si deseas agregar el gráfico de pie (puede requerir 2 páginas)
+    """
+    pie_img = generar_grafico_pie_gastos(datos)
+    if pie_img:
+        elements.append(Paragraph("DISTRIBUCIÓN DE GASTOS", ParagraphStyle(
+            'GraphHeader3',
+            parent=styles['Heading2'],
+            fontSize=10,
+            textColor=colors.HexColor('#1e40af'),
+            spaceAfter=4
+        )))
+        img = Image(pie_img, width=6.5*inch, height=2.0*inch)
+        elements.append(img)
+        elements.append(Spacer(1, 0.15*inch))
+    """
     
     # =================================================================
     # DETALLE DE PROYECTOS CON MANEJO SEGURO DE DATOS
