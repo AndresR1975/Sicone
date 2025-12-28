@@ -1,17 +1,23 @@
 """
 SICONE - Módulo de Reportes Ejecutivos
-Versión: 1.1.0 - Mejorado
+Versión: 1.2.0
 Fecha: Diciembre 2024
 Autor: Andrés Restrepo & Claude
 
 Genera reportes ejecutivos en PDF con datos consolidados del módulo multiproyecto
 
-MEJORAS v1.1.0:
-- Detección automática de sistema operativo y entorno Python
-- Instalación adaptativa según el contexto (venv, system, Windows/Linux)
-- Mejor manejo de errores de permisos
-- Feedback mejorado con instrucciones específicas por plataforma
-- Verificación robusta de instalación
+CAMBIOS v1.2.0:
+- ✅ Formato de cifras colombiano (MM en lugar de B para mil millones)
+- ✅ Diagnóstico de datos para debugging
+- ✅ Mejor manejo de datos faltantes con valores seguros
+- ✅ Estructura preparada para agregar gráficos
+- ✅ Uso de utils_formateo.py para estandarización
+- ✅ Detección automática de entorno mejorada
+- ✅ Instalación adaptativa de reportlab
+
+HISTÓRICO:
+v1.1.0: Detección de entorno y comando adaptativo
+v1.0.0: Versión inicial
 """
 
 import streamlit as st
@@ -23,6 +29,34 @@ import sys
 import os
 import platform
 import subprocess
+
+# Importar utilidades compartidas
+try:
+    from utils_formateo import (
+        formatear_moneda,
+        formatear_porcentaje,
+        formatear_fecha,
+        obtener_valor_seguro,
+        generar_timestamp,
+        calcular_semanas_cobertura,
+        obtener_info_estado_financiero,
+        FORMATO_REGIONAL
+    )
+    UTILS_DISPONIBLE = True
+except ImportError:
+    st.warning("⚠️ utils_formateo.py no encontrado. Usando funciones locales.")
+    UTILS_DISPONIBLE = False
+    
+    # Función local de respaldo
+    def formatear_moneda(valor):
+        if valor >= 1_000_000_000:
+            return f"${valor/1_000_000_000:.2f}MM"
+        elif valor >= 1_000_000:
+            return f"${valor/1_000_000:.1f}M"
+        elif valor >= 1_000:
+            return f"${valor/1_000:.0f}K"
+        else:
+            return f"${valor:,.0f}"
 
 # Variable global para verificar disponibilidad de PDF
 PDF_DISPONIBLE = False
@@ -36,12 +70,7 @@ def detectar_entorno():
     Detecta el entorno de ejecución para adaptar la instalación
     
     Returns:
-        dict: Información del entorno con las siguientes claves:
-            - sistema: 'Windows', 'Linux', 'Darwin' (macOS)
-            - en_venv: bool, True si está en entorno virtual
-            - python_version: str, versión de Python
-            - pip_path: str, ruta al ejecutable de pip
-            - necesita_break_system: bool, True si necesita --break-system-packages
+        dict: Información del entorno
     """
     entorno = {
         'sistema': platform.system(),
@@ -51,8 +80,6 @@ def detectar_entorno():
         'necesita_break_system': False
     }
     
-    # Determinar si necesita --break-system-packages
-    # Esta opción solo es necesaria en Linux/macOS con Python 3.11+ gestionado por el sistema
     if entorno['sistema'] in ['Linux', 'Darwin'] and not entorno['en_venv']:
         version_mayor = sys.version_info.major
         version_menor = sys.version_info.minor
@@ -62,49 +89,23 @@ def detectar_entorno():
     return entorno
 
 def obtener_comando_instalacion(entorno: dict) -> List[str]:
-    """
-    Genera el comando de instalación apropiado según el entorno
-    
-    Args:
-        entorno: Diccionario con información del entorno
-        
-    Returns:
-        List[str]: Comando de instalación como lista de argumentos
-    """
+    """Genera el comando de instalación apropiado según el entorno"""
     comando = [entorno['pip_path'], "-m", "pip", "install", "reportlab"]
     
-    # Agregar --break-system-packages solo si es necesario
     if entorno['necesita_break_system']:
         comando.append("--break-system-packages")
-    
-    # En Windows y entornos virtuales, usar --user puede causar problemas, mejor omitirlo
-    # En Linux/macOS sin venv y sin permisos root, intentaremos con --user
-    if entorno['sistema'] in ['Linux', 'Darwin'] and not entorno['en_venv']:
-        # No agregamos --user inicialmente, lo intentaremos en segundo intento si falla
-        pass
     
     return comando
 
 def obtener_instrucciones_manuales(entorno: dict) -> str:
-    """
-    Genera instrucciones de instalación manual específicas para el entorno
-    
-    Args:
-        entorno: Diccionario con información del entorno
-        
-    Returns:
-        str: Instrucciones formateadas para el entorno específico
-    """
+    """Genera instrucciones de instalación manual específicas para el entorno"""
     sistema = entorno['sistema']
     en_venv = entorno['en_venv']
     
     if sistema == 'Windows':
         if en_venv:
             return """# En su terminal (PowerShell o CMD):
-# Ya está en un entorno virtual, solo instale directamente
 pip install reportlab
-
-# Luego reinicie la aplicación con Ctrl+C y:
 streamlit run main.py"""
         else:
             return """# En su terminal (PowerShell o CMD):
@@ -116,18 +117,12 @@ pip install reportlab
 # Opción 2: Instalación directa
 pip install reportlab
 
-# Luego reinicie la aplicación con Ctrl+C y:
 streamlit run main.py"""
     
     elif sistema in ['Linux', 'Darwin']:
         if en_venv:
-            activacion = "source venv/bin/activate" if sistema == 'Linux' else "source venv/bin/activate"
             return f"""# En su terminal:
-# Ya está en un entorno virtual
-{activacion}
 pip install reportlab
-
-# Luego reinicie la aplicación con Ctrl+C y:
 streamlit run main.py"""
         else:
             break_system = "--break-system-packages" if entorno['necesita_break_system'] else ""
@@ -143,13 +138,11 @@ sudo pip3 install reportlab {break_system}
 # Opción 3: Instalación de usuario
 pip3 install reportlab --user {break_system}
 
-# Luego reinicie la aplicación con Ctrl+C y:
 streamlit run main.py"""
     
     return """# Instalación genérica:
 pip install reportlab
-
-# Luego reinicie la aplicación"""
+streamlit run main.py"""
 
 
 # ============================================================================
@@ -169,21 +162,8 @@ def verificar_reportlab():
         return False
 
 def instalar_reportlab():
-    """
-    Instala reportlab con detección automática de entorno y feedback detallado
-    
-    FUNCIONAMIENTO:
-    1. Detecta el entorno de ejecución (OS, venv, versión Python)
-    2. Construye el comando de instalación apropiado
-    3. Intenta la instalación con feedback en tiempo real
-    4. Si falla por permisos en Linux/macOS, reintenta con --user
-    5. Verifica que la instalación fue exitosa
-    
-    Returns:
-        bool: True si la instalación fue exitosa, False en caso contrario
-    """
+    """Instala reportlab con detección automática de entorno"""
     try:
-        # Detectar entorno
         status_container = st.empty()
         progress_bar = st.progress(0)
         
@@ -192,21 +172,18 @@ def instalar_reportlab():
         
         entorno = detectar_entorno()
         
-        # Mostrar información del entorno
         with st.expander("ℹ️ Información del entorno detectado"):
             st.write(f"**Sistema Operativo:** {entorno['sistema']}")
             st.write(f"**Python:** {entorno['python_version']}")
             st.write(f"**Entorno Virtual:** {'Sí' if entorno['en_venv'] else 'No'}")
             st.write(f"**Requiere --break-system-packages:** {'Sí' if entorno['necesita_break_system'] else 'No'}")
         
-        # Construir comando de instalación
         comando = obtener_comando_instalacion(entorno)
         
         status_container.info(f"📦 Instalando reportlab...")
-        st.caption(f"Ejecutando: `{' '.join(comando[2:])}`")  # Mostrar solo parte legible
+        st.caption(f"Ejecutando: `{' '.join(comando[2:])}`")
         progress_bar.progress(25)
         
-        # Intentar instalación
         resultado = subprocess.run(
             comando,
             capture_output=True,
@@ -216,18 +193,16 @@ def instalar_reportlab():
         
         progress_bar.progress(60)
         
-        # Si falla por permisos en Linux/macOS sin venv, reintentar con --user
+        # Reintento con --user si falla por permisos
         if resultado.returncode != 0 and entorno['sistema'] in ['Linux', 'Darwin'] and not entorno['en_venv']:
             if "Permission denied" in resultado.stderr or "EACCES" in resultado.stderr or "[Errno 13]" in resultado.stderr:
                 status_container.warning("⚠️ Permiso denegado. Reintentando con instalación de usuario...")
                 progress_bar.progress(40)
                 
-                # Agregar --user al comando
                 comando_user = comando.copy()
                 if "--break-system-packages" not in comando_user:
                     comando_user.append("--user")
                 else:
-                    # Insertar --user antes de --break-system-packages
                     idx = comando_user.index("--break-system-packages")
                     comando_user.insert(idx, "--user")
                 
@@ -242,15 +217,13 @@ def instalar_reportlab():
                 
                 progress_bar.progress(75)
         
-        # Verificar resultado
         if resultado.returncode == 0:
             status_container.success("✅ reportlab instalado correctamente")
             progress_bar.progress(90)
             
-            # Verificar que realmente se puede importar
             try:
                 import importlib
-                importlib.invalidate_caches()  # Limpiar cache de imports
+                importlib.invalidate_caches()
                 reportlab_module = importlib.import_module('reportlab')
                 
                 global PDF_DISPONIBLE
@@ -266,26 +239,20 @@ def instalar_reportlab():
                 progress_bar.progress(100)
                 return False
         else:
-            # Instalación falló
             status_container.error("❌ Error en instalación")
             
-            # Analizar el error para dar feedback específico
             error_msg = resultado.stderr.lower()
             
             if "permission" in error_msg or "eacces" in error_msg or "[errno 13]" in error_msg:
-                st.error("**Error de Permisos:** No tiene permisos suficientes para instalar paquetes.")
-                st.info("**Soluciones:**")
-                st.markdown("""
-                1. **Usar entorno virtual** (RECOMENDADO):
-                   - Cree un venv y ejecute la aplicación desde allí
-                2. **Instalación de usuario**:
-                   - Use la instalación manual con la opción `--user`
-                3. **Permisos de administrador**:
-                   - En Linux/macOS: use `sudo` en la instalación manual
+                st.error("**Error de Permisos:** No tiene permisos suficientes")
+                st.info("""**Soluciones:**
+                1. Usar entorno virtual (RECOMENDADO)
+                2. Instalación de usuario con --user
+                3. Permisos de administrador con sudo
                 """)
             
             elif "not found" in error_msg or "no such file" in error_msg:
-                st.error("**Error:** No se encontró pip o Python.")
+                st.error("**Error:** No se encontró pip o Python")
                 st.info("Verifique que Python y pip están correctamente instalados")
             
             else:
@@ -309,19 +276,66 @@ def instalar_reportlab():
 
 
 # ============================================================================
-# UTILIDADES
+# GENERACIÓN DE GRÁFICOS (Preparado para Fase 2)
 # ============================================================================
 
-def formatear_moneda(valor):
-    """Formatea valores monetarios"""
-    if valor >= 1_000_000_000:
-        return f"${valor/1_000_000_000:.2f}B"
-    elif valor >= 1_000_000:
-        return f"${valor/1_000_000:.1f}M"
-    elif valor >= 1_000:
-        return f"${valor/1_000:.0f}K"
-    else:
-        return f"${valor:,.0f}"
+def generar_grafico_timeline(datos: Dict) -> bytes:
+    """
+    FASE 2: Genera gráfico de evolución temporal del saldo
+    
+    Args:
+        datos: Diccionario con datos consolidados
+        
+    Returns:
+        bytes: Imagen PNG del gráfico
+        
+    TODO:
+    - Implementar con matplotlib
+    - Línea azul para histórico
+    - Línea naranja para proyección
+    - Formato adecuado para PDF
+    """
+    # Placeholder - será implementado en Fase 2
+    return None
+
+def generar_grafico_semaforo(datos: Dict) -> bytes:
+    """
+    FASE 2: Genera semáforo de estado por proyecto
+    
+    Args:
+        datos: Diccionario con datos consolidados
+        
+    Returns:
+        bytes: Imagen PNG del gráfico
+    """
+    # Placeholder - será implementado en Fase 2
+    return None
+
+def generar_grafico_comparacion(datos: Dict) -> bytes:
+    """
+    FASE 2: Genera gráfico de comparación planeación vs ejecución
+    
+    Args:
+        datos: Diccionario con datos consolidados
+        
+    Returns:
+        bytes: Imagen PNG del gráfico
+    """
+    # Placeholder - será implementado en Fase 2
+    return None
+
+def generar_grafico_pie_gastos(datos: Dict) -> bytes:
+    """
+    FASE 2: Genera pie chart de distribución de gastos
+    
+    Args:
+        datos: Diccionario con datos consolidados
+        
+    Returns:
+        bytes: Imagen PNG del gráfico
+    """
+    # Placeholder - será implementado en Fase 2
+    return None
 
 
 # ============================================================================
@@ -334,11 +348,11 @@ def generar_reporte_gerencial_pdf(datos: Dict) -> bytes:
     
     Estructura según diseño de Andrés:
     - Encabezado: Fecha, Estado de caja, Margen, Cobertura, etc.
-    - Cuerpo: Timeline, Semáforo, Comparación, Pie de gastos
+    - Cuerpo: Detalle por proyecto
     - Pie: Alertas relevantes
+    - [FASE 2] Gráficos: Timeline, Semáforo, Comparación, Pie
     """
     
-    # Importar reportlab aquí (lazy import)
     try:
         from reportlab.lib.pagesizes import letter
         from reportlab.lib.units import inch
@@ -365,7 +379,6 @@ def generar_reporte_gerencial_pdf(datos: Dict) -> bytes:
     # Estilos
     styles = getSampleStyleSheet()
     
-    # Estilo personalizado para título
     style_title = ParagraphStyle(
         'CustomTitle',
         parent=styles['Heading1'],
@@ -394,7 +407,6 @@ def generar_reporte_gerencial_pdf(datos: Dict) -> bytes:
     estado = datos['estado_caja']
     timestamp = datos['timestamp']
     
-    # Título
     elements.append(Paragraph("REPORTE GERENCIAL MULTIPROYECTO", style_title))
     elements.append(Paragraph(
         f"Generado: {timestamp.strftime('%d/%m/%Y %H:%M')}",
@@ -402,43 +414,50 @@ def generar_reporte_gerencial_pdf(datos: Dict) -> bytes:
     ))
     elements.append(Spacer(1, 0.2*inch))
     
-    # Tabla de métricas clave
-    cobertura = estado['saldo_total'] / estado['burn_rate'] if estado['burn_rate'] > 0 else 999
+    # Tabla de métricas clave CON FORMATO COLOMBIANO
+    saldo_total = obtener_valor_seguro(estado, 'saldo_total', 0, float) if UTILS_DISPONIBLE else estado.get('saldo_total', 0)
+    margen_proteccion = obtener_valor_seguro(estado, 'margen_proteccion', 0, float) if UTILS_DISPONIBLE else estado.get('margen_proteccion', 0)
+    burn_rate = obtener_valor_seguro(estado, 'burn_rate', 0, float) if UTILS_DISPONIBLE else estado.get('burn_rate', 0)
+    excedente_invertible = obtener_valor_seguro(estado, 'excedente_invertible', 0, float) if UTILS_DISPONIBLE else estado.get('excedente_invertible', 0)
+    estado_general = obtener_valor_seguro(estado, 'estado_general', 'N/A', str) if UTILS_DISPONIBLE else estado.get('estado_general', 'N/A')
+    proyectos_activos = obtener_valor_seguro(estado, 'proyectos_activos', 0, int) if UTILS_DISPONIBLE else estado.get('proyectos_activos', 0)
+    total_proyectos = obtener_valor_seguro(estado, 'total_proyectos', 0, int) if UTILS_DISPONIBLE else estado.get('total_proyectos', 0)
+    
+    # Calcular cobertura
+    if UTILS_DISPONIBLE:
+        cobertura = calcular_semanas_cobertura(saldo_total, burn_rate)
+    else:
+        cobertura = saldo_total / burn_rate if burn_rate > 0 else 999
     
     metricas_data = [
         ['Fecha', 'Estado de Caja', 'Margen de Protección', 'Cobertura'],
         [
             timestamp.strftime('%d/%m/%Y'),
-            formatear_moneda(estado['saldo_total']),
-            formatear_moneda(estado['margen_proteccion']),
+            formatear_moneda(saldo_total),
+            formatear_moneda(margen_proteccion),
             f"{cobertura:.1f} semanas"
         ],
         ['Disponible Inversión', 'Burn Rate Semanal', 'Estado General', 'Proyectos Activos'],
         [
-            formatear_moneda(estado.get('excedente_invertible', 0)),
-            formatear_moneda(estado['burn_rate']),
-            estado['estado_general'],
-            f"{estado['proyectos_activos']}/{estado['total_proyectos']}"
+            formatear_moneda(excedente_invertible),
+            formatear_moneda(burn_rate),
+            estado_general,
+            f"{proyectos_activos}/{total_proyectos}"
         ]
     ]
     
     tabla_metricas = Table(metricas_data, colWidths=[1.8*inch, 1.8*inch, 1.8*inch, 1.8*inch])
     tabla_metricas.setStyle(TableStyle([
-        # Encabezados
         ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#3b82f6')),
         ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
         ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
         ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
         ('FONTSIZE', (0, 0), (-1, 0), 9),
         ('BOTTOMPADDING', (0, 0), (-1, 0), 8),
-        
-        # Segunda fila de encabezados
         ('BACKGROUND', (0, 2), (-1, 2), colors.HexColor('#60a5fa')),
         ('TEXTCOLOR', (0, 2), (-1, 2), colors.whitesmoke),
         ('FONTNAME', (0, 2), (-1, 2), 'Helvetica-Bold'),
         ('FONTSIZE', (0, 2), (-1, 2), 9),
-        
-        # Valores
         ('BACKGROUND', (0, 1), (-1, 1), colors.HexColor('#e0f2fe')),
         ('BACKGROUND', (0, 3), (-1, 3), colors.HexColor('#e0f2fe')),
         ('FONTNAME', (0, 1), (-1, 3), 'Helvetica'),
@@ -453,10 +472,10 @@ def generar_reporte_gerencial_pdf(datos: Dict) -> bytes:
     elements.append(Spacer(1, 0.3*inch))
     
     # =================================================================
-    # DETALLE DE PROYECTOS
+    # DETALLE DE PROYECTOS CON MANEJO SEGURO DE DATOS
     # =================================================================
     
-    proyectos = datos['proyectos']
+    proyectos = datos.get('proyectos', [])
     
     elements.append(Paragraph("DETALLE POR PROYECTO", ParagraphStyle(
         'SectionHeader',
@@ -466,34 +485,56 @@ def generar_reporte_gerencial_pdf(datos: Dict) -> bytes:
         spaceAfter=8
     )))
     
-    # Tabla de proyectos
+    # Tabla de proyectos con extracción segura de datos
     proyectos_data = [['Proyecto', 'Estado', 'Presupuesto', 'Ejecutado', 'Saldo', 'Avance']]
     
     for p in proyectos:
-        presupuesto = p.get('presupuesto_total', 0)
-        ejecutado = p.get('ejecutado', 0)
+        # Extraer valores de forma segura (probando diferentes nombres de claves)
+        if UTILS_DISPONIBLE:
+            nombre = obtener_valor_seguro(p, 'nombre', 'Sin nombre', str)
+            estado_proy = obtener_valor_seguro(p, 'estado', 'N/A', str)
+            
+            # Presupuesto - probar múltiples claves posibles
+            presupuesto = (obtener_valor_seguro(p, 'presupuesto_total', None, float) or
+                          obtener_valor_seguro(p, 'presupuesto', None, float) or
+                          obtener_valor_seguro(p, 'costo_total', None, float) or 0)
+            
+            # Ejecutado
+            ejecutado = (obtener_valor_seguro(p, 'ejecutado', None, float) or
+                        obtener_valor_seguro(p, 'costo_acumulado', None, float) or 0)
+            
+            # Saldo
+            saldo = (obtener_valor_seguro(p, 'saldo_real_tesoreria', None, float) or
+                    obtener_valor_seguro(p, 'saldo', None, float) or
+                    obtener_valor_seguro(p, 'saldo_tesoreria', None, float) or 0)
+        else:
+            # Versión sin utils
+            nombre = p.get('nombre', 'Sin nombre')[:30]
+            estado_proy = p.get('estado', 'N/A')
+            presupuesto = p.get('presupuesto_total', 0) or p.get('presupuesto', 0) or 0
+            ejecutado = p.get('ejecutado', 0) or p.get('costo_acumulado', 0) or 0
+            saldo = p.get('saldo_real_tesoreria', 0) or p.get('saldo', 0) or 0
+        
+        # Calcular avance
         avance = (ejecutado / presupuesto * 100) if presupuesto > 0 else 0
         
         proyectos_data.append([
-            p['nombre'][:30],  # Truncar nombres largos
-            p['estado'],
+            nombre[:30],  # Truncar nombres largos
+            estado_proy,
             formatear_moneda(presupuesto),
             formatear_moneda(ejecutado),
-            formatear_moneda(p.get('saldo_real_tesoreria', 0)),
+            formatear_moneda(saldo),
             f"{avance:.1f}%"
         ])
     
     tabla_proyectos = Table(proyectos_data, colWidths=[2.0*inch, 0.9*inch, 1.1*inch, 1.1*inch, 1.1*inch, 0.8*inch])
     tabla_proyectos.setStyle(TableStyle([
-        # Encabezado
         ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#3b82f6')),
         ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
         ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
         ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
         ('FONTSIZE', (0, 0), (-1, 0), 8),
         ('BOTTOMPADDING', (0, 0), (-1, 0), 6),
-        
-        # Datos
         ('BACKGROUND', (0, 1), (-1, -1), colors.HexColor('#f0f9ff')),
         ('FONTNAME', (0, 1), (-1, -1), 'Helvetica'),
         ('FONTSIZE', (0, 1), (-1, -1), 8),
@@ -505,6 +546,29 @@ def generar_reporte_gerencial_pdf(datos: Dict) -> bytes:
     
     elements.append(tabla_proyectos)
     elements.append(Spacer(1, 0.2*inch))
+    
+    # =================================================================
+    # GRÁFICOS (FASE 2 - Estructura preparada)
+    # =================================================================
+    
+    # TODO Fase 2: Descomentar cuando se implementen los gráficos
+    """
+    # Timeline
+    timeline_img = generar_grafico_timeline(datos)
+    if timeline_img:
+        elements.append(Paragraph("EVOLUCIÓN TEMPORAL", style_section))
+        img = Image(timeline_img, width=6*inch, height=2*inch)
+        elements.append(img)
+        elements.append(Spacer(1, 0.1*inch))
+    
+    # Semáforo
+    semaforo_img = generar_grafico_semaforo(datos)
+    if semaforo_img:
+        elements.append(Paragraph("ESTADO POR PROYECTO", style_section))
+        img = Image(semaforo_img, width=6*inch, height=1.5*inch)
+        elements.append(img)
+        elements.append(Spacer(1, 0.1*inch))
+    """
     
     # =================================================================
     # ALERTAS
@@ -521,7 +585,7 @@ def generar_reporte_gerencial_pdf(datos: Dict) -> bytes:
             spaceAfter=6
         )))
         
-        for alerta in alertas[:5]:  # Máximo 5 alertas
+        for alerta in alertas[:5]:
             elements.append(Paragraph(
                 f"• {alerta}",
                 ParagraphStyle('AlertText', parent=styles['Normal'], fontSize=9, leftIndent=10)
@@ -570,7 +634,6 @@ def main():
             st.markdown("### 🔧 Instalación Automática")
             st.caption("El sistema detectará su entorno y ajustará la instalación automáticamente")
             
-            # Mostrar información del entorno antes de instalar
             entorno = detectar_entorno()
             with st.expander("ℹ️ Vista previa del entorno"):
                 st.write(f"**SO:** {entorno['sistema']}")
@@ -585,7 +648,6 @@ def main():
                     st.balloons()
                     st.success("✅ ¡Instalación exitosa!")
                     
-                    # Botón para recargar
                     if st.button("🔄 Recargar módulo", type="primary"):
                         st.rerun()
                 else:
@@ -595,7 +657,6 @@ def main():
             st.markdown("### 📝 Instalación Manual")
             st.caption("Instrucciones específicas para su sistema")
             
-            # Obtener instrucciones específicas para este entorno
             entorno = detectar_entorno()
             instrucciones = obtener_instrucciones_manuales(entorno)
             
@@ -616,7 +677,6 @@ def main():
         
         st.markdown("---")
         
-        # Diagnóstico detallado
         with st.expander("🔍 Información de Diagnóstico Completa"):
             st.markdown("#### Entorno Python")
             st.write("**Python executable:**", sys.executable)
@@ -648,9 +708,9 @@ def main():
                     text=True, 
                     timeout=10
                 )
-                # Filtrar solo paquetes relevantes
                 lineas = result.stdout.split('\n')
-                relevantes = [l for l in lineas if any(x in l.lower() for x in ['report', 'pdf', 'pillow', 'image'])]
+                relevantes = [l for l in lineas if any(x in l.lower() 
+                             for x in ['report', 'pdf', 'pillow', 'image'])]
                 if relevantes:
                     st.code('\n'.join(relevantes), language="text")
                 else:
@@ -663,7 +723,35 @@ def main():
     # Si llegamos aquí, reportlab está disponible
     st.success("✅ reportlab está disponible")
     
-    # Verificar que existan datos
+    # ================================================================
+    # DIAGNÓSTICO DE DATOS (Para debugging)
+    # ================================================================
+    
+    if 'datos_reportes' in st.session_state:
+        with st.expander("🔍 DEBUG: Estructura de datos (para desarrollo)"):
+            datos = st.session_state.datos_reportes
+            
+            st.markdown("#### Claves principales:")
+            st.write(list(datos.keys()))
+            
+            st.markdown("#### Estado de caja:")
+            st.json(datos.get('estado_caja', {}))
+            
+            if datos.get('proyectos'):
+                st.markdown("#### Primer proyecto (estructura completa):")
+                st.json(datos['proyectos'][0])
+                
+                st.markdown("#### Claves disponibles en proyectos:")
+                if datos['proyectos']:
+                    claves = set()
+                    for p in datos['proyectos']:
+                        claves.update(p.keys())
+                    st.write(sorted(list(claves)))
+    
+    # ================================================================
+    # VERIFICAR DATOS
+    # ================================================================
+    
     if 'datos_reportes' not in st.session_state:
         st.warning("⚠️ No hay datos disponibles para generar reportes")
         st.info("📋 **Instrucciones:**\n"
@@ -697,12 +785,15 @@ def main():
     
     with col_info3:
         estado = datos['estado_caja']['estado_general']
-        color_map = {'EXCEDENTE': '🟢', 'AJUSTADO': '🟡', 'CRÍTICO': '🔴'}
+        color_map = {'EXCEDENTE': '🟢', 'AJUSTADO': '🟡', 'CRÍTICO': '🔴', 'ESTABLE': '🔵'}
         st.metric("Estado", f"{color_map.get(estado, '⚪')} {estado}")
     
     st.markdown("---")
     
-    # Selector de tipo de reporte
+    # ================================================================
+    # SELECTOR DE TIPO DE REPORTE
+    # ================================================================
+    
     st.markdown("### 📄 Seleccione el tipo de reporte")
     
     col_tipo1, col_tipo2 = st.columns(2)
@@ -718,6 +809,9 @@ def main():
                 <li>Detalle por proyecto</li>
                 <li>Alertas y recomendaciones</li>
             </ul>
+            <p style="color: #9ca3af; font-size: 0.85em; margin-top: 10px;">
+                <strong>Formato:</strong> Cifras en millones (M) y miles de millones (MM) - Estándar colombiano
+            </p>
         </div>
         """, unsafe_allow_html=True)
         
@@ -729,17 +823,18 @@ def main():
                     st.success("✅ Reporte generado exitosamente")
                     
                     # Botón de descarga
+                    timestamp = generar_timestamp() if UTILS_DISPONIBLE else datetime.now().strftime("%Y%m%d_%H%M")
                     st.download_button(
                         label="⬇️ Descargar PDF",
                         data=pdf_bytes,
-                        file_name=f"Reporte_Gerencial_{datetime.now().strftime('%Y%m%d_%H%M')}.pdf",
+                        file_name=f"Reporte_Gerencial_{timestamp}.pdf",
                         mime="application/pdf",
                         use_container_width=True
                     )
                     
                 except ImportError as e:
                     st.error("❌ Error: reportlab no está instalado correctamente")
-                    st.info("Reinicie la aplicación y vuelva a intentar. Si el problema persiste, instale manualmente.")
+                    st.info("Reinicie la aplicación y vuelva a intentar.")
                 except Exception as e:
                     st.error(f"❌ Error al generar reporte: {str(e)}")
                     with st.expander("🔍 Ver detalles del error"):
@@ -773,11 +868,11 @@ def main():
         st.markdown("#### Proyectos")
         df_proyectos = pd.DataFrame([
             {
-                'Nombre': p['nombre'],
-                'Estado': p['estado'],
-                'Presupuesto': p.get('presupuesto_total', 0),
-                'Ejecutado': p.get('ejecutado', 0),
-                'Saldo': p.get('saldo_real_tesoreria', 0)
+                'Nombre': p.get('nombre', 'Sin nombre'),
+                'Estado': p.get('estado', 'N/A'),
+                'Presupuesto': p.get('presupuesto_total', 0) or p.get('presupuesto', 0),
+                'Ejecutado': p.get('ejecutado', 0) or p.get('costo_acumulado', 0),
+                'Saldo': p.get('saldo_real_tesoreria', 0) or p.get('saldo', 0)
             }
             for p in datos['proyectos']
         ])
