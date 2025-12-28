@@ -2,21 +2,28 @@
 SICONE - Módulo de Análisis Multiproyecto FCL
 Consolidación y análisis de flujo de caja para múltiples proyectos
 
-Versión: 1.4.1
+Versión: 1.5.0
 Fecha: 28 Diciembre 2024
 Autor: AI-MindNovation
 
-FIX CRÍTICO v1.4.1 (28-Dic-2024):
+MEJORA IMPORTANTE v1.5.0 (28-Dic-2024):
+- 🎯 CAMBIO: % de avance ahora es PONDERADO POR MONTO (no solo hitos cumplidos)
+- ✅ Más preciso gerencialmente: refleja trabajo real ejecutado
+- ✅ Fórmula: sum(avance_hito_i × peso_hito_i) donde peso = monto_hito / total_montos
+- ✅ Hitos parciales sí aportan al avance total
+- ✅ Ejemplo: Hito al 88% cuenta como 88%, no como 0%
+- ✅ Cap de avance individual al 100% (sobrepagos no inflan el total)
+
+FIX v1.4.2 (28-Dic-2024):
+- 🐛 FIX: Prevenir conteo duplicado de hitos compartidos (ambos contratos)
+
+FIX v1.4.1 (28-Dic-2024):
 - 🐛 FIX: Nombre de clave correcto es 'contratos_cartera' no 'contratos'
-- ✅ Ahora sí cuenta hitos completados correctamente
-- ✅ % Avance funcionando con datos reales de cartera
 
 NUEVO v1.4.0 (28-Dic-2024):
 - ✅ Extracción de hitos desde configuración del proyecto
-- ✅ Cálculo de % avance basado en hitos completados
-- ✅ Hito completado = Monto pagado >= Monto esperado
-- ✅ Nuevos campos: avance_hitos_pct, hitos_completados, hitos_totales
-- ✅ Disponible para módulo de reportes ejecutivos
+- ✅ Cálculo de % avance basado en hitos
+- ✅ Nuevos campos: avance_hitos_pct, suma_montos_hitos, hitos_totales
 
 HISTÓRICO:
 v1.3.2 (27-Dic-2024): Fix línea azul histórica vs proyección
@@ -218,42 +225,69 @@ class ConsolidadorMultiproyecto:
             proyecto_info['capital_disponible'] = proyecto_info['excedente'] + proyecto_info['saldo_real_tesoreria']
             
             # ================================================================
-            # NUEVO v1.2.1: Calcular % de avance desde hitos
+            # NUEVO v1.2.1: Calcular % de avance desde hitos (ponderado por monto)
             # ================================================================
             if 'configuracion' in data and 'hitos' in data['configuracion']:
                 hitos_config = data['configuracion']['hitos']
                 total_hitos = len(hitos_config)
                 
-                # Contar hitos completados desde cartera (si existe)
-                hitos_completados = 0
+                # Calcular % de avance ponderado por monto (no solo hitos cumplidos)
+                avance_ponderado = 0.0
+                suma_montos_esperados = 0.0
+                hitos_procesados = set()  # Para evitar contar hitos compartidos dos veces
                 
-                # FIX v1.4.1: Clave correcta es 'contratos_cartera' no 'contratos'
                 if 'cartera' in data and data['cartera'] and 'contratos_cartera' in data['cartera']:
-                    # Iterar contratos y sus hitos
+                    # Primera pasada: calcular suma total de montos esperados (sin duplicados)
                     for contrato in data['cartera']['contratos_cartera']:
                         if 'hitos' in contrato:
                             for hito_cartera in contrato['hitos']:
-                                monto_esperado = hito_cartera.get('monto_esperado', 0)
-                                pagos = hito_cartera.get('pagos', [])
-                                monto_pagado = sum([p.get('monto', 0) for p in pagos])
+                                numero_hito = hito_cartera.get('numero')
                                 
-                                # Hito completado si está 100% pagado o más
-                                if monto_pagado >= monto_esperado and monto_esperado > 0:
-                                    hitos_completados += 1
+                                if numero_hito not in hitos_procesados:
+                                    monto_esperado = hito_cartera.get('monto_esperado', 0)
+                                    suma_montos_esperados += monto_esperado
+                                    hitos_procesados.add(numero_hito)
+                    
+                    # Segunda pasada: calcular avance ponderado
+                    hitos_procesados.clear()  # Resetear para segunda pasada
+                    
+                    for contrato in data['cartera']['contratos_cartera']:
+                        if 'hitos' in contrato:
+                            for hito_cartera in contrato['hitos']:
+                                numero_hito = hito_cartera.get('numero')
+                                
+                                # Solo procesar si no se ha contado antes (evita duplicados)
+                                if numero_hito not in hitos_procesados:
+                                    monto_esperado = hito_cartera.get('monto_esperado', 0)
+                                    pagos = hito_cartera.get('pagos', [])
+                                    monto_pagado = sum([p.get('monto', 0) for p in pagos])
+                                    
+                                    if monto_esperado > 0:
+                                        # % de avance de este hito (cap al 100%)
+                                        avance_hito = min(100.0, (monto_pagado / monto_esperado) * 100)
+                                        
+                                        # Peso de este hito en el total
+                                        peso = monto_esperado / suma_montos_esperados if suma_montos_esperados > 0 else 0
+                                        
+                                        # Contribución ponderada al avance total
+                                        avance_ponderado += avance_hito * peso
+                                    
+                                    # Marcar como procesado
+                                    hitos_procesados.add(numero_hito)
                 
-                # Calcular porcentaje de avance
-                if total_hitos > 0:
-                    proyecto_info['avance_hitos_pct'] = (hitos_completados / total_hitos) * 100
-                    proyecto_info['hitos_completados'] = hitos_completados
+                # Guardar % de avance ponderado
+                if suma_montos_esperados > 0:
+                    proyecto_info['avance_hitos_pct'] = avance_ponderado
+                    proyecto_info['suma_montos_hitos'] = suma_montos_esperados
                     proyecto_info['hitos_totales'] = total_hitos
                 else:
                     proyecto_info['avance_hitos_pct'] = 0
-                    proyecto_info['hitos_completados'] = 0
-                    proyecto_info['hitos_totales'] = 0
+                    proyecto_info['suma_montos_hitos'] = 0
+                    proyecto_info['hitos_totales'] = total_hitos
             else:
                 # No hay hitos configurados
                 proyecto_info['avance_hitos_pct'] = 0
-                proyecto_info['hitos_completados'] = 0
+                proyecto_info['suma_montos_hitos'] = 0
                 proyecto_info['hitos_totales'] = 0
             
             # Determinar estado del proyecto
