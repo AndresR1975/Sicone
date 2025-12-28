@@ -1,10 +1,17 @@
 """
 SICONE - Módulo de Reportes Ejecutivos
-Versión: 1.0.0 - Fase 1
+Versión: 1.1.0 - Mejorado
 Fecha: Diciembre 2024
 Autor: Andrés Restrepo & Claude
 
 Genera reportes ejecutivos en PDF con datos consolidados del módulo multiproyecto
+
+MEJORAS v1.1.0:
+- Detección automática de sistema operativo y entorno Python
+- Instalación adaptativa según el contexto (venv, system, Windows/Linux)
+- Mejor manejo de errores de permisos
+- Feedback mejorado con instrucciones específicas por plataforma
+- Verificación robusta de instalación
 """
 
 import streamlit as st
@@ -12,12 +19,145 @@ from datetime import datetime
 import pandas as pd
 from typing import Dict, List
 import io
+import sys
+import os
+import platform
+import subprocess
 
 # Variable global para verificar disponibilidad de PDF
 PDF_DISPONIBLE = False
 
+# ============================================================================
+# DETECCIÓN DE ENTORNO
+# ============================================================================
+
+def detectar_entorno():
+    """
+    Detecta el entorno de ejecución para adaptar la instalación
+    
+    Returns:
+        dict: Información del entorno con las siguientes claves:
+            - sistema: 'Windows', 'Linux', 'Darwin' (macOS)
+            - en_venv: bool, True si está en entorno virtual
+            - python_version: str, versión de Python
+            - pip_path: str, ruta al ejecutable de pip
+            - necesita_break_system: bool, True si necesita --break-system-packages
+    """
+    entorno = {
+        'sistema': platform.system(),
+        'en_venv': hasattr(sys, 'real_prefix') or (hasattr(sys, 'base_prefix') and sys.base_prefix != sys.prefix),
+        'python_version': f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}",
+        'pip_path': sys.executable,
+        'necesita_break_system': False
+    }
+    
+    # Determinar si necesita --break-system-packages
+    # Esta opción solo es necesaria en Linux/macOS con Python 3.11+ gestionado por el sistema
+    if entorno['sistema'] in ['Linux', 'Darwin'] and not entorno['en_venv']:
+        version_mayor = sys.version_info.major
+        version_menor = sys.version_info.minor
+        if version_mayor >= 3 and version_menor >= 11:
+            entorno['necesita_break_system'] = True
+    
+    return entorno
+
+def obtener_comando_instalacion(entorno: dict) -> List[str]:
+    """
+    Genera el comando de instalación apropiado según el entorno
+    
+    Args:
+        entorno: Diccionario con información del entorno
+        
+    Returns:
+        List[str]: Comando de instalación como lista de argumentos
+    """
+    comando = [entorno['pip_path'], "-m", "pip", "install", "reportlab"]
+    
+    # Agregar --break-system-packages solo si es necesario
+    if entorno['necesita_break_system']:
+        comando.append("--break-system-packages")
+    
+    # En Windows y entornos virtuales, usar --user puede causar problemas, mejor omitirlo
+    # En Linux/macOS sin venv y sin permisos root, intentaremos con --user
+    if entorno['sistema'] in ['Linux', 'Darwin'] and not entorno['en_venv']:
+        # No agregamos --user inicialmente, lo intentaremos en segundo intento si falla
+        pass
+    
+    return comando
+
+def obtener_instrucciones_manuales(entorno: dict) -> str:
+    """
+    Genera instrucciones de instalación manual específicas para el entorno
+    
+    Args:
+        entorno: Diccionario con información del entorno
+        
+    Returns:
+        str: Instrucciones formateadas para el entorno específico
+    """
+    sistema = entorno['sistema']
+    en_venv = entorno['en_venv']
+    
+    if sistema == 'Windows':
+        if en_venv:
+            return """# En su terminal (PowerShell o CMD):
+# Ya está en un entorno virtual, solo instale directamente
+pip install reportlab
+
+# Luego reinicie la aplicación con Ctrl+C y:
+streamlit run main.py"""
+        else:
+            return """# En su terminal (PowerShell o CMD):
+# Opción 1: Crear entorno virtual (RECOMENDADO)
+python -m venv venv
+venv\\Scripts\\activate
+pip install reportlab
+
+# Opción 2: Instalación directa
+pip install reportlab
+
+# Luego reinicie la aplicación con Ctrl+C y:
+streamlit run main.py"""
+    
+    elif sistema in ['Linux', 'Darwin']:
+        if en_venv:
+            activacion = "source venv/bin/activate" if sistema == 'Linux' else "source venv/bin/activate"
+            return f"""# En su terminal:
+# Ya está en un entorno virtual
+{activacion}
+pip install reportlab
+
+# Luego reinicie la aplicación con Ctrl+C y:
+streamlit run main.py"""
+        else:
+            break_system = "--break-system-packages" if entorno['necesita_break_system'] else ""
+            return f"""# En su terminal:
+# Opción 1: Con entorno virtual (RECOMENDADO)
+python3 -m venv venv
+source venv/bin/activate
+pip install reportlab
+
+# Opción 2: Instalación de sistema (requiere permisos)
+sudo pip3 install reportlab {break_system}
+
+# Opción 3: Instalación de usuario
+pip3 install reportlab --user {break_system}
+
+# Luego reinicie la aplicación con Ctrl+C y:
+streamlit run main.py"""
+    
+    return """# Instalación genérica:
+pip install reportlab
+
+# Luego reinicie la aplicación"""
+
+
+# ============================================================================
+# VERIFICACIÓN E INSTALACIÓN
+# ============================================================================
+
 def verificar_reportlab():
-    """Verifica e instala reportlab si es necesario"""
+    """Verifica e intenta importar reportlab"""
     global PDF_DISPONIBLE
     
     try:
@@ -25,56 +165,146 @@ def verificar_reportlab():
         PDF_DISPONIBLE = True
         return True
     except ImportError:
+        PDF_DISPONIBLE = False
         return False
 
 def instalar_reportlab():
-    """Instala reportlab con feedback detallado"""
+    """
+    Instala reportlab con detección automática de entorno y feedback detallado
+    
+    FUNCIONAMIENTO:
+    1. Detecta el entorno de ejecución (OS, venv, versión Python)
+    2. Construye el comando de instalación apropiado
+    3. Intenta la instalación con feedback en tiempo real
+    4. Si falla por permisos en Linux/macOS, reintenta con --user
+    5. Verifica que la instalación fue exitosa
+    
+    Returns:
+        bool: True si la instalación fue exitosa, False en caso contrario
+    """
     try:
-        import subprocess
-        import sys
-        
-        # Crear contenedor de estado
+        # Detectar entorno
         status_container = st.empty()
         progress_bar = st.progress(0)
         
-        status_container.info("📦 Descargando reportlab...")
+        status_container.info("🔍 Detectando entorno de ejecución...")
+        progress_bar.progress(10)
+        
+        entorno = detectar_entorno()
+        
+        # Mostrar información del entorno
+        with st.expander("ℹ️ Información del entorno detectado"):
+            st.write(f"**Sistema Operativo:** {entorno['sistema']}")
+            st.write(f"**Python:** {entorno['python_version']}")
+            st.write(f"**Entorno Virtual:** {'Sí' if entorno['en_venv'] else 'No'}")
+            st.write(f"**Requiere --break-system-packages:** {'Sí' if entorno['necesita_break_system'] else 'No'}")
+        
+        # Construir comando de instalación
+        comando = obtener_comando_instalacion(entorno)
+        
+        status_container.info(f"📦 Instalando reportlab...")
+        st.caption(f"Ejecutando: `{' '.join(comando[2:])}`")  # Mostrar solo parte legible
         progress_bar.progress(25)
         
         # Intentar instalación
         resultado = subprocess.run(
-            [sys.executable, "-m", "pip", "install", "reportlab", "--break-system-packages"],
+            comando,
             capture_output=True,
             text=True,
             timeout=120
         )
         
-        progress_bar.progress(75)
+        progress_bar.progress(60)
         
+        # Si falla por permisos en Linux/macOS sin venv, reintentar con --user
+        if resultado.returncode != 0 and entorno['sistema'] in ['Linux', 'Darwin'] and not entorno['en_venv']:
+            if "Permission denied" in resultado.stderr or "EACCES" in resultado.stderr or "[Errno 13]" in resultado.stderr:
+                status_container.warning("⚠️ Permiso denegado. Reintentando con instalación de usuario...")
+                progress_bar.progress(40)
+                
+                # Agregar --user al comando
+                comando_user = comando.copy()
+                if "--break-system-packages" not in comando_user:
+                    comando_user.append("--user")
+                else:
+                    # Insertar --user antes de --break-system-packages
+                    idx = comando_user.index("--break-system-packages")
+                    comando_user.insert(idx, "--user")
+                
+                st.caption(f"Ejecutando: `{' '.join(comando_user[2:])}`")
+                
+                resultado = subprocess.run(
+                    comando_user,
+                    capture_output=True,
+                    text=True,
+                    timeout=120
+                )
+                
+                progress_bar.progress(75)
+        
+        # Verificar resultado
         if resultado.returncode == 0:
             status_container.success("✅ reportlab instalado correctamente")
-            progress_bar.progress(100)
+            progress_bar.progress(90)
             
-            # Verificar que realmente se instaló
+            # Verificar que realmente se puede importar
             try:
                 import importlib
-                importlib.import_module('reportlab')
+                importlib.invalidate_caches()  # Limpiar cache de imports
+                reportlab_module = importlib.import_module('reportlab')
+                
                 global PDF_DISPONIBLE
                 PDF_DISPONIBLE = True
+                progress_bar.progress(100)
+                
+                st.success(f"✅ reportlab versión {reportlab_module.Version} disponible")
                 return True
-            except ImportError:
-                status_container.error("⚠️ Instalado pero no se puede importar. Intente reiniciar la aplicación.")
+                
+            except ImportError as ie:
+                status_container.error("⚠️ Instalado pero no se puede importar. Reinicie la aplicación.")
+                st.warning("**Acción requerida:** Detenga la aplicación (Ctrl+C) y reinicie con `streamlit run main.py`")
+                progress_bar.progress(100)
                 return False
         else:
-            status_container.error(f"❌ Error en instalación")
-            with st.expander("Ver detalles del error"):
-                st.code(resultado.stderr)
+            # Instalación falló
+            status_container.error("❌ Error en instalación")
+            
+            # Analizar el error para dar feedback específico
+            error_msg = resultado.stderr.lower()
+            
+            if "permission" in error_msg or "eacces" in error_msg or "[errno 13]" in error_msg:
+                st.error("**Error de Permisos:** No tiene permisos suficientes para instalar paquetes.")
+                st.info("**Soluciones:**")
+                st.markdown("""
+                1. **Usar entorno virtual** (RECOMENDADO):
+                   - Cree un venv y ejecute la aplicación desde allí
+                2. **Instalación de usuario**:
+                   - Use la instalación manual con la opción `--user`
+                3. **Permisos de administrador**:
+                   - En Linux/macOS: use `sudo` en la instalación manual
+                """)
+            
+            elif "not found" in error_msg or "no such file" in error_msg:
+                st.error("**Error:** No se encontró pip o Python.")
+                st.info("Verifique que Python y pip están correctamente instalados")
+            
+            else:
+                st.error("**Error desconocido en la instalación**")
+            
+            with st.expander("🔍 Ver detalles completos del error"):
+                st.code(resultado.stderr, language="bash")
+            
             return False
             
     except subprocess.TimeoutExpired:
-        st.error("⏱️ Timeout: La instalación tomó demasiado tiempo")
+        st.error("⏱️ Timeout: La instalación tomó demasiado tiempo (>120s)")
+        st.info("Intente la instalación manual en su terminal")
         return False
+        
     except Exception as e:
-        st.error(f"❌ Error inesperado: {str(e)}")
+        st.error(f"❌ Error inesperado durante la instalación: {str(e)}")
+        with st.expander("🔍 Ver detalles del error"):
+            st.exception(e)
         return False
 
 
@@ -223,129 +453,79 @@ def generar_reporte_gerencial_pdf(datos: Dict) -> bytes:
     elements.append(Spacer(1, 0.3*inch))
     
     # =================================================================
-    # CUERPO - INFORMACIÓN DE PROYECTOS
+    # DETALLE DE PROYECTOS
     # =================================================================
     
-    elements.append(Paragraph("📊 Detalle de Proyectos", styles['Heading2']))
-    elements.append(Spacer(1, 0.1*inch))
+    proyectos = datos['proyectos']
+    
+    elements.append(Paragraph("DETALLE POR PROYECTO", ParagraphStyle(
+        'SectionHeader',
+        parent=styles['Heading2'],
+        fontSize=14,
+        textColor=colors.HexColor('#1e40af'),
+        spaceAfter=8
+    )))
     
     # Tabla de proyectos
-    proyectos_data = [['Proyecto', 'Estado', 'Presupuesto', 'Ejecutado', '% Avance', 'Saldo']]
+    proyectos_data = [['Proyecto', 'Estado', 'Presupuesto', 'Ejecutado', 'Saldo', 'Avance']]
     
-    for proyecto in datos['proyectos']:
-        presupuesto = proyecto.get('presupuesto_total', 0)
-        ejecutado = proyecto.get('ejecutado', 0)
+    for p in proyectos:
+        presupuesto = p.get('presupuesto_total', 0)
+        ejecutado = p.get('ejecutado', 0)
         avance = (ejecutado / presupuesto * 100) if presupuesto > 0 else 0
-        saldo = proyecto.get('saldo_real_tesoreria', 0)
         
         proyectos_data.append([
-            proyecto['nombre'][:20],  # Truncar nombre
-            proyecto['estado'],
+            p['nombre'][:30],  # Truncar nombres largos
+            p['estado'],
             formatear_moneda(presupuesto),
             formatear_moneda(ejecutado),
-            f"{avance:.1f}%",
-            formatear_moneda(saldo)
+            formatear_moneda(p.get('saldo_real_tesoreria', 0)),
+            f"{avance:.1f}%"
         ])
     
-    tabla_proyectos = Table(proyectos_data, colWidths=[1.5*inch, 1*inch, 1.2*inch, 1.2*inch, 0.8*inch, 1.1*inch])
+    tabla_proyectos = Table(proyectos_data, colWidths=[2.0*inch, 0.9*inch, 1.1*inch, 1.1*inch, 1.1*inch, 0.8*inch])
     tabla_proyectos.setStyle(TableStyle([
-        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#10b981')),
+        # Encabezado
+        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#3b82f6')),
         ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
         ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
         ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-        ('FONTSIZE', (0, 0), (-1, 0), 9),
+        ('FONTSIZE', (0, 0), (-1, 0), 8),
+        ('BOTTOMPADDING', (0, 0), (-1, 0), 6),
+        
+        # Datos
+        ('BACKGROUND', (0, 1), (-1, -1), colors.HexColor('#f0f9ff')),
         ('FONTNAME', (0, 1), (-1, -1), 'Helvetica'),
         ('FONTSIZE', (0, 1), (-1, -1), 8),
         ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
-        ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#f0fdf4')]),
         ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
         ('TOPPADDING', (0, 0), (-1, -1), 4),
         ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
     ]))
     
     elements.append(tabla_proyectos)
-    elements.append(Spacer(1, 0.3*inch))
+    elements.append(Spacer(1, 0.2*inch))
     
     # =================================================================
-    # ANÁLISIS DE COBERTURA
+    # ALERTAS
     # =================================================================
     
-    elements.append(Paragraph("📈 Análisis de Cobertura", styles['Heading2']))
-    elements.append(Spacer(1, 0.1*inch))
+    alertas = datos.get('alertas', [])
     
-    # Determinar veces de cobertura
-    if estado['margen_proteccion'] > 0:
-        veces_cobertura = estado['saldo_total'] / estado['margen_proteccion']
-    else:
-        veces_cobertura = 999
-    
-    cobertura_data = [
-        ['Concepto', 'Valor'],
-        ['Burn Rate Proyectos', formatear_moneda(estado.get('burn_rate_proyectos', 0))],
-        ['Gastos Fijos Semanales', formatear_moneda(estado.get('gastos_fijos_semanales', 0))],
-        ['Burn Rate Total Semanal', formatear_moneda(estado['burn_rate'])],
-        ['Margen Requerido (8 sem)', formatear_moneda(estado['margen_proteccion'])],
-        ['Veces de Cobertura', f"{veces_cobertura:.2f}x"],
-    ]
-    
-    tabla_cobertura = Table(cobertura_data, colWidths=[4*inch, 2.8*inch])
-    tabla_cobertura.setStyle(TableStyle([
-        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#f59e0b')),
-        ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
-        ('ALIGN', (0, 0), (0, -1), 'LEFT'),
-        ('ALIGN', (1, 0), (1, -1), 'RIGHT'),
-        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-        ('FONTSIZE', (0, 0), (-1, 0), 10),
-        ('FONTNAME', (0, 1), (-1, -1), 'Helvetica'),
-        ('FONTSIZE', (0, 1), (-1, -1), 9),
-        ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
-        ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#fef3c7')]),
-        ('TOPPADDING', (0, 0), (-1, -1), 4),
-        ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
-    ]))
-    
-    elements.append(tabla_cobertura)
-    elements.append(Spacer(1, 0.3*inch))
-    
-    # =================================================================
-    # PIE - ALERTAS Y RECOMENDACIONES
-    # =================================================================
-    
-    elements.append(Paragraph("⚠️ Alertas y Recomendaciones", styles['Heading2']))
-    elements.append(Spacer(1, 0.1*inch))
-    
-    # Generar alertas
-    alertas = []
-    
-    if estado['estado_general'] == 'EXCEDENTE':
-        alertas.append("✅ Liquidez suficiente para operación normal")
-        alertas.append(f"✅ Excedente invertible de {formatear_moneda(estado.get('excedente_invertible', 0))}")
-    elif estado['estado_general'] == 'AJUSTADO':
-        alertas.append("🟡 Liquidez ajustada - Monitorear burn rate")
-        alertas.append("🟡 Considerar optimización de gastos")
-    else:
-        alertas.append("🔴 CRÍTICO: Liquidez insuficiente")
-        alertas.append("🔴 ACCIÓN INMEDIATA: Revisar proyección de ingresos")
-    
-    if cobertura < 12:
-        alertas.append(f"⚠️ Cobertura de solo {cobertura:.1f} semanas (recomendado: 12+)")
-    
-    # Proyectos terminados
-    if estado.get('proyectos_terminados', 0) > 0:
-        alertas.append(f"ℹ️ {estado['proyectos_terminados']} proyecto(s) terminado(s)")
-    
-    # Crear lista de alertas
-    alertas_text = "<br/>".join([f"• {alerta}" for alerta in alertas])
-    
-    style_alertas = ParagraphStyle(
-        'Alertas',
-        parent=styles['Normal'],
-        fontSize=9,
-        leading=14,
-        leftIndent=10
-    )
-    
-    elements.append(Paragraph(alertas_text, style_alertas))
+    if alertas:
+        elements.append(Paragraph("ALERTAS Y RECOMENDACIONES", ParagraphStyle(
+            'AlertHeader',
+            parent=styles['Heading2'],
+            fontSize=12,
+            textColor=colors.HexColor('#dc2626'),
+            spaceAfter=6
+        )))
+        
+        for alerta in alertas[:5]:  # Máximo 5 alertas
+            elements.append(Paragraph(
+                f"• {alerta}",
+                ParagraphStyle('AlertText', parent=styles['Normal'], fontSize=9, leftIndent=10)
+            ))
     
     # =================================================================
     # FOOTER
@@ -380,7 +560,7 @@ def main():
     # Verificar reportlab
     if not verificar_reportlab():
         st.warning("⚠️ La biblioteca 'reportlab' no está instalada")
-        st.info("📦 **reportlab** es necesaria para generar reportes PDF")
+        st.info("📦 **reportlab** es necesaria para generar reportes PDF de alta calidad")
         
         st.markdown("---")
         
@@ -388,34 +568,41 @@ def main():
         
         with col_inst1:
             st.markdown("### 🔧 Instalación Automática")
-            st.caption("Intenta instalar reportlab automáticamente")
+            st.caption("El sistema detectará su entorno y ajustará la instalación automáticamente")
+            
+            # Mostrar información del entorno antes de instalar
+            entorno = detectar_entorno()
+            with st.expander("ℹ️ Vista previa del entorno"):
+                st.write(f"**SO:** {entorno['sistema']}")
+                st.write(f"**Python:** {entorno['python_version']}")
+                st.write(f"**Entorno Virtual:** {'Sí ✅' if entorno['en_venv'] else 'No ❌'}")
+                
+                if not entorno['en_venv']:
+                    st.warning("⚠️ No está usando entorno virtual. Se recomienda crear uno para evitar conflictos.")
             
             if st.button("🚀 Instalar reportlab ahora", type="primary", use_container_width=True):
                 if instalar_reportlab():
                     st.balloons()
-                    st.success("✅ ¡Instalación exitosa! Recargando módulo...")
-                    import time
-                    time.sleep(2)
-                    st.rerun()
+                    st.success("✅ ¡Instalación exitosa!")
+                    
+                    # Botón para recargar
+                    if st.button("🔄 Recargar módulo", type="primary"):
+                        st.rerun()
                 else:
-                    st.warning("⚠️ La instalación automática falló. Use el método manual.")
+                    st.warning("⚠️ La instalación automática falló. Por favor, use el método manual.")
         
         with col_inst2:
             st.markdown("### 📝 Instalación Manual")
-            st.caption("Si la automática falla, use este método")
+            st.caption("Instrucciones específicas para su sistema")
             
-            st.code("""
-# En su terminal:
-pip install reportlab --break-system-packages
-
-# O si usa entorno virtual:
-source venv/bin/activate  # Linux/Mac
-pip install reportlab
-
-# Luego reinicie la aplicación
-            """, language="bash")
+            # Obtener instrucciones específicas para este entorno
+            entorno = detectar_entorno()
+            instrucciones = obtener_instrucciones_manuales(entorno)
             
-            st.info("💡 **Después de instalar manualmente:**\n1. Detenga la aplicación (Ctrl+C)\n2. Reinicie con `streamlit run main.py`")
+            st.code(instrucciones, language="bash")
+            
+            if not entorno['en_venv']:
+                st.info("💡 **Recomendación:** Crear un entorno virtual evita conflictos y problemas de permisos")
             
             st.markdown("")
             if st.button("🔄 Verificar si ya está instalado", use_container_width=True):
@@ -429,22 +616,52 @@ pip install reportlab
         
         st.markdown("---")
         
-        # Diagnóstico
-        with st.expander("🔍 Información de Diagnóstico"):
-            import sys
+        # Diagnóstico detallado
+        with st.expander("🔍 Información de Diagnóstico Completa"):
+            st.markdown("#### Entorno Python")
             st.write("**Python executable:**", sys.executable)
             st.write("**Python version:**", sys.version)
+            st.write("**Sistema Operativo:**", f"{platform.system()} {platform.release()}")
+            st.write("**Arquitectura:**", platform.machine())
             
-            # Intentar ver si pip funciona
+            entorno = detectar_entorno()
+            st.write("**En entorno virtual:**", "Sí" if entorno['en_venv'] else "No")
+            st.write("**Requiere --break-system-packages:**", "Sí" if entorno['necesita_break_system'] else "No")
+            
+            st.markdown("#### Pip")
             try:
-                import subprocess
-                result = subprocess.run([sys.executable, "-m", "pip", "--version"], 
-                                      capture_output=True, text=True, timeout=5)
-                st.write("**pip version:**", result.stdout)
-            except:
-                st.error("❌ pip no está disponible o no funciona")
+                result = subprocess.run(
+                    [sys.executable, "-m", "pip", "--version"], 
+                    capture_output=True, 
+                    text=True, 
+                    timeout=5
+                )
+                st.code(result.stdout, language="bash")
+            except Exception as e:
+                st.error(f"❌ Error al ejecutar pip: {e}")
+            
+            st.markdown("#### Paquetes instalados (relacionados con PDF)")
+            try:
+                result = subprocess.run(
+                    [sys.executable, "-m", "pip", "list"], 
+                    capture_output=True, 
+                    text=True, 
+                    timeout=10
+                )
+                # Filtrar solo paquetes relevantes
+                lineas = result.stdout.split('\n')
+                relevantes = [l for l in lineas if any(x in l.lower() for x in ['report', 'pdf', 'pillow', 'image'])]
+                if relevantes:
+                    st.code('\n'.join(relevantes), language="text")
+                else:
+                    st.caption("No se encontraron paquetes relacionados con PDF")
+            except Exception as e:
+                st.error(f"❌ Error al listar paquetes: {e}")
         
         st.stop()
+    
+    # Si llegamos aquí, reportlab está disponible
+    st.success("✅ reportlab está disponible")
     
     # Verificar que existan datos
     if 'datos_reportes' not in st.session_state:
@@ -452,7 +669,8 @@ pip install reportlab
         st.info("📋 **Instrucciones:**\n"
                 "1. Vaya al módulo **Análisis Multiproyecto**\n"
                 "2. Cargue y consolide sus proyectos\n"
-                "3. Regrese aquí para generar reportes")
+                "3. Haga clic en **'Exportar datos para reportes'**\n"
+                "4. Regrese aquí para generar reportes")
         
         if st.button("🏢 Ir a Análisis Multiproyecto"):
             st.session_state.modulo_actual = 'multiproyecto'
@@ -521,7 +739,7 @@ pip install reportlab
                     
                 except ImportError as e:
                     st.error("❌ Error: reportlab no está instalado correctamente")
-                    st.info("Reinicie la aplicación y vuelva a intentar. Si el problema persiste, instale manualmente:\n```bash\npip install reportlab\n```")
+                    st.info("Reinicie la aplicación y vuelva a intentar. Si el problema persiste, instale manualmente.")
                 except Exception as e:
                     st.error(f"❌ Error al generar reporte: {str(e)}")
                     with st.expander("🔍 Ver detalles del error"):
