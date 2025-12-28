@@ -1,22 +1,27 @@
 """
 SICONE - Módulo de Reportes Ejecutivos
-Versión: 1.4.0
+Versión: 1.5.0
 Fecha: 28 Diciembre 2024
 Autor: Andrés Restrepo & Claude
 
-NUEVO LAYOUT v1.4.0 (28-Dic-2024):
-- 🎨 Layout 2×1: Timeline y Pie CUADRADOS lado a lado
-- ✅ Timeline: 3.2" × 3.2" (cuadrado)
-- ✅ Pie: 3.2" × 3.2" (cuadrado)
-- ✅ Ambos en misma fila (tabla 2 columnas)
-- ✅ Semáforo: Ancho completo debajo (horizontal)
-- ✅ Leyenda semáforo DENTRO del recuadro (upper right, 2 col)
-- ✅ Mejor aprovechamiento del espacio
-- ✅ Más impacto visual
+DATOS REALES v1.5.0 (28-Dic-2024):
+- ✅ Timeline con DATOS HISTÓRICOS REALES del saldo
+- ✅ Consolida saldos de TODOS los proyectos por semana
+- ✅ Variación REAL visible (no línea recta)
+- ✅ Pie con 4 CATEGORÍAS de gasto:
+  * Mano de Obra
+  * Materiales  
+  * Administración
+  * Variables (Equipos + Imprevistos + Logística)
+- ✅ Consolida categorías de TODOS los proyectos
+- 📐 Tamaños reducidos para 1 página:
+  * Timeline: 2.8" × 2.8"
+  * Pie: 2.8" × 2.8"
+  * Semáforo: 6.5" × 1.8"
 
-MEJORAS v1.3.2 (28-Dic-2024):
-- Timeline con eje -6 a +6, línea "Hoy"
-- Semáforo con líneas más visibles
+LAYOUT v1.4.0:
+- Layout 2×1: Timeline y Pie cuadrados lado a lado
+- Semáforo horizontal abajo
 """
 
 import streamlit as st
@@ -287,99 +292,110 @@ def instalar_reportlab():
 
 def generar_grafico_timeline(datos: Dict) -> bytes:
     """
-    Genera gráfico de evolución temporal del saldo consolidado
+    Genera gráfico de evolución temporal del saldo consolidado CON DATOS REALES
+    Suma saldos de todos los proyectos por semana
     
     Args:
-        datos: Diccionario con datos consolidados
+        datos: Diccionario con datos consolidados del multiproyecto
         
     Returns:
         bytes: Imagen PNG del gráfico
     """
     try:
-        # Extraer datos históricos
-        saldo_total = datos.get('saldo_total', 0)
-        semana_actual = datos.get('semana', 0)
+        proyectos = datos.get('proyectos', [])
+        
+        if not proyectos:
+            st.warning("No hay proyectos para generar timeline")
+            return None
+        
+        # CONSOLIDAR saldos de todos los proyectos por semana
+        saldos_por_semana = {}  # {semana: saldo_total}
+        
+        for proyecto in proyectos:
+            proyeccion = proyecto.get('proyeccion_semanal', [])
+            
+            for semana_data in proyeccion:
+                num_semana = semana_data.get('Semana', 0)
+                saldo = semana_data.get('Saldo_Acumulado', 0)
+                
+                if num_semana not in saldos_por_semana:
+                    saldos_por_semana[num_semana] = 0
+                
+                saldos_por_semana[num_semana] += saldo
+        
+        if not saldos_por_semana:
+            st.warning("No hay datos de saldo por semana")
+            return None
+        
+        # Ordenar por semana
+        semanas_ordenadas = sorted(saldos_por_semana.keys())
+        semana_actual_num = max(semanas_ordenadas) if semanas_ordenadas else 0
+        
+        # Tomar últimas 6 semanas de histórico
+        inicio = max(0, len(semanas_ordenadas) - 6)
+        semanas_historicas = semanas_ordenadas[inicio:]
+        
+        # Extraer datos para graficar (semanas relativas a hoy)
+        semanas_hist = []
+        saldos_hist = []
+        
+        for i, sem in enumerate(semanas_historicas):
+            semana_rel = i - len(semanas_historicas) + 1  # -5, -4, -3, -2, -1, 0
+            semanas_hist.append(semana_rel)
+            saldos_hist.append(saldos_por_semana[sem])
+        
+        # Proyección futura (usando burn_rate consolidado)
+        saldo_actual = saldos_hist[-1] if saldos_hist else datos.get('saldo_total', 0)
         burn_rate = datos.get('burn_rate', 0)
         
-        # Generar datos (6 semanas atrás + 6 adelante)
-        semanas_historicas = 6
-        semanas_futuras = 6
+        semanas_proy = [0]  # Incluye hoy
+        saldos_proy = [saldo_actual]
         
-        # Construir arrays coordinados
-        semanas = []
-        saldos = []
-        
-        # Histórico (semanas NEGATIVAS)
-        for i in range(-semanas_historicas, 0):
-            semanas.append(i)
-            # Saldo histórico = saldo actual + (burn_rate × semanas desde entonces)
-            saldo_hist = saldo_total + (burn_rate * abs(i))
-            saldos.append(saldo_hist)
-        
-        # Semana actual (0)
-        semanas.append(0)
-        saldos.append(saldo_total)
-        
-        # Proyección (semanas POSITIVAS)
-        for i in range(1, semanas_futuras + 1):
-            semanas.append(i)
-            saldo_proy = max(0, saldo_total - (burn_rate * i))
-            saldos.append(saldo_proy)
-        
-        # Separar para graficar
-        idx_actual = semanas_historicas  # Índice de semana 0
-        semanas_hist = semanas[:idx_actual + 1]  # Incluye semana 0
-        saldos_hist = saldos[:idx_actual + 1]
-        semanas_proy = semanas[idx_actual:]  # Overlap en semana 0
-        saldos_proy = saldos[idx_actual:]
+        for i in range(1, 7):  # Próximas 6 semanas
+            saldo_futuro = max(0, saldo_actual - (burn_rate * i))
+            semanas_proy.append(i)
+            saldos_proy.append(saldo_futuro)
         
         # Crear gráfico CUADRADO
-        fig, ax = plt.subplots(figsize=(3.2, 3.2))  # CUADRADO para layout 2×1
+        fig, ax = plt.subplots(figsize=(2.8, 2.8))
         
-        # Línea histórica (azul)
+        # Línea histórica (azul) - DATOS REALES CONSOLIDADOS
         ax.plot(semanas_hist, saldos_hist, 
-                color='#3b82f6', linewidth=2.5, marker='o', markersize=4,
+                color='#3b82f6', linewidth=2, marker='o', markersize=3,
                 label='Histórico', zorder=3)
         
         # Línea proyección (naranja)
         ax.plot(semanas_proy, saldos_proy, 
-                color='#f97316', linewidth=2.5, linestyle='--', marker='s', markersize=4,
+                color='#f97316', linewidth=2, linestyle='--', marker='s', markersize=3,
                 label='Proyección', zorder=3)
         
-        # Línea vertical en semana actual
-        ax.axvline(x=0, color='gray', linestyle=':', linewidth=1.5, alpha=0.7, 
+        # Línea vertical en "Hoy"
+        ax.axvline(x=0, color='gray', linestyle=':', linewidth=1.2, alpha=0.7, 
                    label='Hoy', zorder=2)
         
         # Línea en cero
-        ax.axhline(y=0, color='red', linestyle=':', linewidth=1, alpha=0.5, zorder=1)
-        
-        # Área sombreada para proyección
-        ax.fill_between(semanas_proy, 0, saldos_proy, 
-                        alpha=0.1, color='#f97316', zorder=0)
+        ax.axhline(y=0, color='red', linestyle=':', linewidth=0.8, alpha=0.5, zorder=1)
         
         # Formateo
-        ax.set_xlabel('Semanas', fontsize=7, fontweight='bold')
-        ax.set_ylabel('Saldo', fontsize=7, fontweight='bold')
-        ax.set_title('Evolución del Saldo', fontsize=9, fontweight='bold', pad=5)
-        ax.grid(True, alpha=0.3, linestyle='--', linewidth=0.5)
-        ax.legend(loc='upper right', fontsize=6, framealpha=0.95, ncol=1)
+        ax.set_xlabel('Semanas', fontsize=6, fontweight='bold')
+        ax.set_ylabel('Saldo', fontsize=6, fontweight='bold')
+        ax.set_title('Evolución del Saldo', fontsize=8, fontweight='bold', pad=4)
+        ax.grid(True, alpha=0.3, linestyle='--', linewidth=0.4)
+        ax.legend(loc='upper right', fontsize=5, framealpha=0.95, ncol=1)
         
-        # IMPORTANTE: Fijar límites del eje X
-        ax.set_xlim(-semanas_historicas - 0.5, semanas_futuras + 0.5)
-        
-        # Formato de moneda en eje Y
+        # Formato de moneda
         ax.yaxis.set_major_formatter(plt.FuncFormatter(
             lambda x, p: formatear_moneda(x) if UTILS_DISPONIBLE else f"${x/1e6:.0f}M"
         ))
         
-        # Reducir número de ticks
-        ax.yaxis.set_major_locator(plt.MaxNLocator(5))
-        ax.xaxis.set_major_locator(plt.MaxNLocator(7))
-        ax.tick_params(axis='both', labelsize=6)
+        # Reducir ticks
+        ax.yaxis.set_major_locator(plt.MaxNLocator(4))
+        ax.xaxis.set_major_locator(plt.MaxNLocator(6))
+        ax.tick_params(axis='both', labelsize=5)
         
-        plt.tight_layout(pad=0.3)
+        plt.tight_layout(pad=0.2)
         
-        # Guardar a bytes
+        # Guardar
         buf = io.BytesIO()
         plt.savefig(buf, format='png', dpi=120, bbox_inches='tight', facecolor='white')
         buf.seek(0)
@@ -440,7 +456,7 @@ def generar_grafico_semaforo(datos: Dict) -> bytes:
             colores.append(color)
         
         # Crear gráfico más compacto
-        altura = min(2.5, len(proyectos) * 0.35 + 0.4)
+        altura = min(1.8, len(proyectos) * 0.3 + 0.3)  # Reducido para 1 página
         fig, ax = plt.subplots(figsize=(6.5, altura))
         
         # Barras horizontales más delgadas
@@ -524,10 +540,11 @@ def generar_grafico_comparacion(datos: Dict) -> bytes:
 
 def generar_grafico_pie_gastos(datos: Dict) -> bytes:
     """
-    Genera pie chart de distribución de gastos ejecutados por proyecto
+    Genera pie chart de distribución por CATEGORÍAS DE GASTO CONSOLIDADAS
+    Suma categorías de todos los proyectos
     
     Args:
-        datos: Diccionario con datos consolidados
+        datos: Diccionario con datos consolidados del multiproyecto
         
     Returns:
         bytes: Imagen PNG del gráfico
@@ -538,57 +555,66 @@ def generar_grafico_pie_gastos(datos: Dict) -> bytes:
         if not proyectos:
             return None
         
-        # Preparar datos
-        nombres = []
-        ejecutados = []
-        colores_personalizados = ['#3b82f6', '#22c55e', '#f97316', '#8b5cf6', '#ec4899', '#14b8a6']
+        # CONSOLIDAR categorías de todos los proyectos
+        categorias = {
+            'Mano de Obra': 0,
+            'Materiales': 0,
+            'Administración': 0,
+            'Variables': 0
+        }
         
-        for p in proyectos:
-            nombre = p.get('nombre', 'Sin nombre')[:10]  # Más corto
-            ejecutado = p.get('ejecutado', 0)
+        for proyecto in proyectos:
+            proyeccion = proyecto.get('proyeccion_semanal', [])
             
-            if ejecutado > 0:  # Solo incluir proyectos con gasto
-                nombres.append(nombre)
-                ejecutados.append(ejecutado)
+            for semana in proyeccion:
+                categorias['Mano de Obra'] += semana.get('Mano_Obra', 0)
+                categorias['Materiales'] += semana.get('Materiales', 0)
+                categorias['Administración'] += semana.get('Admin', 0)
+                categorias['Variables'] += (
+                    semana.get('Equipos', 0) +
+                    semana.get('Imprevistos', 0) +
+                    semana.get('Logistica', 0)
+                )
         
-        if not ejecutados:
+        if sum(categorias.values()) == 0:
             return None
         
+        # Preparar datos
+        nombres = list(categorias.keys())
+        valores = list(categorias.values())
+        colores = ['#3b82f6', '#22c55e', '#f97316', '#8b5cf6']
+        
         # Crear gráfico CUADRADO
-        fig, ax = plt.subplots(figsize=(3.2, 3.2))  # CUADRADO para layout 2×1
+        fig, ax = plt.subplots(figsize=(2.8, 2.8))
         
-        # Calcular porcentajes
-        total = sum(ejecutados)
-        porcentajes = [(e/total)*100 for e in ejecutados]
-        
-        # Función para formato de labels (solo porcentaje)
+        # Función para mostrar porcentaje
         def formato_label(pct):
-            return f'{pct:.1f}%' if pct > 5 else ''  # Ocultar si muy pequeño
+            return f'{pct:.1f}%' if pct > 3 else ''
         
         # Gráfico de pie
-        wedges, texts, autotexts = ax.pie(ejecutados, 
-                                           labels=None,  # Labels en leyenda
+        wedges, texts, autotexts = ax.pie(valores, 
+                                           labels=None,
                                            autopct=formato_label,
                                            startangle=90,
-                                           colors=colores_personalizados[:len(nombres)],
-                                           textprops={'fontsize': 6, 'weight': 'bold', 'color': 'white'},
-                                           wedgeprops={'edgecolor': 'white', 'linewidth': 1.5})
+                                           colors=colores[:len(nombres)],
+                                           textprops={'fontsize': 5, 'weight': 'bold', 'color': 'white'},
+                                           wedgeprops={'edgecolor': 'white', 'linewidth': 1})
         
         # Título
         ax.set_title('Distribución de Gastos', 
-                    fontsize=9, fontweight='bold', pad=5)
+                    fontsize=8, fontweight='bold', pad=4)
         
-        # Leyenda DENTRO del gráfico (lado derecho)
+        # Leyenda DENTRO
         ax.legend(nombres, 
                  loc='center left',
-                 bbox_to_anchor=(0.9, 0.5),  # Dentro, a la derecha
-                 fontsize=6,
+                 bbox_to_anchor=(0.85, 0.5),
+                 fontsize=5,
                  framealpha=0.95,
                  ncol=1)
         
-        plt.tight_layout(pad=0.3)
+        plt.tight_layout(pad=0.2)
         
-        # Guardar a bytes
+        # Guardar
         buf = io.BytesIO()
         plt.savefig(buf, format='png', dpi=120, bbox_inches='tight', facecolor='white')
         buf.seek(0)
@@ -748,11 +774,11 @@ def generar_reporte_gerencial_pdf(datos: Dict) -> bytes:
     if timeline_img and pie_img:
         # Crear tabla de 2 columnas para poner gráficos lado a lado
         graficos_data = [[
-            Image(timeline_img, width=3.2*inch, height=3.2*inch),
-            Image(pie_img, width=3.2*inch, height=3.2*inch)
+            Image(timeline_img, width=2.8*inch, height=2.8*inch),
+            Image(pie_img, width=2.8*inch, height=2.8*inch)
         ]]
         
-        tabla_graficos = Table(graficos_data, colWidths=[3.3*inch, 3.3*inch])
+        tabla_graficos = Table(graficos_data, colWidths=[2.9*inch, 2.9*inch])
         tabla_graficos.setStyle(TableStyle([
             ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
             ('VALIGN', (0, 0), (-1, -1), 'TOP'),
@@ -764,12 +790,12 @@ def generar_reporte_gerencial_pdf(datos: Dict) -> bytes:
         elements.append(Spacer(1, 0.1*inch))
     elif timeline_img:
         # Solo Timeline
-        img = Image(timeline_img, width=3.2*inch, height=3.2*inch)
+        img = Image(timeline_img, width=2.8*inch, height=2.8*inch)
         elements.append(img)
         elements.append(Spacer(1, 0.1*inch))
     elif pie_img:
         # Solo Pie
-        img = Image(pie_img, width=3.2*inch, height=3.2*inch)
+        img = Image(pie_img, width=2.8*inch, height=2.8*inch)
         elements.append(img)
         elements.append(Spacer(1, 0.1*inch))
     
@@ -777,10 +803,10 @@ def generar_reporte_gerencial_pdf(datos: Dict) -> bytes:
     semaforo_img = generar_grafico_semaforo(datos)
     if semaforo_img:
         num_proyectos = len(datos.get('proyectos', []))
-        altura_semaforo = min(2.2, num_proyectos * 0.35 + 0.4)
+        altura_semaforo = min(1.8, num_proyectos * 0.3 + 0.3)  # Reducido
         img = Image(semaforo_img, width=6.5*inch, height=altura_semaforo*inch)
         elements.append(img)
-        elements.append(Spacer(1, 0.15*inch))
+        elements.append(Spacer(1, 0.1*inch))  # Reducido
     
     # =================================================================
     # DETALLE DE PROYECTOS CON MANEJO SEGURO DE DATOS
@@ -848,15 +874,15 @@ def generar_reporte_gerencial_pdf(datos: Dict) -> bytes:
         ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
         ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
         ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-        ('FONTSIZE', (0, 0), (-1, 0), 7),  # Reducido de 8
-        ('BOTTOMPADDING', (0, 0), (-1, 0), 3),  # Reducido de 6
+        ('FONTSIZE', (0, 0), (-1, 0), 6),  # Reducido de 7
+        ('BOTTOMPADDING', (0, 0), (-1, 0), 2),  # Reducido de 3
         ('BACKGROUND', (0, 1), (-1, -1), colors.HexColor('#f0f9ff')),
         ('FONTNAME', (0, 1), (-1, -1), 'Helvetica'),
-        ('FONTSIZE', (0, 1), (-1, -1), 7),  # Reducido de 8
+        ('FONTSIZE', (0, 1), (-1, -1), 6),  # Reducido de 7
         ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
         ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-        ('TOPPADDING', (0, 0), (-1, -1), 2),  # Reducido de 4
-        ('BOTTOMPADDING', (0, 0), (-1, -1), 2),  # Reducido de 4
+        ('TOPPADDING', (0, 0), (-1, -1), 1.5),  # Reducido de 2
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 1.5),  # Reducido de 2
     ]))
     
     elements.append(tabla_proyectos)
