@@ -2,22 +2,25 @@
 SICONE - Módulo de Análisis Multiproyecto FCL
 Consolidación y análisis de flujo de caja para múltiples proyectos
 
-Versión: 2.0.3 FINAL
+Versión: 2.1.0 FINAL
 Fecha: 29 Diciembre 2024
 Autor: AI-MindNovation
 
-VERSIÓN 2.0.3 (29-Dic-2024) - FIX CRÍTICO MARGEN UNIFICADO:
-- 🔧 FIX CRÍTICO: Margen de Protección UNIFICADO en todos los lugares
-  - DataFrame (Timeline): Histórico variable, futuro constante ✅
-  - get_estado_actual(): Usa MISMO cálculo simple (burn_rate × 8) ✅
-  - Resultado: $402.7M en TODAS las métricas ✅
-  - ELIMINADO: Promedio de burn_rate_proyectado (causaba $483M incorrectos)
+VERSIÓN 2.1.0 (29-Dic-2024) - MARGEN CORRECTO + CONFIGURABLE:
+- 🎯 FIX CRÍTICO: Margen de Protección ahora es CORRECTO
+  - Fórmula: Burn Rate Total × Semanas Margen
+  - Ejemplo: $86M/sem × 8 sem = $687M ✅
+  - TODOS los lugares usan la MISMA fórmula
+  - Consistencia 100%: Análisis = Inversiones = Timeline
 
-VERSIÓN 2.0.2 (29-Dic-2024) - FIX MARGEN TIMELINE:
-- 🔧 FIX: Margen de Protección correctamente implementado en Timeline
-  - HISTÓRICO: Variable (refleja burn rate real de cada semana)
-  - FUTURO: Constante desde HOY (proyección lineal)
-  - Línea roja: Variable en pasado, horizontal desde hoy
+- ⚙️ NUEVO: Margen de Protección CONFIGURABLE
+  - Slider en sidebar: 4-16 semanas (default 8)
+  - Variable: semanas_margen
+  - Se actualiza en tiempo real
+
+- 🔧 SIMPLIFICADO: Eliminada lógica compleja burn_rate_proyectado
+  - Solo fórmula simple: burn_rate_total × semanas_margen
+  - Más predecible y consistente
 
 MEJORA IMPORTANTE v1.5.0 (28-Dic-2024):
 - 🎯 CAMBIO: % de avance ahora es PONDERADO POR MONTO (no solo hitos cumplidos)
@@ -98,6 +101,7 @@ except ImportError:
 # ============================================================================
 
 SEMANAS_FUTURO_DEFAULT = 8
+SEMANAS_MARGEN_DEFAULT = 8  # Semanas de margen de protección (configurable)
 COLORES_PROYECTOS = [
     '#1f77b4',  # Azul
     '#ff7f0e',  # Naranja
@@ -153,9 +157,10 @@ class ConsolidadorMultiproyecto:
     Clase para consolidar y analizar múltiples proyectos
     """
     
-    def __init__(self, semanas_futuro: int = SEMANAS_FUTURO_DEFAULT, gastos_fijos_mensuales: float = 50_000_000):
+    def __init__(self, semanas_futuro: int = SEMANAS_FUTURO_DEFAULT, gastos_fijos_mensuales: float = 50_000_000, semanas_margen: int = SEMANAS_MARGEN_DEFAULT):
         self.proyectos = []
         self.semanas_futuro = semanas_futuro
+        self.semanas_margen = semanas_margen  # Semanas para margen de protección
         self.gastos_fijos_mensuales = gastos_fijos_mensuales
         self.gastos_fijos_semanales = gastos_fijos_mensuales / 4.33  # Promedio semanas/mes
         self.df_consolidado = None
@@ -753,18 +758,20 @@ class ConsolidadorMultiproyecto:
         # Paso 2: Calcular margen HISTÓRICO (variable)
         df.loc[df['es_historica'], 'margen_proteccion'] = (
             df.loc[df['es_historica'], 'burn_rate'] + self.gastos_fijos_semanales
-        ) * 8
+        ) * self.semanas_margen
         
         # Paso 3: Calcular margen FUTURO (constante)
-        margen_proteccion_futuro = (burn_rate_actual + self.gastos_fijos_semanales) * 8
+        margen_proteccion_futuro = (burn_rate_actual + self.gastos_fijos_semanales) * self.semanas_margen
         df.loc[df['es_futura'], 'margen_proteccion'] = margen_proteccion_futuro
         
         print(f"\n{'='*60}")
-        print(f"MARGEN DE PROTECCIÓN v2.0.2")
+        print(f"MARGEN DE PROTECCIÓN v2.1.0")
         print(f"{'='*60}")
+        print(f"Semanas de Margen: {self.semanas_margen}")
         print(f"Burn Rate Actual: ${burn_rate_actual:,.0f}/semana")
         print(f"Gastos Fijos: ${self.gastos_fijos_semanales:,.0f}/semana")
         print(f"Margen Futuro (constante): ${margen_proteccion_futuro:,.0f}")
+        print(f"  = (${burn_rate_actual:,.0f} + ${self.gastos_fijos_semanales:,.0f}) × {self.semanas_margen} semanas")
         print(f"Histórico: Variable | Futuro: Constante desde HOY")
         print(f"{'='*60}\n")
         
@@ -834,11 +841,11 @@ class ConsolidadorMultiproyecto:
         burn_rate_total = burn_rate_proyectos + self.gastos_fijos_semanales
         
         # ============================================================
-        # FIX v2.0.3: Margen de protección CONSTANTE para decisiones
+        # FIX v2.1.0: Margen de protección CORRECTO
         # ============================================================
-        # Usar MISMO cálculo que en DataFrame (proyección lineal)
-        # NO promediar burn_rate_proyectado (eso da valores incorrectos)
-        margen_proteccion = burn_rate_total * 8
+        # Fórmula: Burn Rate Total × Semanas de Margen
+        # Ejemplo: $86M/sem × 8 sem = $687M
+        margen_proteccion = burn_rate_total * self.semanas_margen
         
         # Excedente invertible
         excedente_invertible = total_saldos_reales - margen_proteccion
@@ -855,6 +862,7 @@ class ConsolidadorMultiproyecto:
             'burn_rate': float(burn_rate_total),  # ← Incluye gastos fijos
             'burn_rate_proyectos': float(burn_rate_proyectos),
             'gastos_fijos_semanales': float(self.gastos_fijos_semanales),
+            'semanas_margen': int(self.semanas_margen),  # Semanas configuradas para margen
             'margen_proteccion': float(margen_proteccion),
             'excedente_invertible': float(excedente_invertible),
             'estado_general': estado_general,
@@ -942,9 +950,9 @@ def render_metricas_cobertura(estado: Dict):
     
     with col2:
         st.metric(
-            "Margen Requerido (8 sem)",
+            f"Margen Requerido ({estado.get('semanas_margen', 8)} sem)",
             formatear_moneda(estado['margen_proteccion']),
-            help="Burn Rate Total × 8 semanas"
+            help=f"Burn Rate Total × {estado.get('semanas_margen', 8)} semanas"
         )
     
     with col3:
@@ -1804,6 +1812,20 @@ def main():
         )
         
         st.markdown("---")
+        
+        # Semanas de margen de protección
+        st.markdown("#### 🛡️ Margen de Protección")
+        semanas_margen = st.slider(
+            "Semanas de margen",
+            min_value=4,
+            max_value=16,
+            value=SEMANAS_MARGEN_DEFAULT,
+            step=1,
+            help="Número de semanas de burn rate total a mantener como reserva de contingencia"
+        )
+        st.caption(f"   Margen = Burn Rate Total × {semanas_margen} semanas")
+        
+        st.markdown("---")
         st.markdown("### 📁 Proyectos Cargados")
     
     # Paso 1: Cargar proyectos
@@ -1823,7 +1845,8 @@ def main():
     # Cargar proyectos
     consolidador = ConsolidadorMultiproyecto(
         semanas_futuro=semanas_futuro,
-        gastos_fijos_mensuales=gastos_fijos_mensuales
+        gastos_fijos_mensuales=gastos_fijos_mensuales,
+        semanas_margen=semanas_margen
     )
     
     with st.spinner("Cargando proyectos..."):
