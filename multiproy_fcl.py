@@ -2,23 +2,23 @@
 SICONE - Módulo de Análisis Multiproyecto FCL
 Consolidación y análisis de flujo de caja para múltiples proyectos
 
-Versión: 2.1.2 FINAL
+Versión: 2.1.3 FINAL
 Fecha: 29 Diciembre 2024
 Autor: AI-MindNovation
+
+VERSIÓN 2.1.3 (29-Dic-2024) - EXPORTAR JSON SIMPLE:
+- 📦 NUEVO: Botón de exportar JSON consolidado
+  - Versión simple sin dependencias problemáticas
+  - Genera archivo versionado + latest
+  - Botón de descarga directa
+  - Guarda metadata del análisis actual
+  - Independiente de reportes_ejecutivos.py
 
 VERSIÓN 2.1.2 (29-Dic-2024) - MARGEN DINÁMICO:
 - 🔧 FIX: Slider de semanas_margen ahora es DINÁMICO
   - Cambiar slider → reconsolida automáticamente
   - Margen se actualiza en tiempo real
-  - Propagación a TODOS los módulos (Análisis, Inversiones, Timeline)
-  - Session state mantiene sincronización
-
-VERSIÓN 2.1.1 (29-Dic-2024) - MARGEN FIJO EN INVERSIONES:
-- 🔧 FIX: Eliminado slider de "Margen Adicional" en Inversiones
-  - Margen en Inversiones = Margen en Análisis de Cobertura
-  - Fórmula única: Burn Rate Total × semanas_margen
-  - Sin % adicional que modifique el margen
-  - Usuario decide cuánto invertir del excedente calculado
+  - Propagación a TODOS los módulos
 
 MEJORA IMPORTANTE v1.5.0 (28-Dic-2024):
 - 🎯 CAMBIO: % de avance ahora es PONDERADO POR MONTO (no solo hitos cumplidos)
@@ -875,6 +875,88 @@ class ConsolidadorMultiproyecto:
 # ============================================================================
 # FUNCIONES DE VISUALIZACIÓN
 # ============================================================================
+
+def render_exportar_json_simple(consolidador: ConsolidadorMultiproyecto, estado: Dict):
+    """Renderiza botón para exportar JSON consolidado (versión simple sin dependencias)"""
+    st.markdown("### 📦 Exportar Datos Consolidados")
+    st.caption("Guarda el estado actual del análisis en formato JSON para cargar en reportes")
+    
+    col1, col2 = st.columns([2, 1])
+    
+    with col1:
+        if st.button("📥 Exportar JSON Consolidado", type="primary", use_container_width=True):
+            import json
+            from pathlib import Path
+            
+            # Preparar datos para export
+            json_data = {
+                "metadata": {
+                    "version": "2.1.3",
+                    "fecha_generacion": datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                    "semana_actual": int(estado['semana']),
+                    "total_proyectos": int(estado['total_proyectos']),
+                    "gastos_fijos_mensuales": float(consolidador.gastos_fijos_mensuales),
+                    "semanas_margen": int(estado['semanas_margen'])
+                },
+                "estado_caja": {
+                    "saldo_total": float(estado['saldo_total']),
+                    "burn_rate_total": float(estado['burn_rate']),
+                    "burn_rate_proyectos": float(estado['burn_rate_proyectos']),
+                    "gastos_fijos_semanales": float(estado['gastos_fijos_semanales']),
+                    "margen_proteccion": float(estado['margen_proteccion']),
+                    "excedente_invertible": float(estado['excedente_invertible']),
+                    "estado_general": estado['estado_general']
+                },
+                "proyectos": [
+                    {
+                        "nombre": p['nombre'],
+                        "estado": p['estado'],
+                        "saldo_actual": float(p.get('saldo_actual', 0)),
+                        "burn_rate_semanal": float(p.get('burn_rate_semanal', 0))
+                    }
+                    for p in consolidador.proyectos
+                ]
+            }
+            
+            # Crear directorio si no existe
+            Path('reportes').mkdir(exist_ok=True)
+            
+            # Generar nombre de archivo con timestamp
+            timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+            ruta_json = f'reportes/consolidado_multiproyecto_{timestamp}.json'
+            ruta_latest = 'reportes/consolidado_multiproyecto_latest.json'
+            
+            # Guardar archivo versionado
+            with open(ruta_json, 'w', encoding='utf-8') as f:
+                json.dump(json_data, f, indent=2, ensure_ascii=False)
+            
+            # Guardar archivo "latest" (siempre sobrescribe)
+            with open(ruta_latest, 'w', encoding='utf-8') as f:
+                json.dump(json_data, f, indent=2, ensure_ascii=False)
+            
+            # Guardar en session_state
+            st.session_state.json_consolidado = json_data
+            
+            st.success(f"✅ JSON exportado exitosamente")
+            st.caption(f"📁 Guardado en: {ruta_json}")
+            
+            # Botón de descarga
+            json_str = json.dumps(json_data, indent=2, ensure_ascii=False)
+            st.download_button(
+                label="💾 Descargar JSON",
+                data=json_str,
+                file_name=f'consolidado_{timestamp}.json',
+                mime='application/json'
+            )
+    
+    with col2:
+        if 'json_consolidado' in st.session_state:
+            st.metric(
+                "Último Export",
+                st.session_state.json_consolidado['metadata']['fecha_generacion'][-8:],
+                help="Hora del último export"
+            )
+
 
 def render_metricas_principales(estado: Dict):
     """Renderiza las métricas principales del dashboard"""
@@ -1995,6 +2077,11 @@ def main():
         # Sección de Inversiones Temporales
         if INVERSIONES_DISPONIBLES:
             render_inversiones_temporales(estado)
+        
+        st.markdown("---")
+        
+        # Sección de Exportar JSON
+        render_exportar_json_simple(consolidador, estado)
         
         st.markdown("---")
         
