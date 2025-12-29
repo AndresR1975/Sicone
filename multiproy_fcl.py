@@ -2,21 +2,24 @@
 SICONE - Módulo de Análisis Multiproyecto FCL
 Consolidación y análisis de flujo de caja para múltiples proyectos
 
-Versión: 2.1.4 FINAL
+Versión: 2.1.5 FINAL
 Fecha: 29 Diciembre 2024
 Autor: AI-MindNovation
 
-VERSIÓN 2.1.4 (29-Dic-2024) - JSON COMPLETO PARA REPORTES:
-- 📦 FIX CRÍTICO: Export JSON ahora incluye TODOS los datos necesarios
-  - DataFrame consolidado (para Waterfall)
-  - Proyectos con data.proyeccion_semanal completa (para Pie Chart)
-  - Todas las columnas: saldo, ingresos, egresos, burn_rate
-  - Categorías de gasto: Mano_Obra, Materiales, Admin, etc.
-  - Reportes ahora generan Waterfall + Pie Chart desde JSON ✅
+VERSIÓN 2.1.5 (29-Dic-2024) - NOMBRES CORRECTOS PARA REPORTES:
+- 🔧 FIX CRÍTICO: Campos en JSON ahora usan nombres correctos
+  - estado_caja.burn_rate (no burn_rate_total)
+  - estado_caja.total_proyectos (conteo correcto)
+  - estado_caja.proyectos_activos (conteo correcto)
+  - proyectos.saldo_real_tesoreria (no saldo_actual)
+  - proyectos.burn_rate_real (no burn_rate_semanal)
+  - proyectos.avance_hitos_pct (no porcentaje_avance)
+  - Reportes desde JSON ahora idénticos a reportes desde Multiproyecto ✅
 
-VERSIÓN 2.1.3 (29-Dic-2024) - EXPORTAR JSON SIMPLE:
-- 📦 NUEVO: Botón de exportar JSON consolidado
-  - Versión simple sin dependencias problemáticas
+VERSIÓN 2.1.4 (29-Dic-2024) - JSON COMPLETO PARA REPORTES:
+- 📦 FIX: Export JSON incluye TODOS los datos necesarios
+  - DataFrame consolidado (para Waterfall)
+  - Proyectos con data.proyeccion_semanal (para Pie)
 
 MEJORA IMPORTANTE v1.5.0 (28-Dic-2024):
 - 🎯 CAMBIO: % de avance ahora es PONDERADO POR MONTO (no solo hitos cumplidos)
@@ -919,37 +922,43 @@ def render_exportar_json_simple(consolidador: ConsolidadorMultiproyecto, estado:
                 proyecto_data = {
                     "nombre": p['nombre'],
                     "estado": p['estado'],
-                    "saldo_actual": float(p.get('saldo_actual', 0)),
-                    "burn_rate_semanal": float(p.get('burn_rate_semanal', 0)),
+                    # Campos con nombres que espera reportes_ejecutivos.py
+                    "saldo_real_tesoreria": float(p.get('saldo_actual', 0)),  # ✅ Nombre correcto
+                    "burn_rate_real": float(p.get('burn_rate_semanal', 0)),  # ✅ Nombre correcto
+                    "avance_hitos_pct": float(p.get('porcentaje_avance', 0)),  # ✅ Nombre correcto
                     "monto_contrato": float(p.get('monto_contrato', 0)),
                     "ejecutado": float(p.get('ejecutado', 0)),
-                    "porcentaje_avance": float(p.get('porcentaje_avance', 0)),
                     # DATOS COMPLETOS para gráficos
                     "data": p.get('data', {})  # Incluye proyeccion_semanal completa
                 }
                 proyectos_completos.append(proyecto_data)
             
             # 3. PREPARAR JSON COMPLETO
+            # Contar proyectos activos correctamente
+            proyectos_activos = sum(1 for p in consolidador.proyectos if p['estado'] == 'ACTIVO')
+            proyectos_terminados = sum(1 for p in consolidador.proyectos if p['estado'] == 'TERMINADO')
+            
             json_data = {
                 "metadata": {
-                    "version": "2.1.4",
+                    "version": "2.1.5",
                     "fecha_generacion": datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
                     "semana_actual": int(estado['semana']),
-                    "total_proyectos": int(estado['total_proyectos']),
+                    "total_proyectos": len(consolidador.proyectos),  # ✅ Total real
                     "gastos_fijos_mensuales": float(consolidador.gastos_fijos_mensuales),
                     "semanas_margen": int(estado['semanas_margen']),
                     "semanas_futuro": int(consolidador.semanas_futuro)
                 },
                 "estado_caja": {
                     "saldo_total": float(estado['saldo_total']),
-                    "burn_rate_total": float(estado['burn_rate']),
+                    "burn_rate": float(estado['burn_rate']),  # ✅ Nombre correcto (sin _total)
                     "burn_rate_proyectos": float(estado['burn_rate_proyectos']),
                     "gastos_fijos_semanales": float(estado['gastos_fijos_semanales']),
                     "margen_proteccion": float(estado['margen_proteccion']),
                     "excedente_invertible": float(estado['excedente_invertible']),
                     "estado_general": estado['estado_general'],
-                    "proyectos_activos": int(estado.get('proyectos_activos', 0)),
-                    "proyectos_terminados": int(estado.get('proyectos_terminados', 0))
+                    "proyectos_activos": int(proyectos_activos),  # ✅ Conteo correcto
+                    "proyectos_terminados": int(proyectos_terminados),
+                    "total_proyectos": len(consolidador.proyectos)  # ✅ Total correcto
                 },
                 "df_consolidado": df_data,  # Datos del DataFrame
                 "proyectos": proyectos_completos  # Proyectos completos
