@@ -23,7 +23,6 @@ USO:
 """
 
 import io
-import streamlit as st
 from datetime import datetime, date, timedelta
 from typing import Dict, List, Optional, Tuple
 import pandas as pd
@@ -35,6 +34,14 @@ matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
 from matplotlib.patches import Rectangle
+
+# Streamlit (opcional)
+try:
+    import streamlit as st
+    STREAMLIT_DISPONIBLE = True
+except ImportError:
+    STREAMLIT_DISPONIBLE = False
+    st = None
 
 # ============================================================================
 # CONFIGURACIÓN GLOBAL
@@ -989,8 +996,11 @@ def reconstruir_dataframe_desde_json(json_data: Dict) -> Optional[pd.DataFrame]:
         return df
         
     except Exception as e:
-        if st:
-            st.warning(f"⚠️ No se pudo reconstruir DataFrame: {str(e)}")
+        try:
+            import streamlit as st_local
+            st_local.warning(f"⚠️ No se pudo reconstruir DataFrame: {str(e)}")
+        except:
+            pass
         return None
 
 
