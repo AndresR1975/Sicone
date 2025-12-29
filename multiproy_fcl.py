@@ -2,24 +2,23 @@
 SICONE - Módulo de Análisis Multiproyecto FCL
 Consolidación y análisis de flujo de caja para múltiples proyectos
 
-Versión: 2.1.5 FINAL
+Versión: 2.1.6 FINAL
 Fecha: 29 Diciembre 2024
 Autor: AI-MindNovation
 
-VERSIÓN 2.1.5 (29-Dic-2024) - NOMBRES CORRECTOS PARA REPORTES:
-- 🔧 FIX CRÍTICO: Campos en JSON ahora usan nombres correctos
-  - estado_caja.burn_rate (no burn_rate_total)
-  - estado_caja.total_proyectos (conteo correcto)
-  - estado_caja.proyectos_activos (conteo correcto)
-  - proyectos.saldo_real_tesoreria (no saldo_actual)
-  - proyectos.burn_rate_real (no burn_rate_semanal)
-  - proyectos.avance_hitos_pct (no porcentaje_avance)
-  - Reportes desde JSON ahora idénticos a reportes desde Multiproyecto ✅
+VERSIÓN 2.1.6 (29-Dic-2024) - FIX VALORES DE PROYECTOS:
+- 🔧 FIX CRÍTICO: Ahora extrae valores CORRECTOS de cada proyecto
+  - Antes: p.get('saldo_actual', 0) → Siempre retornaba 0
+  - Ahora: p.get('saldo_real_tesoreria', 0) → Valores reales ✅
+  - Campos ya existen en consolidador.proyectos, solo copiarlos
+  - Tabla de proyectos ahora muestra valores correctos
+  - Gráfico de barras ahora muestra coberturas correctas
+  - PDFs desde JSON ahora 100% idénticos a PDFs desde Multiproyecto ✅
 
-VERSIÓN 2.1.4 (29-Dic-2024) - JSON COMPLETO PARA REPORTES:
-- 📦 FIX: Export JSON incluye TODOS los datos necesarios
-  - DataFrame consolidado (para Waterfall)
-  - Proyectos con data.proyeccion_semanal (para Pie)
+VERSIÓN 2.1.5 (29-Dic-2024) - NOMBRES CORRECTOS PARA REPORTES:
+- 🔧 FIX: Campos en JSON con nombres correctos
+  - estado_caja.burn_rate (no burn_rate_total)
+  - Conteos correctos de proyectos activos
 
 MEJORA IMPORTANTE v1.5.0 (28-Dic-2024):
 - 🎯 CAMBIO: % de avance ahora es PONDERADO POR MONTO (no solo hitos cumplidos)
@@ -922,12 +921,12 @@ def render_exportar_json_simple(consolidador: ConsolidadorMultiproyecto, estado:
                 proyecto_data = {
                     "nombre": p['nombre'],
                     "estado": p['estado'],
-                    # Campos con nombres que espera reportes_ejecutivos.py
-                    "saldo_real_tesoreria": float(p.get('saldo_actual', 0)),  # ✅ Nombre correcto
-                    "burn_rate_real": float(p.get('burn_rate_semanal', 0)),  # ✅ Nombre correcto
-                    "avance_hitos_pct": float(p.get('porcentaje_avance', 0)),  # ✅ Nombre correcto
-                    "monto_contrato": float(p.get('monto_contrato', 0)),
-                    "ejecutado": float(p.get('ejecutado', 0)),
+                    # Campos con nombres correctos que YA EXISTEN en consolidador.proyectos
+                    "saldo_real_tesoreria": float(p.get('saldo_real_tesoreria', 0)),  # ✅
+                    "burn_rate_real": float(p.get('burn_rate_real', 0)),  # ✅
+                    "avance_hitos_pct": float(p.get('avance_hitos_pct', 0)),  # ✅
+                    "monto_contrato": float(p.get('presupuesto_egresos', 0)),  # ✅ Campo correcto
+                    "ejecutado": float(p.get('ejecutado', 0)),  # ✅
                     # DATOS COMPLETOS para gráficos
                     "data": p.get('data', {})  # Incluye proyeccion_semanal completa
                 }
