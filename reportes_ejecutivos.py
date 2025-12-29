@@ -1,33 +1,34 @@
 """
 SICONE - Módulo de Reportes Ejecutivos
-Versión: 1.10.0 COMPARACIÓN
+Versión: 2.0.0 FINAL
 Fecha: 29 Diciembre 2024
 Autor: Andrés Restrepo & Claude
 
-VERSIÓN 1.10.0 (29-Dic-2024) - COMPARACIÓN DE GRÁFICOS:
-- ✅ Genera AMBOS gráficos: Timeline Y Waterfall
-- ✅ Muestra ambos en el PDF para comparación visual
-- ✅ Timeline: Últimas 6 semanas SIN proyección (simple y limpio)
-- ✅ Waterfall: Flujo de caja últimas 6 semanas (ejecutivo)
-- 📊 Andrés puede decidir cuál funciona mejor
+VERSIÓN 2.0.0 (29-Dic-2024) - VERSIÓN FINAL CON WATERFALL:
+- ✅ Waterfall como gráfico principal de flujo de caja
+- ✅ Muestra últimas 6 semanas: Inicio → Ingresos → Egresos → GF → Final
+- ✅ Pie Chart con 4 categorías de gasto consolidadas
+- ✅ Semáforo de estado por proyecto
+- ✅ Tabla detallada con métricas clave
+- ✅ Layout optimizado para 1 página
+- 🎯 NO duplica información del multiproyecto
+- 📊 Formato ejecutivo profesional
+- 📦 Genera JSON consolidado para carga directa
 
-TIMELINE (Opción 1):
-- Gráfico de línea simple
-- Últimas 6 semanas históricas
-- Sin proyección futura
-- Relleno bajo la curva
-- Marca "Hoy" con línea vertical
+DECISIÓN FINAL (Andrés):
+✅ WATERFALL - Flujo de caja consolidado
+❌ Timeline eliminado - Ya existe en multiproyecto
 
-WATERFALL (Opción 2):
-- Gráfico de cascada ejecutivo
-- Muestra: Inicio → +Ingresos → -Egresos → -GF → Final
-- Flujo de dinero visual
-- Estándar en reportes gerenciales
-- Conectores entre barras
+NUEVO en v2.0.0:
+- Función generar_json_consolidado() para persistencia de datos
+- Permite cargar reportes directamente sin reejecutar multiproyecto
+"""
 
-PIE CHART (ambas opciones):
-- 4 categorías de gasto consolidadas
-- Mano de Obra, Materiales, Admin, Variables
+import streamlit as st
+import json
+from datetime import datetime
+from typing import Dict, List, Optional
+import pandas as pd
 """
 
 import streamlit as st
@@ -433,101 +434,6 @@ def generar_grafico_waterfall(datos: Dict) -> bytes:
         st.error(traceback.format_exc())
         return None
 
-
-def generar_grafico_timeline(datos: Dict) -> bytes:
-    """
-    Genera gráfico Timeline simple de últimas 6 semanas (SIN proyección)
-    
-    Args:
-        datos: Diccionario con datos consolidados del multiproyecto
-        
-    Returns:
-        bytes: Imagen PNG del gráfico
-    """
-    try:
-        import pandas as pd
-        
-        # Obtener DataFrame consolidado
-        df = datos.get('df_consolidado')
-        
-        if df is None or df.empty:
-            return None
-        
-        if 'saldo_consolidado' not in df.columns:
-            return None
-        
-        # Semana actual
-        semana_actual = datos.get('semana_actual', 0)
-        
-        if semana_actual == 0:
-            return None
-        
-        # Filtrar últimas 6 semanas históricas
-        df_hist = df[
-            (df['semana_consolidada'] >= semana_actual - 5) &
-            (df['semana_consolidada'] <= semana_actual) &
-            (df['es_historica'] == True)
-        ].copy()
-        
-        if df_hist.empty:
-            return None
-        
-        # Preparar datos
-        semanas_rel = (df_hist['semana_consolidada'] - semana_actual).tolist()
-        saldos = df_hist['saldo_consolidado'].tolist()
-        
-        # Crear gráfico CUADRADO
-        fig, ax = plt.subplots(figsize=(2.8, 2.8))
-        
-        # Línea histórica (azul)
-        ax.plot(semanas_rel, saldos, 
-                color='#3b82f6', linewidth=2.5, marker='o', markersize=4,
-                label='Saldo', zorder=3)
-        
-        # Rellenar área bajo la curva
-        ax.fill_between(semanas_rel, 0, saldos, 
-                        color='#3b82f6', alpha=0.1, zorder=1)
-        
-        # Línea vertical "Hoy"
-        ax.axvline(x=0, color='gray', linestyle=':', linewidth=1.2, alpha=0.7, 
-                   label='Hoy', zorder=2)
-        
-        # Línea en cero
-        ax.axhline(y=0, color='red', linestyle=':', linewidth=0.8, alpha=0.5, zorder=1)
-        
-        # Formateo
-        ax.set_xlabel('Semanas', fontsize=6, fontweight='bold')
-        ax.set_ylabel('Saldo', fontsize=6, fontweight='bold')
-        ax.set_title('Evolución del Saldo (6 semanas)', fontsize=8, fontweight='bold', pad=4)
-        ax.grid(True, alpha=0.3, linestyle='--', linewidth=0.4)
-        ax.legend(loc='upper right', fontsize=5, framealpha=0.95)
-        
-        # Formato moneda
-        ax.yaxis.set_major_formatter(plt.FuncFormatter(
-            lambda x, p: formatear_moneda(x) if UTILS_DISPONIBLE else f"${x/1e6:.0f}M"
-        ))
-        
-        # Reducir ticks
-        ax.yaxis.set_major_locator(plt.MaxNLocator(4))
-        ax.xaxis.set_major_locator(plt.MaxNLocator(6))
-        ax.tick_params(axis='both', labelsize=5)
-        
-        plt.tight_layout(pad=0.2)
-        
-        # Guardar
-        buf = io.BytesIO()
-        plt.savefig(buf, format='png', dpi=120, bbox_inches='tight', facecolor='white')
-        buf.seek(0)
-        plt.close(fig)
-        
-        return buf
-        
-    except Exception as e:
-        st.error(f"Error generando timeline: {e}")
-        import traceback
-        st.error(traceback.format_exc())
-        return None
-
 def generar_grafico_semaforo(datos: Dict) -> bytes:
     """
     Genera semáforo de estado financiero por proyecto
@@ -759,6 +665,134 @@ def generar_grafico_pie_gastos(datos: Dict) -> bytes:
 
 
 # ============================================================================
+# GENERACIÓN DE JSON CONSOLIDADO PARA CARGA DIRECTA
+# ============================================================================
+
+def generar_json_consolidado(datos: Dict, inversiones_data: Optional[Dict] = None) -> Dict:
+    """
+    Genera JSON consolidado con todos los datos del multiproyecto
+    Permite cargar reportes directamente sin reejecutar consolidador
+    
+    Args:
+        datos: Diccionario con datos del multiproyecto (st.session_state.datos_reportes)
+        inversiones_data: Opcional - Datos de inversiones si están activas
+        
+    Returns:
+        Dict: JSON consolidado con estructura completa
+    """
+    try:
+        import pandas as pd
+        
+        # Metadata
+        timestamp = datos.get('timestamp', datetime.now())
+        estado_caja = datos.get('estado_caja', {})
+        proyectos = datos.get('proyectos', [])
+        df_consolidado = datos.get('df_consolidado')
+        semana_actual = datos.get('semana_actual', 0)
+        gastos_fijos_mensuales = datos.get('gastos_fijos_mensuales', 0)
+        
+        json_consolidado = {
+            "metadata": {
+                "version": "2.0.0",
+                "fecha_generacion": timestamp.strftime('%Y-%m-%d %H:%M:%S'),
+                "semana_actual_consolidada": semana_actual,
+                "total_proyectos": len(proyectos),
+                "gastos_fijos_mensuales": gastos_fijos_mensuales
+            },
+            
+            "estado_caja": estado_caja,
+            
+            "proyectos": [
+                {
+                    "nombre": p.get('nombre', 'Sin nombre'),
+                    "estado": p.get('estado', 'ACTIVO'),
+                    "ejecutado": p.get('ejecutado', 0),
+                    "saldo_real_tesoreria": p.get('saldo_real_tesoreria', 0),
+                    "burn_rate_real": p.get('burn_rate_real', 0),
+                    "avance_hitos_pct": p.get('avance_hitos_pct', 0),
+                    "cobertura_semanas": p.get('cobertura_semanas', 0)
+                }
+                for p in proyectos
+            ]
+        }
+        
+        # Waterfall data (últimas 6 semanas)
+        if df_consolidado is not None and not df_consolidado.empty:
+            df_hist = df_consolidado[
+                (df_consolidado['semana_consolidada'] >= semana_actual - 5) &
+                (df_consolidado['semana_consolidada'] <= semana_actual) &
+                (df_consolidado['es_historica'] == True)
+            ].copy()
+            
+            if not df_hist.empty and len(df_hist) >= 2:
+                gastos_fijos_semanales = gastos_fijos_mensuales / 4.33
+                
+                json_consolidado["waterfall_data"] = {
+                    "saldo_inicio": float(df_hist.iloc[0]['saldo_consolidado']),
+                    "saldo_final": float(df_hist.iloc[-1]['saldo_consolidado']),
+                    "ingresos_acumulados": float(df_hist['ingresos_proy_total'].sum()) if 'ingresos_proy_total' in df_hist.columns else 0,
+                    "egresos_acumulados": float(df_hist['egresos_proy_total'].sum()) if 'egresos_proy_total' in df_hist.columns else 0,
+                    "gastos_fijos_acumulados": float(gastos_fijos_semanales * len(df_hist)),
+                    "semanas_periodo": len(df_hist)
+                }
+            
+            # Saldo consolidado (últimas 12 semanas para contexto)
+            df_contexto = df_consolidado[
+                (df_consolidado['semana_consolidada'] >= semana_actual - 11) &
+                (df_consolidado['semana_consolidada'] <= semana_actual)
+            ].copy()
+            
+            if not df_contexto.empty:
+                json_consolidado["saldo_historico"] = {
+                    "semanas": df_contexto['semana_consolidada'].tolist(),
+                    "fechas": df_contexto['fecha'].dt.strftime('%Y-%m-%d').tolist() if 'fecha' in df_contexto.columns else [],
+                    "saldos": df_contexto['saldo_consolidado'].tolist()
+                }
+        
+        # Categorías de gasto
+        categorias_gasto = {
+            'mano_obra': 0,
+            'materiales': 0,
+            'administracion': 0,
+            'variables': 0
+        }
+        
+        for proyecto in proyectos:
+            data = proyecto.get('data', {})
+            proyeccion = data.get('proyeccion_semanal', [])
+            
+            for semana in proyeccion:
+                categorias_gasto['mano_obra'] += semana.get('Mano_Obra', 0)
+                categorias_gasto['materiales'] += semana.get('Materiales', 0)
+                categorias_gasto['administracion'] += semana.get('Admin', 0)
+                categorias_gasto['variables'] += (
+                    semana.get('Equipos', 0) +
+                    semana.get('Imprevistos', 0) +
+                    semana.get('Logistica', 0)
+                )
+        
+        json_consolidado["categorias_gasto"] = {
+            "mano_obra": float(categorias_gasto['mano_obra']),
+            "materiales": float(categorias_gasto['materiales']),
+            "administracion": float(categorias_gasto['administracion']),
+            "variables": float(categorias_gasto['variables']),
+            "total": float(sum(categorias_gasto.values()))
+        }
+        
+        # Inversiones (si están activas)
+        if inversiones_data:
+            json_consolidado["inversiones"] = inversiones_data
+        
+        return json_consolidado
+        
+    except Exception as e:
+        st.error(f"Error generando JSON consolidado: {e}")
+        import traceback
+        st.error(traceback.format_exc())
+        return {}
+
+
+# ============================================================================
 # GENERACIÓN DE REPORTE GERENCIAL
 # ============================================================================
 
@@ -892,75 +926,40 @@ def generar_reporte_gerencial_pdf(datos: Dict) -> bytes:
     elements.append(Spacer(1, 0.15*inch))  # Reducido de 0.3
     
     # =================================================================
-    # GRÁFICOS EJECUTIVOS - COMPARACIÓN TIMELINE vs WATERFALL
+    # GRÁFICOS EJECUTIVOS - WATERFALL + PIE
     # =================================================================
     
-    # Generar AMBOS gráficos para comparación
-    timeline_img = generar_grafico_timeline(datos)
+    # Generar gráficos Waterfall y Pie
     waterfall_img = generar_grafico_waterfall(datos)
     pie_img = generar_grafico_pie_gastos(datos)
     
-    # SECCIÓN 1: Timeline vs Waterfall (para que Andrés decida)
-    if timeline_img and waterfall_img:
-        st.info("📊 Mostrando AMBOS gráficos para comparación:")
-        
-        # Primera fila: Timeline + Pie
-        graficos_data_1 = [[
-            Image(timeline_img, width=2.8*inch, height=2.8*inch),
-            Image(pie_img, width=2.8*inch, height=2.8*inch) if pie_img else ''
-        ]]
-        
-        tabla_graficos_1 = Table(graficos_data_1, colWidths=[2.9*inch, 2.9*inch])
-        tabla_graficos_1.setStyle(TableStyle([
-            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
-            ('VALIGN', (0, 0), (-1, -1), 'TOP'),
-            ('LEFTPADDING', (0, 0), (-1, -1), 0),
-            ('RIGHTPADDING', (0, 0), (-1, -1), 0),
-        ]))
-        
-        elements.append(Paragraph("OPCIÓN 1: Timeline (últimas 6 semanas sin proyección)", 
-                                 ParagraphStyle('Label', fontSize=8, textColor=colors.HexColor('#1e40af'))))
-        elements.append(tabla_graficos_1)
-        elements.append(Spacer(1, 0.2*inch))
-        
-        # Segunda fila: Waterfall + Pie
-        graficos_data_2 = [[
+    # Layout 2×1: Waterfall y Pie lado a lado (ambos cuadrados)
+    if waterfall_img and pie_img:
+        graficos_data = [[
             Image(waterfall_img, width=2.8*inch, height=2.8*inch),
-            Image(pie_img, width=2.8*inch, height=2.8*inch) if pie_img else ''
+            Image(pie_img, width=2.8*inch, height=2.8*inch)
         ]]
         
-        tabla_graficos_2 = Table(graficos_data_2, colWidths=[2.9*inch, 2.9*inch])
-        tabla_graficos_2.setStyle(TableStyle([
+        tabla_graficos = Table(graficos_data, colWidths=[2.9*inch, 2.9*inch])
+        tabla_graficos.setStyle(TableStyle([
             ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
             ('VALIGN', (0, 0), (-1, -1), 'TOP'),
             ('LEFTPADDING', (0, 0), (-1, -1), 0),
             ('RIGHTPADDING', (0, 0), (-1, -1), 0),
         ]))
         
-        elements.append(Paragraph("OPCIÓN 2: Waterfall (flujo de caja últimas 6 semanas)", 
-                                 ParagraphStyle('Label', fontSize=8, textColor=colors.HexColor('#1e40af'))))
-        elements.append(tabla_graficos_2)
+        elements.append(tabla_graficos)
         elements.append(Spacer(1, 0.1*inch))
-    
-    elif timeline_img or waterfall_img:
-        # Si solo hay uno, mostrar ese
-        grafico_disponible = timeline_img or waterfall_img
-        if pie_img:
-            graficos_data = [[
-                Image(grafico_disponible, width=2.8*inch, height=2.8*inch),
-                Image(pie_img, width=2.8*inch, height=2.8*inch)
-            ]]
-            
-            tabla_graficos = Table(graficos_data, colWidths=[2.9*inch, 2.9*inch])
-            tabla_graficos.setStyle(TableStyle([
-                ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
-                ('VALIGN', (0, 0), (-1, -1), 'TOP'),
-                ('LEFTPADDING', (0, 0), (-1, -1), 0),
-                ('RIGHTPADDING', (0, 0), (-1, -1), 0),
-            ]))
-            
-            elements.append(tabla_graficos)
-            elements.append(Spacer(1, 0.1*inch))
+    elif waterfall_img:
+        # Solo Waterfall
+        img = Image(waterfall_img, width=2.8*inch, height=2.8*inch)
+        elements.append(img)
+        elements.append(Spacer(1, 0.1*inch))
+    elif pie_img:
+        # Solo Pie
+        img = Image(pie_img, width=2.8*inch, height=2.8*inch)
+        elements.append(img)
+        elements.append(Spacer(1, 0.1*inch))
     
     # Semáforo - Estado por proyecto (ancho completo, horizontal)
     semaforo_img = generar_grafico_semaforo(datos)
