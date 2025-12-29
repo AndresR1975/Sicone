@@ -2,9 +2,23 @@
 SICONE - Módulo de Análisis Multiproyecto FCL
 Consolidación y análisis de flujo de caja para múltiples proyectos
 
-Versión: 1.5.0
-Fecha: 28 Diciembre 2024
+Versión: 2.0.0
+Fecha: 29 Diciembre 2024
 Autor: AI-MindNovation
+
+VERSIÓN 2.0.0 (29-Dic-2024) - FIXES CRÍTICOS:
+- 🔧 FIX: Margen de Protección ahora es CONSTANTE (proyección lineal)
+  - Razón: Actualización semanal + horizonte inversión 2-3 meses
+  - Comportamiento: Bandas estables, cambios graduales
+  - Línea roja horizontal en Timeline (no variable)
+  - Consistencia entre Timeline y Análisis de Cobertura
+  
+- 📦 NUEVO: Exportar JSON Consolidado para Reportes
+  - Botón visible en interfaz
+  - Genera archivo versionado + latest
+  - Incluye inversiones automáticamente
+  - Preview de datos exportados
+  - Permite cargar reportes sin reejecutar multiproyecto
 
 MEJORA IMPORTANTE v1.5.0 (28-Dic-2024):
 - 🎯 CAMBIO: % de avance ahora es PONDERADO POR MONTO (no solo hitos cumplidos)
@@ -722,8 +736,34 @@ class ConsolidadorMultiproyecto:
                 df.at[idx, 'saldo_consolidado_ajustado'] = saldos_proyectados_por_semana[i]
                 df.at[idx, 'burn_rate'] = burn_rates_por_semana[i]  # Burn rate de proyectos solamente
         
-        # Margen de protección (Burn Rate de proyectos * 8 semanas + Gastos Fijos * 8 semanas)
-        df['margen_proteccion'] = (df['burn_rate'] + self.gastos_fijos_semanales) * 8
+        # ============================================================
+        # FIX v2.0: Margen de Protección Constante (Proyección Lineal)
+        # ============================================================
+        # Calcular margen UNA SOLA VEZ basado en burn rate ACTUAL
+        # Razón: Actualización semanal + horizonte inversión 2-3 meses
+        # Comportamiento observado: Bandas estables, cambios graduales
+        
+        df_actual = df[df['semana_consolidada'] == self.semana_actual_consolidada]
+        if len(df_actual) > 0:
+            burn_rate_actual = df_actual['burn_rate'].iloc[0]
+        else:
+            # Fallback: último burn rate histórico
+            df_hist = df[df['es_historica']]
+            burn_rate_actual = df_hist['burn_rate'].iloc[-1] if len(df_hist) > 0 else 0
+        
+        # Margen CONSTANTE para todas las semanas (proyección lineal)
+        margen_proteccion_fijo = (burn_rate_actual + self.gastos_fijos_semanales) * 8
+        df['margen_proteccion'] = margen_proteccion_fijo
+        
+        # Debug
+        print(f"\n{'='*60}")
+        print(f"MARGEN DE PROTECCIÓN (Proyección Lineal Constante)")
+        print(f"{'='*60}")
+        print(f"Burn Rate Actual: ${burn_rate_actual:,.0f}/semana")
+        print(f"Gastos Fijos: ${self.gastos_fijos_semanales:,.0f}/semana")
+        print(f"Margen Constante: ${margen_proteccion_fijo:,.0f}")
+        print(f"  = (${burn_rate_actual:,.0f} + ${self.gastos_fijos_semanales:,.0f}) × 8 semanas")
+        print(f"{'='*60}\n")
         
         # Excedente invertible
         df['excedente_invertible'] = df['saldo_consolidado'] - df['margen_proteccion']
@@ -1725,6 +1765,114 @@ def render_inversiones_temporales(estado: Dict):
                 )
 
 
+def render_exportar_json(consolidador: ConsolidadorMultiproyecto, estado: Dict):
+    """Renderiza sección para exportar JSON consolidado"""
+    
+    import json
+    from pathlib import Path
+    
+    # Importar función de generación JSON
+    try:
+        from reportes_ejecutivos import generar_json_consolidado
+    except ImportError:
+        st.error("❌ Módulo 'reportes_ejecutivos' no encontrado")
+        return
+    
+    st.markdown("### 📦 Exportar Datos Consolidados")
+    
+    col1, col2 = st.columns([3, 1])
+    
+    with col1:
+        st.info("""
+        Exporta los datos consolidados a JSON para generar reportes ejecutivos 
+        sin necesidad de reejecutar el módulo multiproyecto.
+        
+        **Incluye:** Estado de caja, proyectos, waterfall, categorías de gasto, inversiones (si están activas)
+        """)
+    
+    with col2:
+        if st.button("📥 Exportar JSON", type="primary", use_container_width=True):
+            try:
+                # Recopilar datos de inversiones si existen
+                inversiones_data = None
+                if 'inversiones_configuradas' in st.session_state and st.session_state.inversiones_configuradas:
+                    inversiones_data = {
+                        "activas": True,
+                        "total_invertido": st.session_state.get('total_invertido', 0),
+                        "retorno_esperado": st.session_state.get('retorno_esperado', 0),
+                        "rentabilidad_pct": st.session_state.get('rentabilidad_pct', 0),
+                        "inversiones": st.session_state.get('inversiones_lista', []),
+                        "liquidez_post_inversion": st.session_state.get('liquidez_post_inv', 0),
+                        "ratio_cobertura": st.session_state.get('ratio_cobertura', 0),
+                        "estado_liquidez": st.session_state.get('estado_liquidez', 'N/A')
+                    }
+                
+                # Generar JSON consolidado
+                json_consolidado = generar_json_consolidado(
+                    st.session_state.datos_reportes,
+                    inversiones_data
+                )
+                
+                # Crear directorio si no existe
+                Path('reportes').mkdir(exist_ok=True)
+                
+                # Guardar con timestamp (versionado)
+                fecha_str = datetime.now().strftime('%Y%m%d_%H%M%S')
+                ruta_json = f'reportes/consolidado_multiproyecto_{fecha_str}.json'
+                
+                with open(ruta_json, 'w', encoding='utf-8') as f:
+                    json.dump(json_consolidado, f, indent=2, ensure_ascii=False)
+                
+                # También guardar "latest" (sobrescribe siempre)
+                ruta_latest = 'reportes/consolidado_multiproyecto_latest.json'
+                with open(ruta_latest, 'w', encoding='utf-8') as f:
+                    json.dump(json_consolidado, f, indent=2, ensure_ascii=False)
+                
+                # Guardar en session_state para carga inmediata
+                st.session_state.json_consolidado = json_consolidado
+                
+                st.success(f"""
+                ✅ **JSON Consolidado Exportado**
+                
+                - Archivo versionado: `{ruta_json}`
+                - Archivo latest: `{ruta_latest}`
+                - Proyectos: {len(json_consolidado.get('proyectos', []))}
+                - Inversiones: {'Sí' if inversiones_data else 'No'}
+                """)
+                
+                # Botón de descarga
+                json_str = json.dumps(json_consolidado, indent=2, ensure_ascii=False)
+                st.download_button(
+                    label="💾 Descargar JSON",
+                    data=json_str,
+                    file_name=f"consolidado_multiproyecto_{fecha_str}.json",
+                    mime="application/json",
+                    use_container_width=True
+                )
+                
+            except Exception as e:
+                st.error(f"❌ Error exportando JSON: {e}")
+                import traceback
+                st.error(traceback.format_exc())
+    
+    # Preview de datos (opcional)
+    if 'json_consolidado' in st.session_state:
+        with st.expander("👁️ Preview de Datos Consolidados"):
+            json_data = st.session_state.json_consolidado
+            
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                st.metric("Proyectos", len(json_data.get('proyectos', [])))
+            with col2:
+                saldo = json_data.get('estado_caja', {}).get('saldo_total', 0)
+                st.metric("Saldo Total", formatear_moneda(saldo))
+            with col3:
+                inversiones = "Sí" if json_data.get('inversiones') else "No"
+                st.metric("Inversiones", inversiones)
+            
+            st.json(json_data.get('metadata', {}), expanded=False)
+
+
 # ============================================================================
 # FUNCIÓN PRINCIPAL DEL MÓDULO
 # ============================================================================
@@ -1930,6 +2078,10 @@ def main():
         # Sección de Inversiones Temporales
         if INVERSIONES_DISPONIBLES:
             render_inversiones_temporales(estado)
+            st.markdown("---")
+        
+        # Sección de Exportar JSON Consolidado
+        render_exportar_json(consolidador, estado)
         
         st.markdown("---")
         
