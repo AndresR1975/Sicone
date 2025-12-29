@@ -2,9 +2,18 @@
 SICONE - Módulo de Análisis Multiproyecto FCL
 Consolidación y análisis de flujo de caja para múltiples proyectos
 
-Versión: 2.0.0
+Versión: 2.0.1
 Fecha: 29 Diciembre 2024
 Autor: AI-MindNovation
+
+VERSIÓN 2.0.1 (29-Dic-2024) - FIX CRÍTICO MARGEN:
+- 🔧 FIX: Margen de Protección ahora correctamente implementado
+  - HISTÓRICO: Variable (refleja burn rate real de cada semana)
+  - FUTURO: Constante desde hoy (proyección lineal)
+  - Línea roja: Variable en pasado, horizontal desde hoy
+  
+- 🐛 FIX: Error de indentación en render_exportar_json
+  - Removida línea vacía problemática después de docstring
 
 VERSIÓN 2.0.0 (29-Dic-2024) - FIXES CRÍTICOS:
 - 🔧 FIX: Margen de Protección ahora es CONSTANTE (proyección lineal)
@@ -737,12 +746,16 @@ class ConsolidadorMultiproyecto:
                 df.at[idx, 'burn_rate'] = burn_rates_por_semana[i]  # Burn rate de proyectos solamente
         
         # ============================================================
-        # FIX v2.0: Margen de Protección Constante (Proyección Lineal)
+        # FIX v2.0.1: Margen de Protección - Histórico Variable, Futuro Constante
         # ============================================================
-        # Calcular margen UNA SOLA VEZ basado en burn rate ACTUAL
+        # HISTÓRICO: Usa burn rate de cada semana (refleja realidad del momento)
+        # FUTURO: Usa burn rate actual (proyección lineal constante)
         # Razón: Actualización semanal + horizonte inversión 2-3 meses
-        # Comportamiento observado: Bandas estables, cambios graduales
         
+        # Calcular margen para TODAS las semanas primero (variable con burn_rate de cada semana)
+        df['margen_proteccion'] = (df['burn_rate'] + self.gastos_fijos_semanales) * 8
+        
+        # Para semanas FUTURAS: Sobrescribir con margen constante basado en burn rate ACTUAL
         df_actual = df[df['semana_consolidada'] == self.semana_actual_consolidada]
         if len(df_actual) > 0:
             burn_rate_actual = df_actual['burn_rate'].iloc[0]
@@ -751,17 +764,19 @@ class ConsolidadorMultiproyecto:
             df_hist = df[df['es_historica']]
             burn_rate_actual = df_hist['burn_rate'].iloc[-1] if len(df_hist) > 0 else 0
         
-        # Margen CONSTANTE para todas las semanas (proyección lineal)
-        margen_proteccion_fijo = (burn_rate_actual + self.gastos_fijos_semanales) * 8
-        df['margen_proteccion'] = margen_proteccion_fijo
+        # Margen CONSTANTE solo para semanas FUTURAS (proyección lineal)
+        margen_proteccion_futuro = (burn_rate_actual + self.gastos_fijos_semanales) * 8
+        df.loc[df['es_futura'], 'margen_proteccion'] = margen_proteccion_futuro
         
         # Debug
         print(f"\n{'='*60}")
-        print(f"MARGEN DE PROTECCIÓN (Proyección Lineal Constante)")
+        print(f"MARGEN DE PROTECCIÓN")
         print(f"{'='*60}")
+        print(f"HISTÓRICO: Variable (refleja burn rate de cada semana)")
+        print(f"FUTURO: Constante (proyección lineal)")
         print(f"Burn Rate Actual: ${burn_rate_actual:,.0f}/semana")
         print(f"Gastos Fijos: ${self.gastos_fijos_semanales:,.0f}/semana")
-        print(f"Margen Constante: ${margen_proteccion_fijo:,.0f}")
+        print(f"Margen Futuro (constante): ${margen_proteccion_futuro:,.0f}")
         print(f"  = (${burn_rate_actual:,.0f} + ${self.gastos_fijos_semanales:,.0f}) × 8 semanas")
         print(f"{'='*60}\n")
         
@@ -1767,7 +1782,6 @@ def render_inversiones_temporales(estado: Dict):
 
 def render_exportar_json(consolidador: ConsolidadorMultiproyecto, estado: Dict):
     """Renderiza sección para exportar JSON consolidado"""
-    
     import json
     from pathlib import Path
     
