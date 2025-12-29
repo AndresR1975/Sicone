@@ -302,8 +302,8 @@ def generar_recomendaciones(excedente: float, margen_total: float) -> List[Dict]
             'prioridad': 0
         }]
     
-    # Recomendación 1: Conservadora
-    if excedente >= margen_total * 1.5:
+    # Recomendación 1: Conservadora (ajustado a 60% del margen)
+    if excedente >= margen_total * 0.6:
         monto_rec = excedente * 0.70
         rec = {
             'nombre': 'Conservadora',
@@ -326,8 +326,8 @@ def generar_recomendaciones(excedente: float, margen_total: float) -> List[Dict]
         }
         recomendaciones.append(rec)
     
-    # Recomendación 2: Balanceada
-    if excedente >= margen_total * 2.0:
+    # Recomendación 2: Balanceada (ajustado a 80% del margen)
+    if excedente >= margen_total * 0.8:
         monto_rec = excedente * 0.80
         rec = {
             'nombre': 'Balanceada',
@@ -350,8 +350,8 @@ def generar_recomendaciones(excedente: float, margen_total: float) -> List[Dict]
         }
         recomendaciones.append(rec)
     
-    # Recomendación 3: Agresiva
-    if excedente >= margen_total * 2.5:
+    # Recomendación 3: Agresiva (ajustado a 100% del margen)
+    if excedente >= margen_total * 1.0:
         monto_rec = excedente * 0.85
         rec = {
             'nombre': 'Agresiva',

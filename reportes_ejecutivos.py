@@ -1,311 +1,91 @@
 """
 SICONE - Módulo de Reportes Ejecutivos
-Versión: 2.0.0 FINAL
+Generación de reportes PDF para multiproyecto e inversiones temporales
+
+Versión: 3.0.0 FINAL
 Fecha: 29 Diciembre 2024
-Autor: Andrés Restrepo & Claude
+Autor: AI-MindNovation
 
-VERSIÓN 2.0.0 (29-Dic-2024) - VERSIÓN FINAL CON WATERFALL:
-- ✅ Waterfall como gráfico principal de flujo de caja
-- ✅ Muestra últimas 6 semanas: Inicio → Ingresos → Egresos → GF → Final
-- ✅ Pie Chart con 4 categorías de gasto consolidadas
-- ✅ Semáforo de estado por proyecto
-- ✅ Tabla detallada con métricas clave
-- ✅ Layout optimizado para 1 página
-- 🎯 NO duplica información del multiproyecto
-- 📊 Formato ejecutivo profesional
-- 📦 Genera JSON consolidado para carga directa
+REPORTES DISPONIBLES:
+1. generar_reporte_gerencial_pdf(datos) - Reporte Gerencial Multiproyecto
+2. generar_reporte_inversiones_pdf(datos) - Reporte Inversiones Temporales
 
-DECISIÓN FINAL (Andrés):
-✅ WATERFALL - Flujo de caja consolidado
-❌ Timeline eliminado - Ya existe en multiproyecto
+CHANGELOG:
+v3.0.0 (29-Dic-2024) - UNIFICACIÓN COMPLETA:
+- ✅ Integración de reportes multiproyecto e inversiones en un solo módulo
+- ✅ Funciones comunes optimizadas (formatear_moneda, estilos, etc.)
+- ✅ Mejor organización en secciones claramente delimitadas
+- ✅ Imports compartidos, código DRY
+- ✅ Soporte para ambos tipos de reporte desde una sola importación
 
-NUEVO en v2.0.0:
-- Función generar_json_consolidado() para persistencia de datos
-- Permite cargar reportes directamente sin reejecutar multiproyecto
+USO:
+    from reportes_ejecutivos import generar_reporte_gerencial_pdf, generar_reporte_inversiones_pdf
 """
 
-
-import streamlit as st
-from datetime import datetime
-import pandas as pd
-from typing import Dict, List, Optional
 import io
-import sys
-import os
-import platform
-import subprocess
-import json
-
-# Matplotlib para gráficos
-import matplotlib
-matplotlib.use('Agg')  # Backend sin interfaz gráfica
-import matplotlib.pyplot as plt
-import matplotlib.patches as mpatches
+import streamlit as st
+from datetime import datetime, date, timedelta
+from typing import Dict, List, Optional, Tuple
+import pandas as pd
 import numpy as np
 
-# Importar utilidades compartidas
+# Matplotlib
+import matplotlib
+matplotlib.use('Agg')
+import matplotlib.pyplot as plt
+import matplotlib.patches as mpatches
+from matplotlib.patches import Rectangle
+
+# ============================================================================
+# CONFIGURACIÓN GLOBAL
+# ============================================================================
+
+# Verificar disponibilidad de utils
 try:
-    from utils_formateo import (
-        formatear_moneda,
-        formatear_porcentaje,
-        formatear_fecha,
-        obtener_valor_seguro,
-        generar_timestamp,
-        calcular_semanas_cobertura,
-        obtener_info_estado_financiero,
-        FORMATO_REGIONAL
-    )
+    from utils import formatear_moneda as formatear_moneda_utils, obtener_valor_seguro, calcular_semanas_cobertura
     UTILS_DISPONIBLE = True
 except ImportError:
-    st.warning("⚠️ utils_formateo.py no encontrado. Usando funciones locales.")
     UTILS_DISPONIBLE = False
-    
-    # Función local de respaldo
-    def formatear_moneda(valor):
-        if valor >= 1_000_000_000:
-            return f"${valor/1_000_000_000:.2f}MM"
-        elif valor >= 1_000_000:
-            return f"${valor/1_000_000:.1f}M"
-        elif valor >= 1_000:
-            return f"${valor/1_000:.0f}K"
-        else:
-            return f"${valor:,.0f}"
 
-# Variable global para verificar disponibilidad de PDF
-PDF_DISPONIBLE = False
 
 # ============================================================================
-# DETECCIÓN DE ENTORNO
+# FUNCIONES COMUNES - FORMATEO
 # ============================================================================
 
-def detectar_entorno():
+def formatear_moneda(valor: float) -> str:
     """
-    Detecta el entorno de ejecución para adaptar la instalación
-    
-    Returns:
-        dict: Información del entorno
-    """
-    entorno = {
-        'sistema': platform.system(),
-        'en_venv': hasattr(sys, 'real_prefix') or (hasattr(sys, 'base_prefix') and sys.base_prefix != sys.prefix),
-        'python_version': f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}",
-        'pip_path': sys.executable,
-        'necesita_break_system': False
-    }
-    
-    if entorno['sistema'] in ['Linux', 'Darwin'] and not entorno['en_venv']:
-        version_mayor = sys.version_info.major
-        version_menor = sys.version_info.minor
-        if version_mayor >= 3 and version_menor >= 11:
-            entorno['necesita_break_system'] = True
-    
-    return entorno
-
-def obtener_comando_instalacion(entorno: dict) -> List[str]:
-    """Genera el comando de instalación apropiado según el entorno"""
-    comando = [entorno['pip_path'], "-m", "pip", "install", "reportlab"]
-    
-    if entorno['necesita_break_system']:
-        comando.append("--break-system-packages")
-    
-    return comando
-
-def obtener_instrucciones_manuales(entorno: dict) -> str:
-    """Genera instrucciones de instalación manual específicas para el entorno"""
-    sistema = entorno['sistema']
-    en_venv = entorno['en_venv']
-    
-    if sistema == 'Windows':
-        if en_venv:
-            return """# En su terminal (PowerShell o CMD):
-pip install reportlab
-streamlit run main.py"""
-        else:
-            return """# En su terminal (PowerShell o CMD):
-# Opción 1: Crear entorno virtual (RECOMENDADO)
-python -m venv venv
-venv\\Scripts\\activate
-pip install reportlab
-
-# Opción 2: Instalación directa
-pip install reportlab
-
-streamlit run main.py"""
-    
-    elif sistema in ['Linux', 'Darwin']:
-        if en_venv:
-            return f"""# En su terminal:
-pip install reportlab
-streamlit run main.py"""
-        else:
-            break_system = "--break-system-packages" if entorno['necesita_break_system'] else ""
-            return f"""# En su terminal:
-# Opción 1: Con entorno virtual (RECOMENDADO)
-python3 -m venv venv
-source venv/bin/activate
-pip install reportlab
-
-# Opción 2: Instalación de sistema (requiere permisos)
-sudo pip3 install reportlab {break_system}
-
-# Opción 3: Instalación de usuario
-pip3 install reportlab --user {break_system}
-
-streamlit run main.py"""
-    
-    return """# Instalación genérica:
-pip install reportlab
-streamlit run main.py"""
-
-
-# ============================================================================
-# VERIFICACIÓN E INSTALACIÓN
-# ============================================================================
-
-def verificar_reportlab():
-    """Verifica e intenta importar reportlab"""
-    global PDF_DISPONIBLE
-    
-    try:
-        from reportlab.lib.pagesizes import letter
-        PDF_DISPONIBLE = True
-        return True
-    except ImportError:
-        PDF_DISPONIBLE = False
-        return False
-
-def instalar_reportlab():
-    """Instala reportlab con detección automática de entorno"""
-    try:
-        status_container = st.empty()
-        progress_bar = st.progress(0)
-        
-        status_container.info("🔍 Detectando entorno de ejecución...")
-        progress_bar.progress(10)
-        
-        entorno = detectar_entorno()
-        
-        with st.expander("ℹ️ Información del entorno detectado"):
-            st.write(f"**Sistema Operativo:** {entorno['sistema']}")
-            st.write(f"**Python:** {entorno['python_version']}")
-            st.write(f"**Entorno Virtual:** {'Sí' if entorno['en_venv'] else 'No'}")
-            st.write(f"**Requiere --break-system-packages:** {'Sí' if entorno['necesita_break_system'] else 'No'}")
-        
-        comando = obtener_comando_instalacion(entorno)
-        
-        status_container.info(f"📦 Instalando reportlab...")
-        st.caption(f"Ejecutando: `{' '.join(comando[2:])}`")
-        progress_bar.progress(25)
-        
-        resultado = subprocess.run(
-            comando,
-            capture_output=True,
-            text=True,
-            timeout=120
-        )
-        
-        progress_bar.progress(60)
-        
-        # Reintento con --user si falla por permisos
-        if resultado.returncode != 0 and entorno['sistema'] in ['Linux', 'Darwin'] and not entorno['en_venv']:
-            if "Permission denied" in resultado.stderr or "EACCES" in resultado.stderr or "[Errno 13]" in resultado.stderr:
-                status_container.warning("⚠️ Permiso denegado. Reintentando con instalación de usuario...")
-                progress_bar.progress(40)
-                
-                comando_user = comando.copy()
-                if "--break-system-packages" not in comando_user:
-                    comando_user.append("--user")
-                else:
-                    idx = comando_user.index("--break-system-packages")
-                    comando_user.insert(idx, "--user")
-                
-                st.caption(f"Ejecutando: `{' '.join(comando_user[2:])}`")
-                
-                resultado = subprocess.run(
-                    comando_user,
-                    capture_output=True,
-                    text=True,
-                    timeout=120
-                )
-                
-                progress_bar.progress(75)
-        
-        if resultado.returncode == 0:
-            status_container.success("✅ reportlab instalado correctamente")
-            progress_bar.progress(90)
-            
-            try:
-                import importlib
-                importlib.invalidate_caches()
-                reportlab_module = importlib.import_module('reportlab')
-                
-                global PDF_DISPONIBLE
-                PDF_DISPONIBLE = True
-                progress_bar.progress(100)
-                
-                st.success(f"✅ reportlab versión {reportlab_module.Version} disponible")
-                return True
-                
-            except ImportError as ie:
-                status_container.error("⚠️ Instalado pero no se puede importar. Reinicie la aplicación.")
-                st.warning("**Acción requerida:** Detenga la aplicación (Ctrl+C) y reinicie con `streamlit run main.py`")
-                progress_bar.progress(100)
-                return False
-        else:
-            status_container.error("❌ Error en instalación")
-            
-            error_msg = resultado.stderr.lower()
-            
-            if "permission" in error_msg or "eacces" in error_msg or "[errno 13]" in error_msg:
-                st.error("**Error de Permisos:** No tiene permisos suficientes")
-                st.info("""**Soluciones:**
-                1. Usar entorno virtual (RECOMENDADO)
-                2. Instalación de usuario con --user
-                3. Permisos de administrador con sudo
-                """)
-            
-            elif "not found" in error_msg or "no such file" in error_msg:
-                st.error("**Error:** No se encontró pip o Python")
-                st.info("Verifique que Python y pip están correctamente instalados")
-            
-            else:
-                st.error("**Error desconocido en la instalación**")
-            
-            with st.expander("🔍 Ver detalles completos del error"):
-                st.code(resultado.stderr, language="bash")
-            
-            return False
-            
-    except subprocess.TimeoutExpired:
-        st.error("⏱️ Timeout: La instalación tomó demasiado tiempo (>120s)")
-        st.info("Intente la instalación manual en su terminal")
-        return False
-        
-    except Exception as e:
-        st.error(f"❌ Error inesperado durante la instalación: {str(e)}")
-        with st.expander("🔍 Ver detalles del error"):
-            st.exception(e)
-        return False
-
-
-# ============================================================================
-# GENERACIÓN DE GRÁFICOS (Preparado para Fase 2)
-# ============================================================================
-
-def generar_grafico_waterfall(datos: Dict) -> bytes:
-    """
-    Genera gráfico Waterfall mostrando evolución del saldo en últimas 6 semanas
+    Formatea valores monetarios en formato colombiano (compartido por ambos reportes)
     
     Args:
-        datos: Diccionario con datos consolidados del multiproyecto
+        valor: Valor numérico a formatear
         
     Returns:
-        bytes: Imagen PNG del gráfico
+        String formateado (ej: "$250.0M", "$1.5B")
+    """
+    if UTILS_DISPONIBLE:
+        return formatear_moneda_utils(valor)
+    
+    # Fallback manual
+    if valor >= 1_000_000_000:
+        return f"${valor/1_000_000_000:.1f}B"
+    elif valor >= 1_000_000:
+        return f"${valor/1_000_000:.1f}M"
+    elif valor >= 1_000:
+        return f"${valor/1_000:.0f}K"
+    else:
+        return f"${valor:,.0f}"
+
+
+# ============================================================================
+# REPORTE 1: GERENCIAL MULTIPROYECTO
+# ============================================================================
+
+def generar_grafico_waterfall(datos: Dict) -> Optional[bytes]:
+    """
+    Genera gráfico Waterfall mostrando evolución del saldo en últimas 6 semanas
+    (Usado en reporte multiproyecto)
     """
     try:
-        import pandas as pd
-        import numpy as np
-        
         # Obtener DataFrame consolidado
         df = datos.get('df_consolidado')
         
@@ -344,30 +124,28 @@ def generar_grafico_waterfall(datos: Dict) -> bytes:
         # Preparar datos para waterfall
         categorias = ['Inicio\n(Sem -6)', 'Ingresos', 'Egresos\nProyectos', 'Gastos\nFijos', 'Actual\n(Hoy)']
         
-        # Valores para cada barra
         valores = [
-            saldo_inicio,  # Barra inicial
-            ingresos_acum,  # Incremento
-            -egresos_acum,  # Decremento
-            -gastos_fijos_acum,  # Decremento
-            0  # Barra final (se calcula)
+            saldo_inicio,
+            ingresos_acum,
+            -egresos_acum,
+            -gastos_fijos_acum,
+            0
         ]
         
         # Calcular posiciones
         acumulado = saldo_inicio
-        posiciones_base = [0]  # Inicio en 0
-        alturas = [saldo_inicio]  # Primera barra completa
+        posiciones_base = [0]
+        alturas = [saldo_inicio]
         
-        for i in range(1, 4):  # Ingresos, Egresos, Gastos
+        for i in range(1, 4):
             posiciones_base.append(acumulado)
             alturas.append(valores[i])
             acumulado += valores[i]
         
-        # Barra final
         posiciones_base.append(0)
         alturas.append(saldo_final)
         
-        # Colores: inicial (azul), positivo (verde), negativo (rojo), final (azul)
+        # Colores
         colores = ['#3b82f6', '#22c55e', '#ef4444', '#f97316', '#3b82f6']
         
         # Crear gráfico
@@ -378,19 +156,19 @@ def generar_grafico_waterfall(datos: Dict) -> bytes:
             ax.bar(i, alturas[i], bottom=posiciones_base[i], 
                    color=colores[i], edgecolor='white', linewidth=1.5, width=0.6)
             
-            # Etiquetas de valores
-            if i == 0 or i == 4:  # Inicio y Final
+            # Etiquetas
+            if i == 0 or i == 4:
                 y_pos = posiciones_base[i] + alturas[i] / 2
-                valor_texto = formatear_moneda(alturas[i]) if UTILS_DISPONIBLE else f"${alturas[i]/1e6:.0f}M"
+                valor_texto = formatear_moneda(alturas[i])
             else:
                 y_pos = posiciones_base[i] + alturas[i] / 2
                 valor_absoluto = abs(alturas[i])
-                valor_texto = formatear_moneda(valor_absoluto) if UTILS_DISPONIBLE else f"${valor_absoluto/1e6:.0f}M"
+                valor_texto = formatear_moneda(valor_absoluto)
             
             ax.text(i, y_pos, valor_texto, 
                    ha='center', va='center', fontsize=5, fontweight='bold', color='white')
         
-        # Conectores entre barras
+        # Conectores
         for i in range(len(categorias) - 1):
             if i < 4:
                 y_start = posiciones_base[i] + alturas[i]
@@ -398,24 +176,18 @@ def generar_grafico_waterfall(datos: Dict) -> bytes:
                 ax.plot([i + 0.3, i + 0.7], [y_start, y_end], 
                        'k--', linewidth=0.8, alpha=0.5)
         
-        # Formateo
         ax.set_xticks(range(len(categorias)))
         ax.set_xticklabels(categorias, fontsize=6)
         ax.set_ylabel('Saldo', fontsize=6, fontweight='bold')
         ax.set_title('Flujo de Caja (6 semanas)', fontsize=8, fontweight='bold', pad=4)
         ax.grid(True, alpha=0.2, axis='y', linestyle='--', linewidth=0.4)
         
-        # Formato moneda en eje Y
-        ax.yaxis.set_major_formatter(plt.FuncFormatter(
-            lambda x, p: formatear_moneda(x) if UTILS_DISPONIBLE else f"${x/1e6:.0f}M"
-        ))
-        
+        ax.yaxis.set_major_formatter(plt.FuncFormatter(lambda x, p: formatear_moneda(x)))
         ax.yaxis.set_major_locator(plt.MaxNLocator(4))
         ax.tick_params(axis='y', labelsize=5)
         
         plt.tight_layout(pad=0.2)
         
-        # Guardar
         buf = io.BytesIO()
         plt.savefig(buf, format='png', dpi=120, bbox_inches='tight', facecolor='white')
         buf.seek(0)
@@ -424,20 +196,14 @@ def generar_grafico_waterfall(datos: Dict) -> bytes:
         return buf
         
     except Exception as e:
-        st.error(f"Error generando waterfall: {e}")
-        import traceback
-        st.error(traceback.format_exc())
+        print(f"Error generando waterfall: {e}")
         return None
 
-def generar_grafico_semaforo(datos: Dict) -> bytes:
+
+def generar_grafico_pie_gastos(datos: Dict) -> Optional[bytes]:
     """
-    Genera semáforo de estado financiero por proyecto
-    
-    Args:
-        datos: Diccionario con datos consolidados
-        
-    Returns:
-        bytes: Imagen PNG del gráfico
+    Genera pie chart de distribución por categorías de gasto consolidadas
+    (Usado en reporte multiproyecto)
     """
     try:
         proyectos = datos.get('proyectos', [])
@@ -445,137 +211,7 @@ def generar_grafico_semaforo(datos: Dict) -> bytes:
         if not proyectos:
             return None
         
-        # Preparar datos
-        nombres = []
-        coberturas = []
-        colores = []
-        
-        for p in proyectos:
-            nombre = p.get('nombre', 'Sin nombre')[:12]  # Más corto
-            saldo = p.get('saldo_real_tesoreria', 0)
-            burn_rate = p.get('burn_rate_real', 0)
-            
-            # Calcular cobertura
-            if burn_rate > 0:
-                cobertura = saldo / burn_rate
-            else:
-                cobertura = 100  # Cobertura "infinita"
-            
-            # Determinar color según cobertura
-            if cobertura >= 20:
-                color = '#22c55e'  # Verde - EXCEDENTE
-            elif cobertura >= 10:
-                color = '#3b82f6'  # Azul - ESTABLE
-            elif cobertura >= 5:
-                color = '#f97316'  # Naranja - ALERTA
-            else:
-                color = '#dc2626'  # Rojo - CRÍTICO
-            
-            nombres.append(nombre)
-            coberturas.append(min(cobertura, 100))  # Cap para visualización
-            colores.append(color)
-        
-        # Crear gráfico más compacto
-        altura = min(1.8, len(proyectos) * 0.3 + 0.3)  # Reducido para 1 página
-        fig, ax = plt.subplots(figsize=(6.5, altura))
-        
-        # Barras horizontales más delgadas
-        y_pos = np.arange(len(nombres))
-        bars = ax.barh(y_pos, coberturas, color=colores, height=0.5, 
-                      edgecolor='white', linewidth=1)
-        
-        # Etiquetas más pequeñas
-        ax.set_yticks(y_pos)
-        ax.set_yticklabels(nombres, fontsize=7)
-        ax.set_xlabel('Cobertura (semanas)', fontsize=7, fontweight='bold')
-        ax.set_title('Estado Financiero por Proyecto', fontsize=9, fontweight='bold', pad=5)
-        
-        # Líneas de referencia MÁS VISIBLES
-        ax.axvline(x=20, color='#22c55e', linestyle='-', linewidth=2, alpha=0.4, zorder=1)
-        ax.axvline(x=10, color='#3b82f6', linestyle='-', linewidth=2, alpha=0.4, zorder=1)
-        ax.axvline(x=5, color='#f97316', linestyle='-', linewidth=2, alpha=0.4, zorder=1)
-        
-        # Valores en las barras
-        for i, (bar, cob) in enumerate(zip(bars, coberturas)):
-            width = bar.get_width()
-            label_x = width + 1 if width < 80 else width - 2
-            ax.text(label_x, bar.get_y() + bar.get_height()/2, 
-                   f'{cob:.1f}s', 
-                   ha='left' if width < 80 else 'right',
-                   va='center', fontsize=6, fontweight='bold',
-                   color='black' if width < 80 else 'white')
-        
-        # Formateo compacto
-        ax.set_xlim(0, 105)
-        ax.grid(axis='x', alpha=0.2, linestyle='--', linewidth=0.5)
-        ax.tick_params(axis='both', labelsize=6)
-        ax.invert_yaxis()  # Primer proyecto arriba
-        
-        # LEYENDA DENTRO DEL RECUADRO (esquina superior derecha)
-        from matplotlib.patches import Patch
-        legend_elements = [
-            Patch(facecolor='#22c55e', edgecolor='black', linewidth=0.5, label='Exc (≥20s)'),
-            Patch(facecolor='#3b82f6', edgecolor='black', linewidth=0.5, label='Est (≥10s)'),
-            Patch(facecolor='#f97316', edgecolor='black', linewidth=0.5, label='Ale (≥5s)'),
-            Patch(facecolor='#dc2626', edgecolor='black', linewidth=0.5, label='Crí (<5s)')
-        ]
-        ax.legend(handles=legend_elements, 
-                 loc='upper right',  # DENTRO del gráfico
-                 fontsize=6, 
-                 framealpha=0.95, 
-                 ncol=2,  # 2 columnas para ahorrar espacio vertical
-                 handlelength=1, 
-                 handletextpad=0.4,
-                 columnspacing=1,
-                 borderpad=0.5)
-        
-        plt.tight_layout(pad=0.3)
-        
-        # Guardar a bytes con espacio extra para leyenda
-        buf = io.BytesIO()
-        plt.savefig(buf, format='png', dpi=120, bbox_inches='tight', facecolor='white')
-        buf.seek(0)
-        plt.close(fig)
-        
-        return buf
-        
-    except Exception as e:
-        st.error(f"Error generando gráfico semáforo: {e}")
-        import traceback
-        st.error(traceback.format_exc())
-        return None
-
-def generar_grafico_comparacion(datos: Dict) -> bytes:
-    """
-    FASE 2: Genera gráfico de comparación planeación vs ejecución
-    
-    Args:
-        datos: Diccionario con datos consolidados
-        
-    Returns:
-        bytes: Imagen PNG del gráfico
-    """
-    # Placeholder - será implementado en Fase 2
-    return None
-
-def generar_grafico_pie_gastos(datos: Dict) -> bytes:
-    """
-    Genera pie chart de distribución por CATEGORÍAS DE GASTO CONSOLIDADAS
-    Suma categorías de todos los proyectos: Mano de Obra, Materiales, Administración, Variables
-    
-    Args:
-        datos: Diccionario con datos consolidados del multiproyecto
-        
-    Returns:
-        bytes: Imagen PNG del gráfico
-    """
-    try:
-        proyectos = datos.get('proyectos', [])
-        
-        if not proyectos:
-            return None
-        
-        # CONSOLIDAR categorías de todos los proyectos
+        # Consolidar categorías
         categorias = {
             'Mano de Obra': 0,
             'Materiales': 0,
@@ -584,18 +220,14 @@ def generar_grafico_pie_gastos(datos: Dict) -> bytes:
         }
         
         for proyecto in proyectos:
-            # Datos están en proyecto['data']
             data = proyecto.get('data', {})
-            
             if not data:
                 continue
             
             proyeccion = data.get('proyeccion_semanal', [])
-            
             if not proyeccion:
                 continue
             
-            # Sumar categorías de todas las semanas
             for semana in proyeccion:
                 categorias['Mano de Obra'] += semana.get('Mano_Obra', 0)
                 categorias['Materiales'] += semana.get('Materiales', 0)
@@ -609,19 +241,15 @@ def generar_grafico_pie_gastos(datos: Dict) -> bytes:
         if sum(categorias.values()) == 0:
             return None
         
-        # Preparar datos
         nombres = list(categorias.keys())
         valores = list(categorias.values())
-        colores = ['#3b82f6', '#22c55e', '#f97316', '#8b5cf6']  # Azul, Verde, Naranja, Morado
+        colores = ['#3b82f6', '#22c55e', '#f97316', '#8b5cf6']
         
-        # Crear gráfico CUADRADO
         fig, ax = plt.subplots(figsize=(2.8, 2.8))
         
-        # Función para mostrar porcentaje
         def formato_label(pct):
             return f'{pct:.1f}%' if pct > 3 else ''
         
-        # Gráfico de pie
         wedges, texts, autotexts = ax.pie(valores, 
                                            labels=None,
                                            autopct=formato_label,
@@ -630,21 +258,12 @@ def generar_grafico_pie_gastos(datos: Dict) -> bytes:
                                            textprops={'fontsize': 5, 'weight': 'bold', 'color': 'white'},
                                            wedgeprops={'edgecolor': 'white', 'linewidth': 1})
         
-        # Título
-        ax.set_title('Categorías de Gasto', 
-                    fontsize=8, fontweight='bold', pad=4)
-        
-        # Leyenda DENTRO
-        ax.legend(nombres, 
-                 loc='center left',
-                 bbox_to_anchor=(0.85, 0.5),
-                 fontsize=5,
-                 framealpha=0.95,
-                 ncol=1)
+        ax.set_title('Categorías de Gasto', fontsize=8, fontweight='bold', pad=4)
+        ax.legend(nombres, loc='center left', bbox_to_anchor=(0.85, 0.5),
+                 fontsize=5, framealpha=0.95, ncol=1)
         
         plt.tight_layout(pad=0.2)
         
-        # Guardar
         buf = io.BytesIO()
         plt.savefig(buf, format='png', dpi=120, bbox_inches='tight', facecolor='white')
         buf.seek(0)
@@ -653,169 +272,117 @@ def generar_grafico_pie_gastos(datos: Dict) -> bytes:
         return buf
         
     except Exception as e:
-        st.error(f"Error generando gráfico pie: {e}")
-        import traceback
-        st.error(traceback.format_exc())
+        print(f"Error generando pie: {e}")
         return None
 
 
-# ============================================================================
-# GENERACIÓN DE JSON CONSOLIDADO PARA CARGA DIRECTA
-# ============================================================================
-
-def generar_json_consolidado(datos: Dict, inversiones_data: Optional[Dict] = None) -> Dict:
+def generar_grafico_semaforo(datos: Dict) -> Optional[bytes]:
     """
-    Genera JSON consolidado con todos los datos del multiproyecto
-    Permite cargar reportes directamente sin reejecutar consolidador
-    
-    Args:
-        datos: Diccionario con datos del multiproyecto (st.session_state.datos_reportes)
-        inversiones_data: Opcional - Datos de inversiones si están activas
-        
-    Returns:
-        Dict: JSON consolidado con estructura completa
+    Genera semáforo de estado financiero por proyecto
+    (Usado en reporte multiproyecto)
     """
     try:
-        import pandas as pd
-        
-        # Metadata
-        timestamp = datos.get('timestamp', datetime.now())
-        estado_caja = datos.get('estado_caja', {})
         proyectos = datos.get('proyectos', [])
-        df_consolidado = datos.get('df_consolidado')
-        semana_actual = datos.get('semana_actual', 0)
-        gastos_fijos_mensuales = datos.get('gastos_fijos_mensuales', 0)
         
-        json_consolidado = {
-            "metadata": {
-                "version": "2.0.0",
-                "fecha_generacion": timestamp.strftime('%Y-%m-%d %H:%M:%S'),
-                "semana_actual_consolidada": semana_actual,
-                "total_proyectos": len(proyectos),
-                "gastos_fijos_mensuales": gastos_fijos_mensuales
-            },
+        if not proyectos or len(proyectos) == 0:
+            return None
+        
+        # Limitar a 5 proyectos
+        proyectos_mostrar = proyectos[:5]
+        
+        fig, ax = plt.subplots(figsize=(5.5, 1.5))
+        
+        nombres = []
+        coberturas = []
+        colores_barra = []
+        
+        for p in proyectos_mostrar:
+            nombre = p.get('nombre', 'Sin nombre')[:20]
+            saldo = p.get('saldo_real_tesoreria', 0)
+            burn_rate = p.get('burn_rate_real', 0)
             
-            "estado_caja": estado_caja,
+            if burn_rate > 0:
+                cobertura = saldo / burn_rate
+            else:
+                cobertura = 100
             
-            "proyectos": [
-                {
-                    "nombre": p.get('nombre', 'Sin nombre'),
-                    "estado": p.get('estado', 'ACTIVO'),
-                    "ejecutado": p.get('ejecutado', 0),
-                    "saldo_real_tesoreria": p.get('saldo_real_tesoreria', 0),
-                    "burn_rate_real": p.get('burn_rate_real', 0),
-                    "avance_hitos_pct": p.get('avance_hitos_pct', 0),
-                    "cobertura_semanas": p.get('cobertura_semanas', 0)
-                }
-                for p in proyectos
-            ]
-        }
-        
-        # Waterfall data (últimas 6 semanas)
-        if df_consolidado is not None and not df_consolidado.empty:
-            df_hist = df_consolidado[
-                (df_consolidado['semana_consolidada'] >= semana_actual - 5) &
-                (df_consolidado['semana_consolidada'] <= semana_actual) &
-                (df_consolidado['es_historica'] == True)
-            ].copy()
+            nombres.append(nombre)
+            coberturas.append(min(cobertura, 100))
             
-            if not df_hist.empty and len(df_hist) >= 2:
-                gastos_fijos_semanales = gastos_fijos_mensuales / 4.33
-                
-                json_consolidado["waterfall_data"] = {
-                    "saldo_inicio": float(df_hist.iloc[0]['saldo_consolidado']),
-                    "saldo_final": float(df_hist.iloc[-1]['saldo_consolidado']),
-                    "ingresos_acumulados": float(df_hist['ingresos_proy_total'].sum()) if 'ingresos_proy_total' in df_hist.columns else 0,
-                    "egresos_acumulados": float(df_hist['egresos_proy_total'].sum()) if 'egresos_proy_total' in df_hist.columns else 0,
-                    "gastos_fijos_acumulados": float(gastos_fijos_semanales * len(df_hist)),
-                    "semanas_periodo": len(df_hist)
-                }
-            
-            # Saldo consolidado (últimas 12 semanas para contexto)
-            df_contexto = df_consolidado[
-                (df_consolidado['semana_consolidada'] >= semana_actual - 11) &
-                (df_consolidado['semana_consolidada'] <= semana_actual)
-            ].copy()
-            
-            if not df_contexto.empty:
-                json_consolidado["saldo_historico"] = {
-                    "semanas": df_contexto['semana_consolidada'].tolist(),
-                    "fechas": df_contexto['fecha'].dt.strftime('%Y-%m-%d').tolist() if 'fecha' in df_contexto.columns else [],
-                    "saldos": df_contexto['saldo_consolidado'].tolist()
-                }
+            # Color según cobertura
+            if cobertura >= 20:
+                colores_barra.append('#22c55e')  # Verde
+            elif cobertura >= 10:
+                colores_barra.append('#f97316')  # Naranja
+            else:
+                colores_barra.append('#ef4444')  # Rojo
         
-        # Categorías de gasto
-        categorias_gasto = {
-            'mano_obra': 0,
-            'materiales': 0,
-            'administracion': 0,
-            'variables': 0
-        }
+        y_pos = np.arange(len(nombres))
         
-        for proyecto in proyectos:
-            data = proyecto.get('data', {})
-            proyeccion = data.get('proyeccion_semanal', [])
-            
-            for semana in proyeccion:
-                categorias_gasto['mano_obra'] += semana.get('Mano_Obra', 0)
-                categorias_gasto['materiales'] += semana.get('Materiales', 0)
-                categorias_gasto['administracion'] += semana.get('Admin', 0)
-                categorias_gasto['variables'] += (
-                    semana.get('Equipos', 0) +
-                    semana.get('Imprevistos', 0) +
-                    semana.get('Logistica', 0)
-                )
+        ax.barh(y_pos, coberturas, color=colores_barra, edgecolor='white', linewidth=1.5)
         
-        json_consolidado["categorias_gasto"] = {
-            "mano_obra": float(categorias_gasto['mano_obra']),
-            "materiales": float(categorias_gasto['materiales']),
-            "administracion": float(categorias_gasto['administracion']),
-            "variables": float(categorias_gasto['variables']),
-            "total": float(sum(categorias_gasto.values()))
-        }
+        # Etiquetas
+        for i, (cob, col) in enumerate(zip(coberturas, colores_barra)):
+            if cob < 100:
+                ax.text(cob + 2, i, f'{cob:.1f}s', va='center', fontsize=6, fontweight='bold')
+            else:
+                ax.text(95, i, '100.0s', va='center', fontsize=6, fontweight='bold', color='white')
         
-        # Inversiones (si están activas)
-        if inversiones_data:
-            json_consolidado["inversiones"] = inversiones_data
+        ax.set_yticks(y_pos)
+        ax.set_yticklabels(nombres, fontsize=6)
+        ax.set_xlabel('Cobertura (semanas)', fontsize=7)
+        ax.set_title('Estado Financiero por Proyecto', fontsize=8, fontweight='bold', pad=4)
+        ax.set_xlim(0, 100)
         
-        return json_consolidado
+        # Leyenda
+        from matplotlib.patches import Patch
+        legend_elements = [
+            Patch(facecolor='#22c55e', label='Exc (≥20s)'),
+            Patch(facecolor='#f97316', label='Ale (≥5s)'),
+            Patch(facecolor='#ef4444', label='Crí (<5s)')
+        ]
+        ax.legend(handles=legend_elements, loc='upper right', fontsize=5, framealpha=0.9)
+        
+        ax.spines['top'].set_visible(False)
+        ax.spines['right'].set_visible(False)
+        ax.grid(True, axis='x', alpha=0.2, linestyle='--')
+        
+        plt.tight_layout(pad=0.2)
+        
+        buf = io.BytesIO()
+        plt.savefig(buf, format='png', dpi=120, bbox_inches='tight', facecolor='white')
+        buf.seek(0)
+        plt.close(fig)
+        
+        return buf
         
     except Exception as e:
-        st.error(f"Error generando JSON consolidado: {e}")
-        import traceback
-        st.error(traceback.format_exc())
-        return {}
+        print(f"Error generando semáforo: {e}")
+        return None
 
-
-# ============================================================================
-# GENERACIÓN DE REPORTE GERENCIAL
-# ============================================================================
 
 def generar_reporte_gerencial_pdf(datos: Dict) -> bytes:
     """
-    Genera el Reporte Gerencial en PDF (1 página)
+    Genera el Reporte Gerencial Multiproyecto en PDF (1 página)
     
-    Estructura según diseño de Andrés:
-    - Encabezado: Fecha, Estado de caja, Margen, Cobertura, etc.
-    - Cuerpo: Detalle por proyecto
-    - Pie: Alertas relevantes
-    - [FASE 2] Gráficos: Timeline, Semáforo, Comparación, Pie
+    Args:
+        datos: Diccionario con datos consolidados del multiproyecto
+        
+    Returns:
+        bytes: PDF generado
     """
-    
     try:
         from reportlab.lib.pagesizes import letter
         from reportlab.lib.units import inch
         from reportlab.lib import colors
         from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, Image
         from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-        from reportlab.lib.enums import TA_CENTER, TA_LEFT, TA_RIGHT
+        from reportlab.lib.enums import TA_CENTER
     except ImportError as e:
-        raise ImportError("reportlab no está instalado. Use el botón 'Instalar reportlab' primero.") from e
+        raise ImportError("reportlab no está instalado") from e
     
-    # Crear buffer de memoria para el PDF
     buffer = io.BytesIO()
     
-    # Crear documento PDF
     doc = SimpleDocTemplate(
         buffer,
         pagesize=letter,
@@ -825,7 +392,6 @@ def generar_reporte_gerencial_pdf(datos: Dict) -> bytes:
         bottomMargin=0.5*inch
     )
     
-    # Estilos
     styles = getSampleStyleSheet()
     
     style_title = ParagraphStyle(
@@ -846,33 +412,25 @@ def generar_reporte_gerencial_pdf(datos: Dict) -> bytes:
         alignment=TA_CENTER
     )
     
-    # Contenido del PDF
     elements = []
     
-    # =================================================================
     # ENCABEZADO
-    # =================================================================
-    
     estado = datos['estado_caja']
     timestamp = datos['timestamp']
     
     elements.append(Paragraph("REPORTE GERENCIAL MULTIPROYECTO", style_title))
-    elements.append(Paragraph(
-        f"Generado: {timestamp.strftime('%d/%m/%Y %H:%M')}",
-        style_subtitle
-    ))
+    elements.append(Paragraph(f"Generado: {timestamp.strftime('%d/%m/%Y %H:%M')}", style_subtitle))
     elements.append(Spacer(1, 0.2*inch))
     
-    # Tabla de métricas clave CON FORMATO COLOMBIANO
-    saldo_total = obtener_valor_seguro(estado, 'saldo_total', 0, float) if UTILS_DISPONIBLE else estado.get('saldo_total', 0)
-    margen_proteccion = obtener_valor_seguro(estado, 'margen_proteccion', 0, float) if UTILS_DISPONIBLE else estado.get('margen_proteccion', 0)
-    burn_rate = obtener_valor_seguro(estado, 'burn_rate', 0, float) if UTILS_DISPONIBLE else estado.get('burn_rate', 0)
-    excedente_invertible = obtener_valor_seguro(estado, 'excedente_invertible', 0, float) if UTILS_DISPONIBLE else estado.get('excedente_invertible', 0)
-    estado_general = obtener_valor_seguro(estado, 'estado_general', 'N/A', str) if UTILS_DISPONIBLE else estado.get('estado_general', 'N/A')
-    proyectos_activos = obtener_valor_seguro(estado, 'proyectos_activos', 0, int) if UTILS_DISPONIBLE else estado.get('proyectos_activos', 0)
-    total_proyectos = obtener_valor_seguro(estado, 'total_proyectos', 0, int) if UTILS_DISPONIBLE else estado.get('total_proyectos', 0)
+    # MÉTRICAS CLAVE
+    saldo_total = estado.get('saldo_total', 0)
+    margen_proteccion = estado.get('margen_proteccion', 0)
+    burn_rate = estado.get('burn_rate', 0)
+    excedente_invertible = estado.get('excedente_invertible', 0)
+    estado_general = estado.get('estado_general', 'N/A')
+    proyectos_activos = estado.get('proyectos_activos', 0)
+    total_proyectos = estado.get('total_proyectos', 0)
     
-    # Calcular cobertura
     if UTILS_DISPONIBLE:
         cobertura = calcular_semanas_cobertura(saldo_total, burn_rate)
     else:
@@ -895,7 +453,7 @@ def generar_reporte_gerencial_pdf(datos: Dict) -> bytes:
         ]
     ]
     
-    tabla_metricas = Table(metricas_data, colWidths=[1.8*inch, 1.8*inch, 1.8*inch, 1.8*inch])
+    tabla_metricas = Table(metricas_data, colWidths=[1.8*inch]*4)
     tabla_metricas.setStyle(TableStyle([
         ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#3b82f6')),
         ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
@@ -913,98 +471,79 @@ def generar_reporte_gerencial_pdf(datos: Dict) -> bytes:
         ('FONTSIZE', (0, 1), (-1, 3), 10),
         ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
         ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-        ('TOPPADDING', (0, 0), (-1, -1), 6),
-        ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
+        ('TOPPADDING', (0, 1), (-1, -1), 4),
+        ('BOTTOMPADDING', (0, 1), (-1, -1), 4),
     ]))
     
     elements.append(tabla_metricas)
-    elements.append(Spacer(1, 0.15*inch))  # Reducido de 0.3
+    elements.append(Spacer(1, 0.15*inch))
     
-    # =================================================================
-    # GRÁFICOS EJECUTIVOS - WATERFALL + PIE
-    # =================================================================
+    # GRÁFICOS
+    waterfall_buf = generar_grafico_waterfall(datos)
+    pie_buf = generar_grafico_pie_gastos(datos)
     
-    # Generar gráficos Waterfall y Pie
-    waterfall_img = generar_grafico_waterfall(datos)
-    pie_img = generar_grafico_pie_gastos(datos)
+    graficos_data = []
+    fila_graficos = []
     
-    # Layout 2×1: Waterfall y Pie lado a lado (ambos cuadrados)
-    if waterfall_img and pie_img:
-        graficos_data = [[
-            Image(waterfall_img, width=2.8*inch, height=2.8*inch),
-            Image(pie_img, width=2.8*inch, height=2.8*inch)
-        ]]
-        
-        tabla_graficos = Table(graficos_data, colWidths=[2.9*inch, 2.9*inch])
-        tabla_graficos.setStyle(TableStyle([
-            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
-            ('VALIGN', (0, 0), (-1, -1), 'TOP'),
-            ('LEFTPADDING', (0, 0), (-1, -1), 0),
-            ('RIGHTPADDING', (0, 0), (-1, -1), 0),
-        ]))
-        
-        elements.append(tabla_graficos)
+    if waterfall_buf:
+        waterfall_img = Image(waterfall_buf, width=2.8*inch, height=2.8*inch)
+        fila_graficos.append(waterfall_img)
+    else:
+        fila_graficos.append(Paragraph("Waterfall no disponible", styles['Normal']))
+    
+    if pie_buf:
+        pie_img = Image(pie_buf, width=2.8*inch, height=2.8*inch)
+        fila_graficos.append(pie_img)
+    else:
+        fila_graficos.append(Paragraph("Pie no disponible", styles['Normal']))
+    
+    graficos_data.append(fila_graficos)
+    
+    tabla_graficos = Table(graficos_data, colWidths=[3.6*inch, 3.6*inch])
+    tabla_graficos.setStyle(TableStyle([
+        ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+    ]))
+    
+    elements.append(tabla_graficos)
+    elements.append(Spacer(1, 0.15*inch))
+    
+    # GRÁFICO SEMÁFORO
+    semaforo_buf = generar_grafico_semaforo(datos)
+    if semaforo_buf:
+        semaforo_img = Image(semaforo_buf, width=5.5*inch, height=1.5*inch)
+        elements.append(semaforo_img)
         elements.append(Spacer(1, 0.1*inch))
-    elif waterfall_img:
-        # Solo Waterfall
-        img = Image(waterfall_img, width=2.8*inch, height=2.8*inch)
-        elements.append(img)
-        elements.append(Spacer(1, 0.1*inch))
-    elif pie_img:
-        # Solo Pie
-        img = Image(pie_img, width=2.8*inch, height=2.8*inch)
-        elements.append(img)
-        elements.append(Spacer(1, 0.1*inch))
     
-    # Semáforo - Estado por proyecto (ancho completo, horizontal)
-    semaforo_img = generar_grafico_semaforo(datos)
-    if semaforo_img:
-        num_proyectos = len(datos.get('proyectos', []))
-        altura_semaforo = min(1.8, num_proyectos * 0.3 + 0.3)  # Reducido
-        img = Image(semaforo_img, width=6.5*inch, height=altura_semaforo*inch)
-        elements.append(img)
-        elements.append(Spacer(1, 0.1*inch))  # Reducido
-    
-    # =================================================================
-    # DETALLE DE PROYECTOS CON MANEJO SEGURO DE DATOS
-    # =================================================================
-    
-    proyectos = datos.get('proyectos', [])
-    
+    # TABLA PROYECTOS
     elements.append(Paragraph("DETALLE POR PROYECTO", ParagraphStyle(
         'SectionHeader',
         parent=styles['Heading2'],
-        fontSize=10,  # Reducido de 14
-        textColor=colors.HexColor('#1e40af'),
-        spaceAfter=4  # Reducido de 8
+        fontSize=12,
+        textColor=colors.HexColor('#1e3a8a'),
+        spaceAfter=6
     )))
     
-    # Tabla de proyectos con campos optimizados
-    # CAMBIO v1.2.1: Eliminamos Estado (todos son ACTIVO), agregamos % Avance desde hitos
-    # Incluimos: Ejecutado, Saldo, Burn Rate, Cobertura, % Avance
-    proyectos_data = [['Proyecto', 'Ejecutado', 'Saldo', 'Burn Rate', 'Cobertura', '% Avance']]
+    proyectos_data = [
+        ['Proyecto', 'Ejecutado', 'Saldo', 'Burn Rate', 'Cobertura', '% Avance']
+    ]
     
-    for p in proyectos:
-        # Extraer valores de forma segura usando los nombres reales del consolidador
+    proyectos = datos.get('proyectos', [])
+    
+    for p in proyectos[:5]:
         if UTILS_DISPONIBLE:
-            nombre = obtener_valor_seguro(p, 'nombre', 'Sin nombre', str)
-            
-            # Campos que existen en el consolidador
+            nombre = obtener_valor_seguro(p, 'nombre', 'Sin nombre', str)[:30]
             ejecutado = obtener_valor_seguro(p, 'ejecutado', 0, float)
             saldo = obtener_valor_seguro(p, 'saldo_real_tesoreria', 0, float)
             burn_rate = obtener_valor_seguro(p, 'burn_rate_real', 0, float)
-            
-            # NUEVO v1.2.1: % Avance desde hitos (agregado en multiproy_fcl.py)
             avance_hitos = obtener_valor_seguro(p, 'avance_hitos_pct', 0, float)
             
-            # Calcular cobertura (semanas)
             if burn_rate > 0:
                 cobertura = saldo / burn_rate
                 cobertura_str = f"{cobertura:.1f}s"
             else:
                 cobertura_str = "∞"
         else:
-            # Versión sin utils
             nombre = p.get('nombre', 'Sin nombre')[:30]
             ejecutado = p.get('ejecutado', 0)
             saldo = p.get('saldo_real_tesoreria', 0)
@@ -1017,10 +556,10 @@ def generar_reporte_gerencial_pdf(datos: Dict) -> bytes:
                 cobertura_str = "∞"
         
         proyectos_data.append([
-            nombre[:28],  # Truncar nombres largos
+            nombre[:28],
             formatear_moneda(ejecutado),
             formatear_moneda(saldo),
-            formatear_moneda(burn_rate) + "/s",  # Por semana
+            formatear_moneda(burn_rate) + "/s",
             cobertura_str,
             f"{avance_hitos:.1f}%"
         ])
@@ -1031,78 +570,405 @@ def generar_reporte_gerencial_pdf(datos: Dict) -> bytes:
         ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
         ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
         ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-        ('FONTSIZE', (0, 0), (-1, 0), 8),  # Aumentado de 6 a 8
-        ('BOTTOMPADDING', (0, 0), (-1, 0), 3),  # Aumentado de 2 a 3
+        ('FONTSIZE', (0, 0), (-1, 0), 8),
+        ('BOTTOMPADDING', (0, 0), (-1, 0), 3),
         ('BACKGROUND', (0, 1), (-1, -1), colors.HexColor('#f0f9ff')),
         ('FONTNAME', (0, 1), (-1, -1), 'Helvetica'),
-        ('FONTSIZE', (0, 1), (-1, -1), 8),  # Aumentado de 6 a 8
+        ('FONTSIZE', (0, 1), (-1, -1), 8),
         ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
         ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-        ('TOPPADDING', (0, 0), (-1, -1), 2),  # Aumentado de 1.5 a 2
-        ('BOTTOMPADDING', (0, 0), (-1, -1), 2),  # Aumentado de 1.5 a 2
+        ('TOPPADDING', (0, 0), (-1, -1), 2),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 2),
     ]))
     
     elements.append(tabla_proyectos)
-    elements.append(Spacer(1, 0.1*inch))  # Reducido de 0.2
+    elements.append(Spacer(1, 0.1*inch))
     
-    # =================================================================
+    # FOOTER
+    footer_text = f"SICONE | {timestamp.strftime('%d/%m/%Y %H:%M')}"
+    elements.append(Paragraph(
+        footer_text,
+        ParagraphStyle('Footer', parent=styles['Normal'], fontSize=7,
+                      textColor=colors.gray, alignment=TA_CENTER)
+    ))
+    
+    doc.build(elements)
+    
+    buffer.seek(0)
+    return buffer.getvalue()
+
+
+# ============================================================================
+# REPORTE 2: INVERSIONES TEMPORALES
+# ============================================================================
+
+def generar_gauge_liquidez(liquidez_post: float, margen_total: float, ratio: float, estado: str) -> Optional[bytes]:
+    """
+    Genera gráfico tipo gauge para análisis de liquidez
+    (Usado en reporte inversiones)
+    """
+    try:
+        fig, ax = plt.subplots(figsize=(2.5, 1.8))
+        
+        colores = {
+            'ESTABLE': '#22c55e',
+            'PRECAUCIÓN': '#f97316',
+            'CRÍTICO': '#ef4444'
+        }
+        color = colores.get(estado, '#9ca3af')
+        
+        theta = 180 * min(ratio, 2.0) / 2.0
+        
+        wedge_bg = mpatches.Wedge((0, 0), 1, 0, 180, facecolor='#e5e7eb',
+                                 edgecolor='white', linewidth=2)
+        ax.add_patch(wedge_bg)
+        
+        wedge_prog = mpatches.Wedge((0, 0), 1, 0, theta, facecolor=color,
+                                   edgecolor='white', linewidth=2)
+        ax.add_patch(wedge_prog)
+        
+        circle = mpatches.Circle((0, 0), 0.6, facecolor='white', edgecolor='white')
+        ax.add_patch(circle)
+        
+        ax.text(0, -0.05, f"{ratio:.2f}x", ha='center', va='center',
+               fontsize=12, fontweight='bold', color=color)
+        
+        ax.text(0, -0.35, estado, ha='center', va='center',
+               fontsize=7, fontweight='bold', color=color)
+        
+        ax.set_xlim(-1.2, 1.2)
+        ax.set_ylim(-0.5, 1.2)
+        ax.set_aspect('equal')
+        ax.axis('off')
+        
+        plt.tight_layout(pad=0.1)
+        
+        buf = io.BytesIO()
+        plt.savefig(buf, format='png', dpi=120, bbox_inches='tight', facecolor='white')
+        buf.seek(0)
+        plt.close(fig)
+        
+        return buf
+        
+    except Exception as e:
+        print(f"Error generando gauge: {e}")
+        return None
+
+
+def generar_pie_portafolio(inversiones: List[Dict]) -> Optional[bytes]:
+    """
+    Genera pie chart de composición del portafolio
+    (Usado en reporte inversiones)
+    """
+    try:
+        por_instrumento = {}
+        for inv in inversiones:
+            instrumento = inv.get('instrumento', 'Otro')
+            monto = inv.get('monto', 0)
+            por_instrumento[instrumento] = por_instrumento.get(instrumento, 0) + monto
+        
+        if not por_instrumento:
+            return None
+        
+        nombres = list(por_instrumento.keys())
+        valores = list(por_instrumento.values())
+        colores = ['#3b82f6', '#22c55e', '#f97316', '#8b5cf6'][:len(nombres)]
+        
+        fig, ax = plt.subplots(figsize=(2.5, 2.5))
+        
+        def formato_label(pct):
+            return f'{pct:.1f}%' if pct > 3 else ''
+        
+        wedges, texts, autotexts = ax.pie(
+            valores, labels=None, autopct=formato_label, startangle=90,
+            colors=colores,
+            textprops={'fontsize': 6, 'weight': 'bold', 'color': 'white'},
+            wedgeprops={'edgecolor': 'white', 'linewidth': 1.5}
+        )
+        
+        ax.set_title('Composición Portafolio', fontsize=8, fontweight='bold', pad=4)
+        ax.legend(nombres, loc='center left', bbox_to_anchor=(0.85, 0.5),
+                 fontsize=5, framealpha=0.95)
+        
+        plt.tight_layout(pad=0.2)
+        
+        buf = io.BytesIO()
+        plt.savefig(buf, format='png', dpi=120, bbox_inches='tight', facecolor='white')
+        buf.seek(0)
+        plt.close(fig)
+        
+        return buf
+        
+    except Exception as e:
+        print(f"Error generando pie portafolio: {e}")
+        return None
+
+
+def generar_timeline_vencimientos(inversiones: List[Dict], fecha_hoy: date) -> Optional[bytes]:
+    """
+    Genera timeline tipo Gantt de vencimientos
+    (Usado en reporte inversiones)
+    """
+    try:
+        if not inversiones:
+            return None
+        
+        fig, ax = plt.subplots(figsize=(5.5, 1.8))
+        
+        inversiones_sort = sorted(inversiones, key=lambda x: x.get('fecha_vencimiento', fecha_hoy))
+        
+        colores = ['#3b82f6', '#60a5fa', '#93c5fd']
+        
+        for idx, inv in enumerate(inversiones_sort[:3]):
+            nombre = inv.get('nombre', f'Inversión {idx+1}')
+            fecha_venc = inv.get('fecha_vencimiento', fecha_hoy)
+            dias = (fecha_venc - fecha_hoy).days
+            
+            ax.barh(idx, dias, left=0, height=0.6, color=colores[idx % len(colores)],
+                   edgecolor='white', linewidth=1.5)
+            
+            ax.text(dias / 2, idx, nombre, ha='center', va='center',
+                   fontsize=6, color='white', fontweight='bold')
+        
+        ax.set_yticks(range(len(inversiones_sort[:3])))
+        ax.set_yticklabels([])
+        ax.set_xlabel('Días hasta vencimiento', fontsize=7)
+        ax.set_title('Timeline de Vencimientos', fontsize=8, fontweight='bold', pad=4)
+        ax.grid(True, axis='x', alpha=0.2, linestyle='--')
+        ax.spines['top'].set_visible(False)
+        ax.spines['right'].set_visible(False)
+        ax.spines['left'].set_visible(False)
+        
+        plt.tight_layout(pad=0.2)
+        
+        buf = io.BytesIO()
+        plt.savefig(buf, format='png', dpi=120, bbox_inches='tight', facecolor='white')
+        buf.seek(0)
+        plt.close(fig)
+        
+        return buf
+        
+    except Exception as e:
+        print(f"Error generando timeline: {e}")
+        return None
+
+
+def generar_reporte_inversiones_pdf(datos: Dict) -> bytes:
+    """
+    Genera reporte PDF de inversiones temporales (1 página)
+    
+    Args:
+        datos: Diccionario con información de inversiones
+        
+    Returns:
+        bytes: PDF generado
+    """
+    try:
+        from reportlab.lib.pagesizes import letter
+        from reportlab.lib.units import inch
+        from reportlab.lib import colors
+        from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, Image
+        from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+        from reportlab.lib.enums import TA_CENTER
+    except ImportError as e:
+        raise ImportError("reportlab no está instalado") from e
+    
+    buffer = io.BytesIO()
+    
+    doc = SimpleDocTemplate(
+        buffer,
+        pagesize=letter,
+        rightMargin=0.5*inch,
+        leftMargin=0.5*inch,
+        topMargin=0.5*inch,
+        bottomMargin=0.5*inch
+    )
+    
+    styles = getSampleStyleSheet()
+    
+    style_title = ParagraphStyle(
+        'CustomTitle',
+        parent=styles['Heading1'],
+        fontSize=16,
+        textColor=colors.HexColor('#1e3a8a'),
+        spaceAfter=8,
+        alignment=TA_CENTER
+    )
+    
+    style_subtitle = ParagraphStyle(
+        'CustomSubtitle',
+        parent=styles['Normal'],
+        fontSize=9,
+        textColor=colors.gray,
+        spaceAfter=6,
+        alignment=TA_CENTER
+    )
+    
+    style_section = ParagraphStyle(
+        'SectionHeader',
+        parent=styles['Heading2'],
+        fontSize=11,
+        textColor=colors.HexColor('#1e3a8a'),
+        spaceAfter=6,
+        spaceBefore=8
+    )
+    
+    elements = []
+    
+    # ENCABEZADO
+    elements.append(Paragraph("SICONE - Inversiones Temporales", style_title))
+    elements.append(Paragraph(f"Generado: {datetime.now().strftime('%d/%m/%Y %H:%M')}", style_subtitle))
+    elements.append(Spacer(1, 0.15*inch))
+    
+    # RESUMEN EJECUTIVO
+    resumen = datos.get('resumen', {})
+    resumen_data = [
+        ['Total Invertido', 'Retorno Neto Total', 'Descuentos Totales', 'Plazo Promedio'],
+        [
+            formatear_moneda(resumen.get('total_invertido', 0)),
+            formatear_moneda(resumen.get('retorno_neto_total', 0)),
+            formatear_moneda(resumen.get('descuentos_totales', 0)),
+            f"{resumen.get('plazo_promedio', 0):.0f} días"
+        ]
+    ]
+    
+    tabla_resumen = Table(resumen_data, colWidths=[1.8*inch]*4)
+    tabla_resumen.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#3b82f6')),
+        ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+        ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+        ('FONTSIZE', (0, 0), (-1, 0), 8),
+        ('BACKGROUND', (0, 1), (-1, 1), colors.HexColor('#e0f2fe')),
+        ('FONTNAME', (0, 1), (-1, 1), 'Helvetica'),
+        ('FONTSIZE', (0, 1), (-1, 1), 9),
+        ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
+        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+        ('TOPPADDING', (0, 0), (-1, -1), 3),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 3),
+    ]))
+    
+    elements.append(tabla_resumen)
+    elements.append(Spacer(1, 0.15*inch))
+    
+    # GRÁFICOS
+    liquidez = datos.get('liquidez', {})
+    inversiones = datos.get('inversiones', [])
+    
+    gauge_buf = generar_gauge_liquidez(
+        liquidez.get('liquidez_post', 0),
+        liquidez.get('margen_total', 0),
+        liquidez.get('ratio', 0),
+        liquidez.get('estado', 'N/A')
+    )
+    
+    pie_buf = generar_pie_portafolio(inversiones)
+    
+    graficos_data = []
+    fila_graficos = []
+    
+    if gauge_buf:
+        gauge_img = Image(gauge_buf, width=2.5*inch, height=1.8*inch)
+        fila_graficos.append(gauge_img)
+    else:
+        fila_graficos.append(Paragraph("Gauge no disponible", styles['Normal']))
+    
+    if pie_buf:
+        pie_img = Image(pie_buf, width=2.5*inch, height=2.5*inch)
+        fila_graficos.append(pie_img)
+    else:
+        fila_graficos.append(Paragraph("Pie no disponible", styles['Normal']))
+    
+    graficos_data.append(fila_graficos)
+    
+    tabla_graficos = Table(graficos_data, colWidths=[3.6*inch, 3.6*inch])
+    tabla_graficos.setStyle(TableStyle([
+        ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+    ]))
+    
+    elements.append(tabla_graficos)
+    elements.append(Spacer(1, 0.1*inch))
+    
+    # TABLA DE INVERSIONES
+    elements.append(Paragraph("Detalle de Inversiones", style_section))
+    
+    inversiones_data = [
+        ['Instrumento', 'Monto', 'Plazo', 'Retorno Neto', 'Vencimiento']
+    ]
+    
+    for inv in inversiones[:5]:
+        inversiones_data.append([
+            inv.get('instrumento', 'N/A'),
+            formatear_moneda(inv.get('monto', 0)),
+            f"{inv.get('plazo_dias', 0)}d",
+            formatear_moneda(inv.get('retorno_neto', 0)),
+            inv.get('fecha_vencimiento', date.today()).strftime('%d/%m/%Y')
+        ])
+    
+    tabla_inversiones = Table(inversiones_data, colWidths=[1.5*inch, 1.3*inch, 0.9*inch, 1.3*inch, 1.3*inch])
+    tabla_inversiones.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#3b82f6')),
+        ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+        ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+        ('FONTSIZE', (0, 0), (-1, 0), 8),
+        ('BACKGROUND', (0, 1), (-1, -1), colors.HexColor('#f0f9ff')),
+        ('FONTNAME', (0, 1), (-1, -1), 'Helvetica'),
+        ('FONTSIZE', (0, 1), (-1, -1), 8),
+        ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
+        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+        ('TOPPADDING', (0, 0), (-1, -1), 2),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 2),
+    ]))
+    
+    elements.append(tabla_inversiones)
+    elements.append(Spacer(1, 0.1*inch))
+    
+    # TIMELINE
+    timeline_buf = generar_timeline_vencimientos(inversiones, date.today())
+    
+    if timeline_buf:
+        timeline_img = Image(timeline_buf, width=7*inch, height=1.8*inch)
+        elements.append(timeline_img)
+        elements.append(Spacer(1, 0.1*inch))
+    
     # ALERTAS
-    # =================================================================
-    
     alertas = datos.get('alertas', [])
     
     if alertas:
-        elements.append(Paragraph("ALERTAS Y RECOMENDACIONES", ParagraphStyle(
-            'AlertHeader',
-            parent=styles['Heading2'],
-            fontSize=12,
-            textColor=colors.HexColor('#dc2626'),
-            spaceAfter=6
-        )))
+        elements.append(Paragraph("Alertas", style_section))
         
-        for alerta in alertas[:5]:
+        for alerta in alertas[:3]:
             elements.append(Paragraph(
                 f"• {alerta}",
-                ParagraphStyle('AlertText', parent=styles['Normal'], fontSize=9, leftIndent=10)
+                ParagraphStyle('AlertText', parent=styles['Normal'],
+                             fontSize=8, leftIndent=10, spaceAfter=3)
             ))
     
-    # =================================================================
     # FOOTER
-    # =================================================================
-    
-    elements.append(Spacer(1, 0.2*inch))
+    elements.append(Spacer(1, 0.1*inch))
+    footer_text = f"SICONE | {datetime.now().strftime('%d/%m/%Y %H:%M')}"
     elements.append(Paragraph(
-        f"_____<br/><font size='6'>SICONE | {timestamp.strftime('%d/%m/%Y %H:%M')}</font>",
-        style_subtitle
+        footer_text,
+        ParagraphStyle('Footer', parent=styles['Normal'], fontSize=7,
+                      textColor=colors.gray, alignment=TA_CENTER)
     ))
     
-    # Construir PDF
     doc.build(elements)
     
-    # Obtener bytes del PDF
-    pdf_bytes = buffer.getvalue()
-    buffer.close()
-    
-    return pdf_bytes
+    buffer.seek(0)
+    return buffer.getvalue()
 
 
 # ============================================================================
-# INTERFAZ PRINCIPAL
-# ============================================================================
-
-# ============================================================================
-# FUNCIONES AUXILIARES PARA CARGA DE JSON
+# FUNCIÓN AUXILIAR PARA RECONSTRUIR DATAFRAME DESDE JSON
 # ============================================================================
 
 def reconstruir_dataframe_desde_json(json_data: Dict) -> Optional[pd.DataFrame]:
     """
     Reconstruye DataFrame consolidado desde JSON para generar gráficos
-    
-    Args:
-        json_data: Datos exportados desde multiproyecto v2.1.4+
-        
-    Returns:
-        DataFrame o None si no hay datos suficientes
+    (Usado internamente por reporte multiproyecto)
     """
     try:
         df_data = json_data.get('df_consolidado')
@@ -1110,7 +976,6 @@ def reconstruir_dataframe_desde_json(json_data: Dict) -> Optional[pd.DataFrame]:
         if not df_data or not df_data.get('semanas'):
             return None
         
-        # Reconstruir DataFrame desde listas
         df = pd.DataFrame({
             'semana_consolidada': df_data.get('semanas', []),
             'fecha': pd.to_datetime(df_data.get('fechas', [])),
@@ -1124,358 +989,19 @@ def reconstruir_dataframe_desde_json(json_data: Dict) -> Optional[pd.DataFrame]:
         return df
         
     except Exception as e:
-        st.warning(f"⚠️ No se pudo reconstruir DataFrame para gráficos: {str(e)}")
+        if st:
+            st.warning(f"⚠️ No se pudo reconstruir DataFrame: {str(e)}")
         return None
 
 
 # ============================================================================
-# FUNCIÓN PRINCIPAL
+# MAIN PARA TESTING
 # ============================================================================
 
-def main():
-    """Función principal del módulo de reportes"""
-    
-    st.markdown("# 📊 Reportes Ejecutivos")
-    st.caption("Genere reportes profesionales con los datos consolidados")
-    
-    # Verificar reportlab
-    if not verificar_reportlab():
-        st.warning("⚠️ La biblioteca 'reportlab' no está instalada")
-        st.info("📦 **reportlab** es necesaria para generar reportes PDF de alta calidad")
-        
-        st.markdown("---")
-        
-        col_inst1, col_inst2 = st.columns(2)
-        
-        with col_inst1:
-            st.markdown("### 🔧 Instalación Automática")
-            st.caption("El sistema detectará su entorno y ajustará la instalación automáticamente")
-            
-            entorno = detectar_entorno()
-            with st.expander("ℹ️ Vista previa del entorno"):
-                st.write(f"**SO:** {entorno['sistema']}")
-                st.write(f"**Python:** {entorno['python_version']}")
-                st.write(f"**Entorno Virtual:** {'Sí ✅' if entorno['en_venv'] else 'No ❌'}")
-                
-                if not entorno['en_venv']:
-                    st.warning("⚠️ No está usando entorno virtual. Se recomienda crear uno para evitar conflictos.")
-            
-            if st.button("🚀 Instalar reportlab ahora", type="primary", use_container_width=True):
-                if instalar_reportlab():
-                    st.balloons()
-                    st.success("✅ ¡Instalación exitosa!")
-                    
-                    if st.button("🔄 Recargar módulo", type="primary"):
-                        st.rerun()
-                else:
-                    st.warning("⚠️ La instalación automática falló. Por favor, use el método manual.")
-        
-        with col_inst2:
-            st.markdown("### 📝 Instalación Manual")
-            st.caption("Instrucciones específicas para su sistema")
-            
-            entorno = detectar_entorno()
-            instrucciones = obtener_instrucciones_manuales(entorno)
-            
-            st.code(instrucciones, language="bash")
-            
-            if not entorno['en_venv']:
-                st.info("💡 **Recomendación:** Crear un entorno virtual evita conflictos y problemas de permisos")
-            
-            st.markdown("")
-            if st.button("🔄 Verificar si ya está instalado", use_container_width=True):
-                if verificar_reportlab():
-                    st.success("✅ ¡reportlab está instalado! Recargando módulo...")
-                    import time
-                    time.sleep(1)
-                    st.rerun()
-                else:
-                    st.error("❌ Aún no está instalado. Complete la instalación manual primero.")
-        
-        st.markdown("---")
-        
-        with st.expander("🔍 Información de Diagnóstico Completa"):
-            st.markdown("#### Entorno Python")
-            st.write("**Python executable:**", sys.executable)
-            st.write("**Python version:**", sys.version)
-            st.write("**Sistema Operativo:**", f"{platform.system()} {platform.release()}")
-            st.write("**Arquitectura:**", platform.machine())
-            
-            entorno = detectar_entorno()
-            st.write("**En entorno virtual:**", "Sí" if entorno['en_venv'] else "No")
-            st.write("**Requiere --break-system-packages:**", "Sí" if entorno['necesita_break_system'] else "No")
-            
-            st.markdown("#### Pip")
-            try:
-                result = subprocess.run(
-                    [sys.executable, "-m", "pip", "--version"], 
-                    capture_output=True, 
-                    text=True, 
-                    timeout=5
-                )
-                st.code(result.stdout, language="bash")
-            except Exception as e:
-                st.error(f"❌ Error al ejecutar pip: {e}")
-            
-            st.markdown("#### Paquetes instalados (relacionados con PDF)")
-            try:
-                result = subprocess.run(
-                    [sys.executable, "-m", "pip", "list"], 
-                    capture_output=True, 
-                    text=True, 
-                    timeout=10
-                )
-                lineas = result.stdout.split('\n')
-                relevantes = [l for l in lineas if any(x in l.lower() 
-                             for x in ['report', 'pdf', 'pillow', 'image'])]
-                if relevantes:
-                    st.code('\n'.join(relevantes), language="text")
-                else:
-                    st.caption("No se encontraron paquetes relacionados con PDF")
-            except Exception as e:
-                st.error(f"❌ Error al listar paquetes: {e}")
-        
-        st.stop()
-    
-    # Si llegamos aquí, reportlab está disponible
-    st.success("✅ reportlab está disponible")
-    
-    # ================================================================
-    # DIAGNÓSTICO DE DATOS (Para debugging)
-    # ================================================================
-    
-    if 'datos_reportes' in st.session_state:
-        with st.expander("🔍 DEBUG: Estructura de datos (para desarrollo)"):
-            datos = st.session_state.datos_reportes
-            
-            st.markdown("#### Claves principales:")
-            st.write(list(datos.keys()))
-            
-            st.markdown("#### Estado de caja:")
-            st.json(datos.get('estado_caja', {}))
-            
-            if datos.get('proyectos'):
-                st.markdown("#### Primer proyecto (estructura completa):")
-                st.json(datos['proyectos'][0])
-                
-                st.markdown("#### Claves disponibles en proyectos:")
-                if datos['proyectos']:
-                    claves = set()
-                    for p in datos['proyectos']:
-                        claves.update(p.keys())
-                    st.write(sorted(list(claves)))
-    
-    # ================================================================
-    # VERIFICAR/CARGAR DATOS - MODO DUAL
-    # ================================================================
-    
-    if 'datos_reportes' not in st.session_state and 'json_consolidado' not in st.session_state:
-        st.warning("⚠️ No hay datos disponibles para generar reportes")
-        
-        st.markdown("### 📁 Opciones para Cargar Datos:")
-        
-        col_opt1, col_opt2 = st.columns(2)
-        
-        with col_opt1:
-            st.markdown("#### Opción 1: Desde Multiproyecto")
-            st.info("📋 **Pasos:**\n"
-                    "1. Vaya al módulo **Análisis Multiproyecto**\n"
-                    "2. Cargue y consolide sus proyectos\n"
-                    "3. Haga clic en **'Ver Reportes Ejecutivos'**")
-            
-            if st.button("🏢 Ir a Análisis Multiproyecto", use_container_width=True):
-                st.session_state.modulo_actual = 'multiproyecto'
-                st.rerun()
-        
-        with col_opt2:
-            st.markdown("#### Opción 2: Cargar JSON")
-            st.info("📦 **Pasos:**\n"
-                    "1. Exporte JSON desde Multiproyecto\n"
-                    "2. Suba el archivo aquí\n"
-                    "3. Genere reportes")
-            
-            archivo_json = st.file_uploader(
-                "Sube JSON consolidado",
-                type=['json'],
-                help="Archivo generado con 'Exportar JSON' en Multiproyecto"
-            )
-            
-            if archivo_json:
-                try:
-                    contenido = archivo_json.read()
-                    json_data = json.loads(contenido.decode('utf-8'))
-                    
-                    # Reconstruir DataFrame desde JSON
-                    df_reconstruido = reconstruir_dataframe_desde_json(json_data)
-                    
-                    # Convertir JSON a formato datos_reportes
-                    datos_convertidos = {
-                        'timestamp': datetime.now(),
-                        'estado_caja': json_data.get('estado_caja', {}),
-                        'proyectos': json_data.get('proyectos', []),
-                        'df_consolidado': df_reconstruido,  # DataFrame reconstruido ✅
-                        'gastos_fijos_mensuales': json_data.get('metadata', {}).get('gastos_fijos_mensuales', 50000000),
-                        'semanas_futuro': json_data.get('metadata', {}).get('semanas_futuro', 8),
-                        'semana_actual': json_data.get('metadata', {}).get('semana_actual', 0)
-                    }
-                    
-                    st.session_state.datos_reportes = datos_convertidos
-                    st.session_state.json_consolidado = json_data
-                    st.success("✅ JSON cargado exitosamente")
-                    if df_reconstruido is not None:
-                        st.success("✅ DataFrame reconstruido - Gráficos disponibles")
-                    else:
-                        st.warning("⚠️ DataFrame no disponible - Gráficos limitados")
-                    st.rerun()
-                    
-                except Exception as e:
-                    st.error(f"❌ Error cargando JSON: {str(e)}")
-                    st.caption("Verifique que el archivo sea un JSON válido exportado desde Multiproyecto v2.1.4+")
-        
-        return
-    
-    # Si llegamos aquí, hay datos (de session_state o JSON cargado)
-    # Cargar datos desde la fuente disponible
-    if 'datos_reportes' in st.session_state:
-        datos = st.session_state.datos_reportes
-        st.success(f"✅ Datos cargados desde análisis multiproyecto")
-    elif 'json_consolidado' in st.session_state:
-        # Convertir JSON a formato datos_reportes si solo tenemos json_consolidado
-        json_data = st.session_state.json_consolidado
-        
-        # Reconstruir DataFrame
-        df_reconstruido = reconstruir_dataframe_desde_json(json_data)
-        
-        datos = {
-            'timestamp': datetime.now(),
-            'estado_caja': json_data.get('estado_caja', {}),
-            'proyectos': json_data.get('proyectos', []),
-            'df_consolidado': df_reconstruido,  # DataFrame reconstruido ✅
-            'gastos_fijos_mensuales': json_data.get('metadata', {}).get('gastos_fijos_mensuales', 50000000),
-            'semanas_futuro': json_data.get('metadata', {}).get('semanas_futuro', 8),
-            'semana_actual': json_data.get('metadata', {}).get('semana_actual', 0)
-        }
-        st.session_state.datos_reportes = datos
-        st.success(f"✅ Datos cargados desde JSON")
-        if df_reconstruido is not None:
-            st.caption("📊 Gráficos Waterfall + Pie disponibles")
-        else:
-            st.warning("⚠️ Gráficos limitados (JSON antiguo)")
-    else:
-        st.error("Error inesperado: No hay datos disponibles")
-        return
-    
-    # Mostrar información de los datos
-    st.success(f"✅ Datos cargados correctamente")
-    
-    col_info1, col_info2, col_info3 = st.columns(3)
-    
-    with col_info1:
-        edad = (datetime.now() - datos['timestamp']).total_seconds() / 60
-        if edad < 1:
-            st.metric("Actualización", "Reciente", delta="hace < 1 min")
-        else:
-            st.metric("Actualización", f"Hace {edad:.0f} min")
-    
-    with col_info2:
-        st.metric("Proyectos", len(datos['proyectos']))
-    
-    with col_info3:
-        estado = datos['estado_caja']['estado_general']
-        color_map = {'EXCEDENTE': '🟢', 'AJUSTADO': '🟡', 'CRÍTICO': '🔴', 'ESTABLE': '🔵'}
-        st.metric("Estado", f"{color_map.get(estado, '⚪')} {estado}")
-    
-    st.markdown("---")
-    
-    # ================================================================
-    # SELECTOR DE TIPO DE REPORTE
-    # ================================================================
-    
-    st.markdown("### 📄 Seleccione el tipo de reporte")
-    
-    col_tipo1, col_tipo2 = st.columns(2)
-    
-    with col_tipo1:
-        st.markdown("""
-        <div style="padding: 20px; border: 2px solid #3b82f6; border-radius: 10px; background-color: #eff6ff;">
-            <h4 style="color: #1e40af;">📊 Reporte Gerencial</h4>
-            <p style="color: #64748b;">Dashboard ejecutivo con métricas clave, estado de proyectos y alertas</p>
-            <ul style="color: #64748b; font-size: 0.9em;">
-                <li>Estado de caja consolidado</li>
-                <li>Análisis de cobertura</li>
-                <li>Detalle por proyecto</li>
-                <li>Alertas y recomendaciones</li>
-            </ul>
-            <p style="color: #9ca3af; font-size: 0.85em; margin-top: 10px;">
-                <strong>Formato:</strong> Cifras en millones (M) y miles de millones (MM) - Estándar colombiano
-            </p>
-        </div>
-        """, unsafe_allow_html=True)
-        
-        if st.button("🎯 Generar Reporte Gerencial", use_container_width=True, type="primary"):
-            with st.spinner("Generando reporte..."):
-                try:
-                    pdf_bytes = generar_reporte_gerencial_pdf(datos)
-                    
-                    st.success("✅ Reporte generado exitosamente")
-                    
-                    # Botón de descarga
-                    timestamp = generar_timestamp() if UTILS_DISPONIBLE else datetime.now().strftime("%Y%m%d_%H%M")
-                    st.download_button(
-                        label="⬇️ Descargar PDF",
-                        data=pdf_bytes,
-                        file_name=f"Reporte_Gerencial_{timestamp}.pdf",
-                        mime="application/pdf",
-                        use_container_width=True
-                    )
-                    
-                except ImportError as e:
-                    st.error("❌ Error: reportlab no está instalado correctamente")
-                    st.info("Reinicie la aplicación y vuelva a intentar.")
-                except Exception as e:
-                    st.error(f"❌ Error al generar reporte: {str(e)}")
-                    with st.expander("🔍 Ver detalles del error"):
-                        st.exception(e)
-    
-    with col_tipo2:
-        st.markdown("""
-        <div style="padding: 20px; border: 2px solid #10b981; border-radius: 10px; background-color: #f0fdf4;">
-            <h4 style="color: #065f46;">💰 Reporte de Inversiones</h4>
-            <p style="color: #64748b;">Análisis detallado de instrumentos financieros y rentabilidad</p>
-            <ul style="color: #64748b; font-size: 0.9em;">
-                <li>Monto total invertido</li>
-                <li>Retorno neto por instrumento</li>
-                <li>Gantt de vencimientos</li>
-                <li>Costos y comisiones</li>
-            </ul>
-        </div>
-        """, unsafe_allow_html=True)
-        
-        if st.button("💎 Generar Reporte de Inversiones", use_container_width=True):
-            st.info("🚧 Reporte de Inversiones disponible en Fase 2")
-            st.caption("Este reporte estará disponible próximamente")
-    
-    st.markdown("---")
-    
-    # Vista previa de datos
-    with st.expander("🔍 Vista Previa de Datos"):
-        st.markdown("#### Estado de Caja")
-        st.json(datos['estado_caja'])
-        
-        st.markdown("#### Proyectos")
-        df_proyectos = pd.DataFrame([
-            {
-                'Nombre': p.get('nombre', 'Sin nombre'),
-                'Ejecutado': p.get('ejecutado', 0),
-                'Saldo': p.get('saldo_real_tesoreria', 0),
-                'Burn Rate': p.get('burn_rate_real', 0),
-                '% Avance': p.get('avance_hitos_pct', 0),
-                'Hitos': f"{p.get('hitos_completados', 0)}/{p.get('hitos_totales', 0)}"
-            }
-            for p in datos['proyectos']
-        ])
-        st.dataframe(df_proyectos, use_container_width=True)
-
-
 if __name__ == "__main__":
-    main()
+    print("SICONE - Módulo de Reportes Ejecutivos Unificado v3.0.0")
+    print("=" * 60)
+    print("\nFUNCIONES DISPONIBLES:")
+    print("1. generar_reporte_gerencial_pdf(datos)")
+    print("2. generar_reporte_inversiones_pdf(datos)")
+    print("\nMódulo listo para importar")
