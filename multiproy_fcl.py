@@ -2,23 +2,21 @@
 SICONE - Módulo de Análisis Multiproyecto FCL
 Consolidación y análisis de flujo de caja para múltiples proyectos
 
-Versión: 2.1.3 FINAL
+Versión: 2.1.4 FINAL
 Fecha: 29 Diciembre 2024
 Autor: AI-MindNovation
+
+VERSIÓN 2.1.4 (29-Dic-2024) - JSON COMPLETO PARA REPORTES:
+- 📦 FIX CRÍTICO: Export JSON ahora incluye TODOS los datos necesarios
+  - DataFrame consolidado (para Waterfall)
+  - Proyectos con data.proyeccion_semanal completa (para Pie Chart)
+  - Todas las columnas: saldo, ingresos, egresos, burn_rate
+  - Categorías de gasto: Mano_Obra, Materiales, Admin, etc.
+  - Reportes ahora generan Waterfall + Pie Chart desde JSON ✅
 
 VERSIÓN 2.1.3 (29-Dic-2024) - EXPORTAR JSON SIMPLE:
 - 📦 NUEVO: Botón de exportar JSON consolidado
   - Versión simple sin dependencias problemáticas
-  - Genera archivo versionado + latest
-  - Botón de descarga directa
-  - Guarda metadata del análisis actual
-  - Independiente de reportes_ejecutivos.py
-
-VERSIÓN 2.1.2 (29-Dic-2024) - MARGEN DINÁMICO:
-- 🔧 FIX: Slider de semanas_margen ahora es DINÁMICO
-  - Cambiar slider → reconsolida automáticamente
-  - Margen se actualiza en tiempo real
-  - Propagación a TODOS los módulos
 
 MEJORA IMPORTANTE v1.5.0 (28-Dic-2024):
 - 🎯 CAMBIO: % de avance ahora es PONDERADO POR MONTO (no solo hitos cumplidos)
@@ -877,7 +875,7 @@ class ConsolidadorMultiproyecto:
 # ============================================================================
 
 def render_exportar_json_simple(consolidador: ConsolidadorMultiproyecto, estado: Dict):
-    """Renderiza botón para exportar JSON consolidado (versión simple sin dependencias)"""
+    """Renderiza botón para exportar JSON consolidado CON TODOS LOS DATOS para reportes"""
     st.markdown("### 📦 Exportar Datos Consolidados")
     st.caption("Guarda el estado actual del análisis en formato JSON para cargar en reportes")
     
@@ -888,15 +886,59 @@ def render_exportar_json_simple(consolidador: ConsolidadorMultiproyecto, estado:
             import json
             from pathlib import Path
             
-            # Preparar datos para export
+            # =================================================================
+            # PREPARAR DATOS COMPLETOS PARA REPORTES
+            # =================================================================
+            
+            # 1. DATOS DEL DATAFRAME (para Waterfall)
+            df_data = None
+            if consolidador.df_consolidado is not None and not consolidador.df_consolidado.empty:
+                df = consolidador.df_consolidado
+                semana_actual = estado['semana']
+                
+                # Filtrar últimas 6 semanas históricas + futuras
+                df_export = df[
+                    (df['semana_consolidada'] >= semana_actual - 5) &
+                    (df['semana_consolidada'] <= semana_actual + 8)
+                ].copy()
+                
+                # Convertir a formato JSON-serializable
+                df_data = {
+                    "semanas": df_export['semana_consolidada'].tolist(),
+                    "fechas": df_export['fecha'].astype(str).tolist() if 'fecha' in df_export.columns else [],
+                    "saldo_consolidado": df_export['saldo_consolidado'].tolist() if 'saldo_consolidado' in df_export.columns else [],
+                    "ingresos_proy_total": df_export['ingresos_proy_total'].tolist() if 'ingresos_proy_total' in df_export.columns else [],
+                    "egresos_proy_total": df_export['egresos_proy_total'].tolist() if 'egresos_proy_total' in df_export.columns else [],
+                    "es_historica": df_export['es_historica'].tolist() if 'es_historica' in df_export.columns else [],
+                    "burn_rate": df_export['burn_rate'].tolist() if 'burn_rate' in df_export.columns else []
+                }
+            
+            # 2. PROYECTOS COMPLETOS (para Pie Chart y Tabla)
+            proyectos_completos = []
+            for p in consolidador.proyectos:
+                proyecto_data = {
+                    "nombre": p['nombre'],
+                    "estado": p['estado'],
+                    "saldo_actual": float(p.get('saldo_actual', 0)),
+                    "burn_rate_semanal": float(p.get('burn_rate_semanal', 0)),
+                    "monto_contrato": float(p.get('monto_contrato', 0)),
+                    "ejecutado": float(p.get('ejecutado', 0)),
+                    "porcentaje_avance": float(p.get('porcentaje_avance', 0)),
+                    # DATOS COMPLETOS para gráficos
+                    "data": p.get('data', {})  # Incluye proyeccion_semanal completa
+                }
+                proyectos_completos.append(proyecto_data)
+            
+            # 3. PREPARAR JSON COMPLETO
             json_data = {
                 "metadata": {
-                    "version": "2.1.3",
+                    "version": "2.1.4",
                     "fecha_generacion": datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
                     "semana_actual": int(estado['semana']),
                     "total_proyectos": int(estado['total_proyectos']),
                     "gastos_fijos_mensuales": float(consolidador.gastos_fijos_mensuales),
-                    "semanas_margen": int(estado['semanas_margen'])
+                    "semanas_margen": int(estado['semanas_margen']),
+                    "semanas_futuro": int(consolidador.semanas_futuro)
                 },
                 "estado_caja": {
                     "saldo_total": float(estado['saldo_total']),
@@ -905,17 +947,12 @@ def render_exportar_json_simple(consolidador: ConsolidadorMultiproyecto, estado:
                     "gastos_fijos_semanales": float(estado['gastos_fijos_semanales']),
                     "margen_proteccion": float(estado['margen_proteccion']),
                     "excedente_invertible": float(estado['excedente_invertible']),
-                    "estado_general": estado['estado_general']
+                    "estado_general": estado['estado_general'],
+                    "proyectos_activos": int(estado.get('proyectos_activos', 0)),
+                    "proyectos_terminados": int(estado.get('proyectos_terminados', 0))
                 },
-                "proyectos": [
-                    {
-                        "nombre": p['nombre'],
-                        "estado": p['estado'],
-                        "saldo_actual": float(p.get('saldo_actual', 0)),
-                        "burn_rate_semanal": float(p.get('burn_rate_semanal', 0))
-                    }
-                    for p in consolidador.proyectos
-                ]
+                "df_consolidado": df_data,  # Datos del DataFrame
+                "proyectos": proyectos_completos  # Proyectos completos
             }
             
             # Crear directorio si no existe
@@ -939,6 +976,7 @@ def render_exportar_json_simple(consolidador: ConsolidadorMultiproyecto, estado:
             
             st.success(f"✅ JSON exportado exitosamente")
             st.caption(f"📁 Guardado en: {ruta_json}")
+            st.caption(f"📊 Incluye: DataFrame completo + Proyectos con categorías de gasto")
             
             # Botón de descarga
             json_str = json.dumps(json_data, indent=2, ensure_ascii=False)

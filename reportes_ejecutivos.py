@@ -1090,6 +1090,48 @@ def generar_reporte_gerencial_pdf(datos: Dict) -> bytes:
 # INTERFAZ PRINCIPAL
 # ============================================================================
 
+# ============================================================================
+# FUNCIONES AUXILIARES PARA CARGA DE JSON
+# ============================================================================
+
+def reconstruir_dataframe_desde_json(json_data: Dict) -> Optional[pd.DataFrame]:
+    """
+    Reconstruye DataFrame consolidado desde JSON para generar gráficos
+    
+    Args:
+        json_data: Datos exportados desde multiproyecto v2.1.4+
+        
+    Returns:
+        DataFrame o None si no hay datos suficientes
+    """
+    try:
+        df_data = json_data.get('df_consolidado')
+        
+        if not df_data or not df_data.get('semanas'):
+            return None
+        
+        # Reconstruir DataFrame desde listas
+        df = pd.DataFrame({
+            'semana_consolidada': df_data.get('semanas', []),
+            'fecha': pd.to_datetime(df_data.get('fechas', [])),
+            'saldo_consolidado': df_data.get('saldo_consolidado', []),
+            'ingresos_proy_total': df_data.get('ingresos_proy_total', []),
+            'egresos_proy_total': df_data.get('egresos_proy_total', []),
+            'es_historica': df_data.get('es_historica', []),
+            'burn_rate': df_data.get('burn_rate', [])
+        })
+        
+        return df
+        
+    except Exception as e:
+        st.warning(f"⚠️ No se pudo reconstruir DataFrame para gráficos: {str(e)}")
+        return None
+
+
+# ============================================================================
+# FUNCIÓN PRINCIPAL
+# ============================================================================
+
 def main():
     """Función principal del módulo de reportes"""
     
@@ -1263,25 +1305,32 @@ def main():
                     contenido = archivo_json.read()
                     json_data = json.loads(contenido.decode('utf-8'))
                     
+                    # Reconstruir DataFrame desde JSON
+                    df_reconstruido = reconstruir_dataframe_desde_json(json_data)
+                    
                     # Convertir JSON a formato datos_reportes
                     datos_convertidos = {
                         'timestamp': datetime.now(),
                         'estado_caja': json_data.get('estado_caja', {}),
                         'proyectos': json_data.get('proyectos', []),
-                        'df_consolidado': None,  # No disponible desde JSON
+                        'df_consolidado': df_reconstruido,  # DataFrame reconstruido ✅
                         'gastos_fijos_mensuales': json_data.get('metadata', {}).get('gastos_fijos_mensuales', 50000000),
-                        'semanas_futuro': 8,
+                        'semanas_futuro': json_data.get('metadata', {}).get('semanas_futuro', 8),
                         'semana_actual': json_data.get('metadata', {}).get('semana_actual', 0)
                     }
                     
                     st.session_state.datos_reportes = datos_convertidos
                     st.session_state.json_consolidado = json_data
                     st.success("✅ JSON cargado exitosamente")
+                    if df_reconstruido is not None:
+                        st.success("✅ DataFrame reconstruido - Gráficos disponibles")
+                    else:
+                        st.warning("⚠️ DataFrame no disponible - Gráficos limitados")
                     st.rerun()
                     
                 except Exception as e:
                     st.error(f"❌ Error cargando JSON: {str(e)}")
-                    st.caption("Verifique que el archivo sea un JSON válido exportado desde Multiproyecto")
+                    st.caption("Verifique que el archivo sea un JSON válido exportado desde Multiproyecto v2.1.4+")
         
         return
     
@@ -1293,17 +1342,25 @@ def main():
     elif 'json_consolidado' in st.session_state:
         # Convertir JSON a formato datos_reportes si solo tenemos json_consolidado
         json_data = st.session_state.json_consolidado
+        
+        # Reconstruir DataFrame
+        df_reconstruido = reconstruir_dataframe_desde_json(json_data)
+        
         datos = {
             'timestamp': datetime.now(),
             'estado_caja': json_data.get('estado_caja', {}),
             'proyectos': json_data.get('proyectos', []),
-            'df_consolidado': None,
+            'df_consolidado': df_reconstruido,  # DataFrame reconstruido ✅
             'gastos_fijos_mensuales': json_data.get('metadata', {}).get('gastos_fijos_mensuales', 50000000),
-            'semanas_futuro': 8,
+            'semanas_futuro': json_data.get('metadata', {}).get('semanas_futuro', 8),
             'semana_actual': json_data.get('metadata', {}).get('semana_actual', 0)
         }
         st.session_state.datos_reportes = datos
         st.success(f"✅ Datos cargados desde JSON")
+        if df_reconstruido is not None:
+            st.caption("📊 Gráficos Waterfall + Pie disponibles")
+        else:
+            st.warning("⚠️ Gráficos limitados (JSON antiguo)")
     else:
         st.error("Error inesperado: No hay datos disponibles")
         return
