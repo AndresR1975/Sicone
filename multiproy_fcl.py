@@ -2,19 +2,22 @@
 SICONE - Módulo de Análisis Multiproyecto FCL
 Consolidación y análisis de flujo de caja para múltiples proyectos
 
-Versión: 2.0.2 FINAL
+Versión: 2.0.3 FINAL
 Fecha: 29 Diciembre 2024
 Autor: AI-MindNovation
 
-VERSIÓN 2.0.2 (29-Dic-2024) - FIX FINAL MARGEN:
-- 🔧 FIX CRÍTICO: Margen de Protección correctamente implementado
-  - HISTÓRICO: Variable (refleja burn rate real de cada semana)
-  - FUTURO: Constante desde HOY (proyección lineal en $402.7M)
-  - Línea roja: Variable en pasado, horizontal desde hoy
-  - ✅ Consistencia Timeline vs Análisis de Cobertura
+VERSIÓN 2.0.3 (29-Dic-2024) - FIX CRÍTICO MARGEN UNIFICADO:
+- 🔧 FIX CRÍTICO: Margen de Protección UNIFICADO en todos los lugares
+  - DataFrame (Timeline): Histórico variable, futuro constante ✅
+  - get_estado_actual(): Usa MISMO cálculo simple (burn_rate × 8) ✅
+  - Resultado: $402.7M en TODAS las métricas ✅
+  - ELIMINADO: Promedio de burn_rate_proyectado (causaba $483M incorrectos)
 
-NOTA: Botón "Exportar JSON" temporalmente deshabilitado hasta resolver
-compatibilidad con módulo reportes_ejecutivos.
+VERSIÓN 2.0.2 (29-Dic-2024) - FIX MARGEN TIMELINE:
+- 🔧 FIX: Margen de Protección correctamente implementado en Timeline
+  - HISTÓRICO: Variable (refleja burn rate real de cada semana)
+  - FUTURO: Constante desde HOY (proyección lineal)
+  - Línea roja: Variable en pasado, horizontal desde hoy
 
 MEJORA IMPORTANTE v1.5.0 (28-Dic-2024):
 - 🎯 CAMBIO: % de avance ahora es PONDERADO POR MONTO (no solo hitos cumplidos)
@@ -830,21 +833,12 @@ class ConsolidadorMultiproyecto:
         burn_rate_proyectos = float(row['burn_rate'])
         burn_rate_total = burn_rate_proyectos + self.gastos_fijos_semanales
         
-        # Margen de protección (8 semanas de burn rate total)
-        # Usar burn rate proyectado si está disponible (considera finalizaciones)
-        if 'burn_rate_proyectado' in self.df_consolidado.columns:
-            # Promediar burn rate proyectado de las próximas 8 semanas
-            df_futuro = self.df_consolidado[self.df_consolidado['es_futura']].head(8)
-            if len(df_futuro) > 0:
-                burn_rate_promedio_futuro = df_futuro['burn_rate_proyectado'].mean()
-                if burn_rate_promedio_futuro > 0:
-                    margen_proteccion = burn_rate_promedio_futuro * 8
-                else:
-                    margen_proteccion = burn_rate_total * 8
-            else:
-                margen_proteccion = burn_rate_total * 8
-        else:
-            margen_proteccion = burn_rate_total * 8
+        # ============================================================
+        # FIX v2.0.3: Margen de protección CONSTANTE para decisiones
+        # ============================================================
+        # Usar MISMO cálculo que en DataFrame (proyección lineal)
+        # NO promediar burn_rate_proyectado (eso da valores incorrectos)
+        margen_proteccion = burn_rate_total * 8
         
         # Excedente invertible
         excedente_invertible = total_saldos_reales - margen_proteccion
