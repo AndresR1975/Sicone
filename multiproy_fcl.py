@@ -2,9 +2,16 @@
 SICONE - Módulo de Análisis Multiproyecto FCL
 Consolidación y análisis de flujo de caja para múltiples proyectos
 
-Versión: 2.1.1 FINAL
+Versión: 2.1.2 FINAL
 Fecha: 29 Diciembre 2024
 Autor: AI-MindNovation
+
+VERSIÓN 2.1.2 (29-Dic-2024) - MARGEN DINÁMICO:
+- 🔧 FIX: Slider de semanas_margen ahora es DINÁMICO
+  - Cambiar slider → reconsolida automáticamente
+  - Margen se actualiza en tiempo real
+  - Propagación a TODOS los módulos (Análisis, Inversiones, Timeline)
+  - Session state mantiene sincronización
 
 VERSIÓN 2.1.1 (29-Dic-2024) - MARGEN FIJO EN INVERSIONES:
 - 🔧 FIX: Eliminado slider de "Margen Adicional" en Inversiones
@@ -12,18 +19,6 @@ VERSIÓN 2.1.1 (29-Dic-2024) - MARGEN FIJO EN INVERSIONES:
   - Fórmula única: Burn Rate Total × semanas_margen
   - Sin % adicional que modifique el margen
   - Usuario decide cuánto invertir del excedente calculado
-
-VERSIÓN 2.1.0 (29-Dic-2024) - MARGEN CORRECTO + CONFIGURABLE:
-- 🎯 FIX CRÍTICO: Margen de Protección ahora es CORRECTO
-  - Fórmula: Burn Rate Total × Semanas Margen
-  - Ejemplo: $86M/sem × 8 sem = $687M ✅
-  - TODOS los lugares usan la MISMA fórmula
-  - Consistencia 100%: Análisis = Inversiones = Timeline
-
-- ⚙️ NUEVO: Margen de Protección CONFIGURABLE
-  - Slider en sidebar: 4-16 semanas (default 8)
-  - Variable: semanas_margen
-  - Se actualiza en tiempo real
 
 MEJORA IMPORTANTE v1.5.0 (28-Dic-2024):
 - 🎯 CAMBIO: % de avance ahora es PONDERADO POR MONTO (no solo hitos cumplidos)
@@ -1888,6 +1883,7 @@ def main():
             st.session_state.consolidador = consolidador
             st.session_state.gastos_fijos_mensuales = gastos_fijos_mensuales
             st.session_state.semanas_futuro = semanas_futuro
+            st.session_state.semanas_margen = semanas_margen
             st.success("✅ Consolidación completada")
             st.rerun()
     
@@ -1898,22 +1894,27 @@ def main():
         # Verificar si cambiaron los parámetros
         gastos_fijos_previos = st.session_state.get('gastos_fijos_mensuales', gastos_fijos_mensuales)
         semanas_futuro_previas = st.session_state.get('semanas_futuro', semanas_futuro)
+        semanas_margen_previas = st.session_state.get('semanas_margen', semanas_margen)
         
         cambio_gastos = gastos_fijos_previos != gastos_fijos_mensuales
         cambio_horizonte = semanas_futuro_previas != semanas_futuro
+        cambio_margen = semanas_margen_previas != semanas_margen
         
-        if cambio_gastos or cambio_horizonte:
+        if cambio_gastos or cambio_horizonte or cambio_margen:
             # Reconsolidar con nuevos parámetros
             with st.spinner("Recalculando..."):
                 if cambio_gastos:
                     consolidador_previo.gastos_fijos_semanales = gastos_fijos_mensuales / 4.33
                 if cambio_horizonte:
                     consolidador_previo.semanas_futuro = semanas_futuro
+                if cambio_margen:
+                    consolidador_previo.semanas_margen = semanas_margen
                 
                 consolidador_previo.consolidar()
                 st.session_state.consolidador = consolidador_previo
                 st.session_state.gastos_fijos_mensuales = gastos_fijos_mensuales
                 st.session_state.semanas_futuro = semanas_futuro
+                st.session_state.semanas_margen = semanas_margen
         
         consolidador = st.session_state.consolidador
         
