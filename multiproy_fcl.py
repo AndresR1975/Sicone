@@ -2,9 +2,16 @@
 SICONE - Módulo de Análisis Multiproyecto FCL
 Consolidación y análisis de flujo de caja para múltiples proyectos
 
-Versión: 2.1.0 FINAL
+Versión: 2.1.1 FINAL
 Fecha: 29 Diciembre 2024
 Autor: AI-MindNovation
+
+VERSIÓN 2.1.1 (29-Dic-2024) - MARGEN FIJO EN INVERSIONES:
+- 🔧 FIX: Eliminado slider de "Margen Adicional" en Inversiones
+  - Margen en Inversiones = Margen en Análisis de Cobertura
+  - Fórmula única: Burn Rate Total × semanas_margen
+  - Sin % adicional que modifique el margen
+  - Usuario decide cuánto invertir del excedente calculado
 
 VERSIÓN 2.1.0 (29-Dic-2024) - MARGEN CORRECTO + CONFIGURABLE:
 - 🎯 FIX CRÍTICO: Margen de Protección ahora es CORRECTO
@@ -17,10 +24,6 @@ VERSIÓN 2.1.0 (29-Dic-2024) - MARGEN CORRECTO + CONFIGURABLE:
   - Slider en sidebar: 4-16 semanas (default 8)
   - Variable: semanas_margen
   - Se actualiza en tiempo real
-
-- 🔧 SIMPLIFICADO: Eliminada lógica compleja burn_rate_proyectado
-  - Solo fórmula simple: burn_rate_total × semanas_margen
-  - Más predecible y consistente
 
 MEJORA IMPORTANTE v1.5.0 (28-Dic-2024):
 - 🎯 CAMBIO: % de avance ahora es PONDERADO POR MONTO (no solo hitos cumplidos)
@@ -1142,19 +1145,9 @@ def render_inversiones_temporales(estado: Dict):
     st.caption("Optimiza excedentes de liquidez con instrumentos financieros")
     
     # Configuración del margen de seguridad
-    col_config1, col_config2, col_config3 = st.columns([2, 1, 1])
+    col_config1, col_config2 = st.columns([1, 1])
     
     with col_config1:
-        margen_seguridad_pct = st.slider(
-            "🛡️ Margen de Seguridad Adicional (%)",
-            min_value=0,
-            max_value=50,
-            value=20,
-            step=5,
-            help="Porcentaje adicional sobre el margen requerido base"
-        )
-    
-    with col_config2:
         # Obtener tasas (desde session_state o API)
         if 'tasas_actualizadas' not in st.session_state:
             st.session_state.tasas_actualizadas = {
@@ -1169,7 +1162,7 @@ def render_inversiones_temporales(estado: Dict):
             help=f"Fuente: {st.session_state.tasas_actualizadas.get('fuente', 'Manual')}"
         )
     
-    with col_config3:
+    with col_config2:
         if st.button("🔄 Actualizar Tasas", help="Obtener tasas actuales del Banco de la República"):
             with st.spinner("Consultando Banco de la República..."):
                 tasas_nuevas = obtener_tasas_en_vivo()
@@ -1180,12 +1173,26 @@ def render_inversiones_temporales(estado: Dict):
                     st.success(f"✅ Tasas actualizadas\nIBR: {tasas_nuevas['IBR']:.2f}% EA")
                     st.rerun()
     
-    # Calcular excedente invertible
-    excedente_info = calcular_excedente_invertible(
-        estado['saldo_total'],
-        estado['margen_proteccion'],
-        margen_seguridad_pct
-    )
+    # ============================================================
+    # FIX v2.1.1: Excedente invertible con margen FIJO
+    # ============================================================
+    # Margen = Burn Rate Total × semanas_margen (sin % adicional)
+    # Excedente = Saldo Total - Margen de Protección
+    # Usuario decide cuánto del excedente invertir
+    
+    saldo_total = estado['saldo_total']
+    margen_proteccion = estado['margen_proteccion']  # Fórmula: burn_rate_total × semanas_margen
+    
+    # Excedente disponible para inversión
+    excedente_invertible = saldo_total - margen_proteccion
+    porcentaje_excedente = (excedente_invertible / saldo_total * 100) if saldo_total > 0 else 0
+    
+    excedente_info = {
+        'saldo_total': saldo_total,
+        'margen_total': margen_proteccion,  # = $687M (con 8 semanas)
+        'excedente_invertible': excedente_invertible,
+        'porcentaje_excedente': porcentaje_excedente
+    }
     
     # Mostrar capital disponible
     st.markdown("#### 💼 Capital Disponible para Inversión")
@@ -1202,7 +1209,7 @@ def render_inversiones_temporales(estado: Dict):
         st.metric(
             "Margen Total",
             formatear_moneda(excedente_info['margen_total']),
-            help=f"Margen base + {margen_seguridad_pct}% seguridad"
+            help=f"Margen de protección fijo: Burn Rate Total × {estado.get('semanas_margen', 8)} semanas (NO incluye % adicional)"
         )
     
     with col3:
