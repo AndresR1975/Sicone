@@ -1,30 +1,33 @@
 """
 SICONE - Módulo de Reportes Ejecutivos
-Versión: 1.9.0 FINAL
-Fecha: 28 Diciembre 2024
+Versión: 1.10.0 COMPARACIÓN
+Fecha: 29 Diciembre 2024
 Autor: Andrés Restrepo & Claude
 
-VERSIÓN 1.9.0 (28-Dic-2024) - USA COLUMNA CONSOLIDADA OFICIAL:
-- ✅ Timeline usa directamente columna 'saldo_consolidado'
-- ✅ MISMA columna que usa el multiproyecto
-- ✅ NO intenta sumar manualmente (fuente única de verdad)
-- ✅ Incluye saldos reales de tesorería automáticamente
-- ✅ Incluye descuento de gastos fijos empresariales
-- ✅ Proyección futura ya calculada en df
-- ✅ GARANTIZA consistencia 100% con multiproyecto
+VERSIÓN 1.10.0 (29-Dic-2024) - COMPARACIÓN DE GRÁFICOS:
+- ✅ Genera AMBOS gráficos: Timeline Y Waterfall
+- ✅ Muestra ambos en el PDF para comparación visual
+- ✅ Timeline: Últimas 6 semanas SIN proyección (simple y limpio)
+- ✅ Waterfall: Flujo de caja últimas 6 semanas (ejecutivo)
+- 📊 Andrés puede decidir cuál funciona mejor
 
-FIX CRÍTICO v1.9.0:
-ANTES (v1.8.0): Sumaba manualmente columnas saldo_real_*
-                 Problema: saldo_real_ solo tiene datos de tesorería
-                 Resultado: Gráfico plano cerca de $0
+TIMELINE (Opción 1):
+- Gráfico de línea simple
+- Últimas 6 semanas históricas
+- Sin proyección futura
+- Relleno bajo la curva
+- Marca "Hoy" con línea vertical
 
-AHORA (v1.9.0): Usa directamente saldo_consolidado
-                Esta columna YA tiene todo calculado:
-                - Saldos reales de tesorería (cuando existen)
-                - Saldos proyectados (cuando no hay reales)
-                - Gastos fijos descontados
-                - Proyección futura incluida
-                Resultado: Gráfico IDÉNTICO al multiproyecto
+WATERFALL (Opción 2):
+- Gráfico de cascada ejecutivo
+- Muestra: Inicio → +Ingresos → -Egresos → -GF → Final
+- Flujo de dinero visual
+- Estándar en reportes gerenciales
+- Conectores entre barras
+
+PIE CHART (ambas opciones):
+- 4 categorías de gasto consolidadas
+- Mano de Obra, Materiales, Admin, Variables
 """
 
 import streamlit as st
@@ -293,10 +296,147 @@ def instalar_reportlab():
 # GENERACIÓN DE GRÁFICOS (Preparado para Fase 2)
 # ============================================================================
 
+def generar_grafico_waterfall(datos: Dict) -> bytes:
+    """
+    Genera gráfico Waterfall mostrando evolución del saldo en últimas 6 semanas
+    
+    Args:
+        datos: Diccionario con datos consolidados del multiproyecto
+        
+    Returns:
+        bytes: Imagen PNG del gráfico
+    """
+    try:
+        import pandas as pd
+        import numpy as np
+        
+        # Obtener DataFrame consolidado
+        df = datos.get('df_consolidado')
+        
+        if df is None or df.empty:
+            return None
+        
+        if 'saldo_consolidado' not in df.columns:
+            return None
+        
+        # Semana actual
+        semana_actual = datos.get('semana_actual', 0)
+        gastos_fijos_semanales = datos.get('gastos_fijos_mensuales', 0) / 4.33
+        
+        if semana_actual == 0:
+            return None
+        
+        # Filtrar últimas 6 semanas históricas
+        df_hist = df[
+            (df['semana_consolidada'] >= semana_actual - 5) &
+            (df['semana_consolidada'] <= semana_actual) &
+            (df['es_historica'] == True)
+        ].copy()
+        
+        if df_hist.empty or len(df_hist) < 2:
+            return None
+        
+        # Calcular valores
+        saldo_inicio = df_hist.iloc[0]['saldo_consolidado']
+        saldo_final = df_hist.iloc[-1]['saldo_consolidado']
+        
+        # Flujos acumulados en el período
+        ingresos_acum = df_hist['ingresos_proy_total'].sum() if 'ingresos_proy_total' in df_hist.columns else 0
+        egresos_acum = df_hist['egresos_proy_total'].sum() if 'egresos_proy_total' in df_hist.columns else 0
+        gastos_fijos_acum = gastos_fijos_semanales * len(df_hist)
+        
+        # Preparar datos para waterfall
+        categorias = ['Inicio\n(Sem -6)', 'Ingresos', 'Egresos\nProyectos', 'Gastos\nFijos', 'Actual\n(Hoy)']
+        
+        # Valores para cada barra
+        valores = [
+            saldo_inicio,  # Barra inicial
+            ingresos_acum,  # Incremento
+            -egresos_acum,  # Decremento
+            -gastos_fijos_acum,  # Decremento
+            0  # Barra final (se calcula)
+        ]
+        
+        # Calcular posiciones
+        acumulado = saldo_inicio
+        posiciones_base = [0]  # Inicio en 0
+        alturas = [saldo_inicio]  # Primera barra completa
+        
+        for i in range(1, 4):  # Ingresos, Egresos, Gastos
+            posiciones_base.append(acumulado)
+            alturas.append(valores[i])
+            acumulado += valores[i]
+        
+        # Barra final
+        posiciones_base.append(0)
+        alturas.append(saldo_final)
+        
+        # Colores: inicial (azul), positivo (verde), negativo (rojo), final (azul)
+        colores = ['#3b82f6', '#22c55e', '#ef4444', '#f97316', '#3b82f6']
+        
+        # Crear gráfico
+        fig, ax = plt.subplots(figsize=(2.8, 2.8))
+        
+        # Dibujar barras
+        for i in range(len(categorias)):
+            ax.bar(i, alturas[i], bottom=posiciones_base[i], 
+                   color=colores[i], edgecolor='white', linewidth=1.5, width=0.6)
+            
+            # Etiquetas de valores
+            if i == 0 or i == 4:  # Inicio y Final
+                y_pos = posiciones_base[i] + alturas[i] / 2
+                valor_texto = formatear_moneda(alturas[i]) if UTILS_DISPONIBLE else f"${alturas[i]/1e6:.0f}M"
+            else:
+                y_pos = posiciones_base[i] + alturas[i] / 2
+                valor_absoluto = abs(alturas[i])
+                valor_texto = formatear_moneda(valor_absoluto) if UTILS_DISPONIBLE else f"${valor_absoluto/1e6:.0f}M"
+            
+            ax.text(i, y_pos, valor_texto, 
+                   ha='center', va='center', fontsize=5, fontweight='bold', color='white')
+        
+        # Conectores entre barras
+        for i in range(len(categorias) - 1):
+            if i < 4:
+                y_start = posiciones_base[i] + alturas[i]
+                y_end = posiciones_base[i+1]
+                ax.plot([i + 0.3, i + 0.7], [y_start, y_end], 
+                       'k--', linewidth=0.8, alpha=0.5)
+        
+        # Formateo
+        ax.set_xticks(range(len(categorias)))
+        ax.set_xticklabels(categorias, fontsize=6)
+        ax.set_ylabel('Saldo', fontsize=6, fontweight='bold')
+        ax.set_title('Flujo de Caja (6 semanas)', fontsize=8, fontweight='bold', pad=4)
+        ax.grid(True, alpha=0.2, axis='y', linestyle='--', linewidth=0.4)
+        
+        # Formato moneda en eje Y
+        ax.yaxis.set_major_formatter(plt.FuncFormatter(
+            lambda x, p: formatear_moneda(x) if UTILS_DISPONIBLE else f"${x/1e6:.0f}M"
+        ))
+        
+        ax.yaxis.set_major_locator(plt.MaxNLocator(4))
+        ax.tick_params(axis='y', labelsize=5)
+        
+        plt.tight_layout(pad=0.2)
+        
+        # Guardar
+        buf = io.BytesIO()
+        plt.savefig(buf, format='png', dpi=120, bbox_inches='tight', facecolor='white')
+        buf.seek(0)
+        plt.close(fig)
+        
+        return buf
+        
+    except Exception as e:
+        st.error(f"Error generando waterfall: {e}")
+        import traceback
+        st.error(traceback.format_exc())
+        return None
+
+
 def generar_grafico_timeline(datos: Dict) -> bytes:
     """
-    Genera gráfico de evolución temporal del saldo consolidado
-    Usa directamente la columna 'saldo_consolidado' del df_consolidado
+    Genera gráfico Timeline simple de últimas 6 semanas (SIN proyección)
     
     Args:
         datos: Diccionario con datos consolidados del multiproyecto
@@ -313,83 +453,40 @@ def generar_grafico_timeline(datos: Dict) -> bytes:
         if df is None or df.empty:
             return None
         
-        # Verificar que existe la columna saldo_consolidado
         if 'saldo_consolidado' not in df.columns:
             return None
         
-        # Semana actual consolidada
+        # Semana actual
         semana_actual = datos.get('semana_actual', 0)
         
         if semana_actual == 0:
             return None
         
-        # Filtrar últimas 6 semanas + próximas 6 semanas
-        rango_min = semana_actual - 5  # -5, -4, -3, -2, -1, 0
-        rango_max = semana_actual + 6   # 0, 1, 2, 3, 4, 5, 6
-        
-        df_timeline = df[
-            (df['semana_consolidada'] >= rango_min) &
-            (df['semana_consolidada'] <= rango_max)
+        # Filtrar últimas 6 semanas históricas
+        df_hist = df[
+            (df['semana_consolidada'] >= semana_actual - 5) &
+            (df['semana_consolidada'] <= semana_actual) &
+            (df['es_historica'] == True)
         ].copy()
         
-        if df_timeline.empty:
+        if df_hist.empty:
             return None
         
-        # Separar histórico y futuro
-        df_historico = df_timeline[df_timeline['semana_consolidada'] <= semana_actual].copy()
-        df_futuro = df_timeline[df_timeline['semana_consolidada'] > semana_actual].copy()
-        
-        # Convertir semanas consolidadas a semanas relativas (0 = hoy)
-        semanas_hist = (df_historico['semana_consolidada'] - semana_actual).tolist()
-        saldos_hist = df_historico['saldo_consolidado'].tolist()
-        
-        # Para proyección futura, usar el saldo_consolidado ya calculado en el df
-        # (que ya incluye la proyección con gastos fijos)
-        if not df_futuro.empty:
-            semanas_proy = (df_futuro['semana_consolidada'] - semana_actual).tolist()
-            saldos_proy = df_futuro['saldo_consolidado'].tolist()
-            
-            # Incluir punto actual en ambas listas
-            semanas_proy = [0] + semanas_proy
-            saldos_proy = [saldos_hist[-1]] + saldos_proy if saldos_hist else saldos_proy
-        else:
-            # No hay datos futuros, crear proyección simple
-            saldo_actual = saldos_hist[-1] if saldos_hist else 0
-            
-            # Calcular burn_rate de proyectos ACTIVOS
-            proyectos = datos.get('proyectos', [])
-            burn_rate_activos = 0
-            
-            for proyecto in proyectos:
-                estado = proyecto.get('estado', '')
-                if estado == 'ACTIVO':
-                    burn_rate_activos += proyecto.get('burn_rate_real', 0)
-            
-            # Si no hay proyectos activos, usar burn_rate consolidado
-            if burn_rate_activos == 0:
-                estado_caja = datos.get('estado_caja', {})
-                burn_rate_activos = estado_caja.get('burn_rate', 0)
-            
-            semanas_proy = [0]
-            saldos_proy = [saldo_actual]
-            
-            for i in range(1, 7):
-                saldo_futuro = max(0, saldo_actual - (burn_rate_activos * i))
-                semanas_proy.append(i)
-                saldos_proy.append(saldo_futuro)
+        # Preparar datos
+        semanas_rel = (df_hist['semana_consolidada'] - semana_actual).tolist()
+        saldos = df_hist['saldo_consolidado'].tolist()
         
         # Crear gráfico CUADRADO
         fig, ax = plt.subplots(figsize=(2.8, 2.8))
         
-        # Línea histórica (azul) - SALDO CONSOLIDADO REAL
-        ax.plot(semanas_hist, saldos_hist, 
-                color='#3b82f6', linewidth=2, marker='o', markersize=3,
-                label='Histórico', zorder=3)
+        # Línea histórica (azul)
+        ax.plot(semanas_rel, saldos, 
+                color='#3b82f6', linewidth=2.5, marker='o', markersize=4,
+                label='Saldo', zorder=3)
         
-        # Línea proyección (naranja)
-        ax.plot(semanas_proy, saldos_proy, 
-                color='#f97316', linewidth=2, linestyle='--', marker='s', markersize=3,
-                label='Proyección', zorder=3)
+        # Rellenar área bajo la curva
+        ax.fill_between(semanas_rel, 0, saldos, 
+                        color='#3b82f6', alpha=0.1, zorder=1)
         
         # Línea vertical "Hoy"
         ax.axvline(x=0, color='gray', linestyle=':', linewidth=1.2, alpha=0.7, 
@@ -401,9 +498,9 @@ def generar_grafico_timeline(datos: Dict) -> bytes:
         # Formateo
         ax.set_xlabel('Semanas', fontsize=6, fontweight='bold')
         ax.set_ylabel('Saldo', fontsize=6, fontweight='bold')
-        ax.set_title('Evolución del Saldo', fontsize=8, fontweight='bold', pad=4)
+        ax.set_title('Evolución del Saldo (6 semanas)', fontsize=8, fontweight='bold', pad=4)
         ax.grid(True, alpha=0.3, linestyle='--', linewidth=0.4)
-        ax.legend(loc='upper right', fontsize=5, framealpha=0.95, ncol=1)
+        ax.legend(loc='upper right', fontsize=5, framealpha=0.95)
         
         # Formato moneda
         ax.yaxis.set_major_formatter(plt.FuncFormatter(
@@ -426,7 +523,7 @@ def generar_grafico_timeline(datos: Dict) -> bytes:
         return buf
         
     except Exception as e:
-        st.error(f"Error generando gráfico timeline: {e}")
+        st.error(f"Error generando timeline: {e}")
         import traceback
         st.error(traceback.format_exc())
         return None
@@ -795,41 +892,75 @@ def generar_reporte_gerencial_pdf(datos: Dict) -> bytes:
     elements.append(Spacer(1, 0.15*inch))  # Reducido de 0.3
     
     # =================================================================
-    # GRÁFICOS EJECUTIVOS (Layout 2×1: Timeline+Pie arriba, Semáforo abajo)
+    # GRÁFICOS EJECUTIVOS - COMPARACIÓN TIMELINE vs WATERFALL
     # =================================================================
     
-    # Generar gráficos Timeline y Pie
+    # Generar AMBOS gráficos para comparación
     timeline_img = generar_grafico_timeline(datos)
+    waterfall_img = generar_grafico_waterfall(datos)
     pie_img = generar_grafico_pie_gastos(datos)
     
-    # Layout 2×1: Timeline y Pie lado a lado (ambos cuadrados)
-    if timeline_img and pie_img:
-        # Crear tabla de 2 columnas para poner gráficos lado a lado
-        graficos_data = [[
+    # SECCIÓN 1: Timeline vs Waterfall (para que Andrés decida)
+    if timeline_img and waterfall_img:
+        st.info("📊 Mostrando AMBOS gráficos para comparación:")
+        
+        # Primera fila: Timeline + Pie
+        graficos_data_1 = [[
             Image(timeline_img, width=2.8*inch, height=2.8*inch),
-            Image(pie_img, width=2.8*inch, height=2.8*inch)
+            Image(pie_img, width=2.8*inch, height=2.8*inch) if pie_img else ''
         ]]
         
-        tabla_graficos = Table(graficos_data, colWidths=[2.9*inch, 2.9*inch])
-        tabla_graficos.setStyle(TableStyle([
+        tabla_graficos_1 = Table(graficos_data_1, colWidths=[2.9*inch, 2.9*inch])
+        tabla_graficos_1.setStyle(TableStyle([
             ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
             ('VALIGN', (0, 0), (-1, -1), 'TOP'),
             ('LEFTPADDING', (0, 0), (-1, -1), 0),
             ('RIGHTPADDING', (0, 0), (-1, -1), 0),
         ]))
         
-        elements.append(tabla_graficos)
+        elements.append(Paragraph("OPCIÓN 1: Timeline (últimas 6 semanas sin proyección)", 
+                                 ParagraphStyle('Label', fontSize=8, textColor=colors.HexColor('#1e40af'))))
+        elements.append(tabla_graficos_1)
+        elements.append(Spacer(1, 0.2*inch))
+        
+        # Segunda fila: Waterfall + Pie
+        graficos_data_2 = [[
+            Image(waterfall_img, width=2.8*inch, height=2.8*inch),
+            Image(pie_img, width=2.8*inch, height=2.8*inch) if pie_img else ''
+        ]]
+        
+        tabla_graficos_2 = Table(graficos_data_2, colWidths=[2.9*inch, 2.9*inch])
+        tabla_graficos_2.setStyle(TableStyle([
+            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+            ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+            ('LEFTPADDING', (0, 0), (-1, -1), 0),
+            ('RIGHTPADDING', (0, 0), (-1, -1), 0),
+        ]))
+        
+        elements.append(Paragraph("OPCIÓN 2: Waterfall (flujo de caja últimas 6 semanas)", 
+                                 ParagraphStyle('Label', fontSize=8, textColor=colors.HexColor('#1e40af'))))
+        elements.append(tabla_graficos_2)
         elements.append(Spacer(1, 0.1*inch))
-    elif timeline_img:
-        # Solo Timeline
-        img = Image(timeline_img, width=2.8*inch, height=2.8*inch)
-        elements.append(img)
-        elements.append(Spacer(1, 0.1*inch))
-    elif pie_img:
-        # Solo Pie
-        img = Image(pie_img, width=2.8*inch, height=2.8*inch)
-        elements.append(img)
-        elements.append(Spacer(1, 0.1*inch))
+    
+    elif timeline_img or waterfall_img:
+        # Si solo hay uno, mostrar ese
+        grafico_disponible = timeline_img or waterfall_img
+        if pie_img:
+            graficos_data = [[
+                Image(grafico_disponible, width=2.8*inch, height=2.8*inch),
+                Image(pie_img, width=2.8*inch, height=2.8*inch)
+            ]]
+            
+            tabla_graficos = Table(graficos_data, colWidths=[2.9*inch, 2.9*inch])
+            tabla_graficos.setStyle(TableStyle([
+                ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+                ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+                ('LEFTPADDING', (0, 0), (-1, -1), 0),
+                ('RIGHTPADDING', (0, 0), (-1, -1), 0),
+            ]))
+            
+            elements.append(tabla_graficos)
+            elements.append(Spacer(1, 0.1*inch))
     
     # Semáforo - Estado por proyecto (ancho completo, horizontal)
     semaforo_img = generar_grafico_semaforo(datos)
