@@ -1,28 +1,30 @@
 """
 SICONE - Módulo de Reportes Ejecutivos
-Versión: 1.8.0 FINAL
+Versión: 1.9.0 FINAL
 Fecha: 28 Diciembre 2024
 Autor: Andrés Restrepo & Claude
 
-VERSIÓN 1.8.0 (28-Dic-2024) - CONSISTENCIA CON MULTIPROYECTO:
-- ✅ Timeline usa df_consolidado directamente
-- ✅ Semanas alineadas correctamente (semana_consolidada)
-- ✅ ELIMINA pico artificial en semana actual
-- ✅ Consistente con gráfico de multiproyecto
-- ✅ Suma saldos por FILA (misma semana calendario)
-- ✅ NO suma semanas diferentes de proyectos distintos
-- ✅ Proyección con burn_rate de proyectos ACTIVOS
-- ✅ Pie con 4 categorías de gasto consolidadas
-- ✅ Layout 2×1 optimizado para 1 página
+VERSIÓN 1.9.0 (28-Dic-2024) - USA COLUMNA CONSOLIDADA OFICIAL:
+- ✅ Timeline usa directamente columna 'saldo_consolidado'
+- ✅ MISMA columna que usa el multiproyecto
+- ✅ NO intenta sumar manualmente (fuente única de verdad)
+- ✅ Incluye saldos reales de tesorería automáticamente
+- ✅ Incluye descuento de gastos fijos empresariales
+- ✅ Proyección futura ya calculada en df
+- ✅ GARANTIZA consistencia 100% con multiproyecto
 
-FIX CRÍTICO v1.8.0:
-ANTES: Sumaba Semana 50 de AVelez + Semana 50 de FArroyave
-       (¡Diferencia de 2 meses calendario!)
-       Resultado: Pico artificial en semana actual
+FIX CRÍTICO v1.9.0:
+ANTES (v1.8.0): Sumaba manualmente columnas saldo_real_*
+                 Problema: saldo_real_ solo tiene datos de tesorería
+                 Resultado: Gráfico plano cerca de $0
 
-AHORA: Usa semana_consolidada del DataFrame
-       Suma proyectos en la MISMA semana calendario
-       Resultado: Gráfico consistente con multiproyecto
+AHORA (v1.9.0): Usa directamente saldo_consolidado
+                Esta columna YA tiene todo calculado:
+                - Saldos reales de tesorería (cuando existen)
+                - Saldos proyectados (cuando no hay reales)
+                - Gastos fijos descontados
+                - Proyección futura incluida
+                Resultado: Gráfico IDÉNTICO al multiproyecto
 """
 
 import streamlit as st
@@ -293,8 +295,8 @@ def instalar_reportlab():
 
 def generar_grafico_timeline(datos: Dict) -> bytes:
     """
-    Genera gráfico de evolución temporal del saldo consolidado usando df_consolidado
-    Esto asegura consistencia con el gráfico del multiproyecto
+    Genera gráfico de evolución temporal del saldo consolidado
+    Usa directamente la columna 'saldo_consolidado' del df_consolidado
     
     Args:
         datos: Diccionario con datos consolidados del multiproyecto
@@ -309,6 +311,10 @@ def generar_grafico_timeline(datos: Dict) -> bytes:
         df = datos.get('df_consolidado')
         
         if df is None or df.empty:
+            return None
+        
+        # Verificar que existe la columna saldo_consolidado
+        if 'saldo_consolidado' not in df.columns:
             return None
         
         # Semana actual consolidada
@@ -329,52 +335,53 @@ def generar_grafico_timeline(datos: Dict) -> bytes:
         if df_timeline.empty:
             return None
         
-        # Identificar columnas de saldo real de cada proyecto
-        saldo_cols = [col for col in df.columns if col.startswith('saldo_real_')]
-        
-        if not saldo_cols:
-            return None
-        
-        # Calcular saldo total consolidado por semana (suma de todos los proyectos)
-        df_timeline['saldo_total'] = df_timeline[saldo_cols].sum(axis=1)
-        
         # Separar histórico y futuro
         df_historico = df_timeline[df_timeline['semana_consolidada'] <= semana_actual].copy()
         df_futuro = df_timeline[df_timeline['semana_consolidada'] > semana_actual].copy()
         
         # Convertir semanas consolidadas a semanas relativas (0 = hoy)
         semanas_hist = (df_historico['semana_consolidada'] - semana_actual).tolist()
-        saldos_hist = df_historico['saldo_total'].tolist()
+        saldos_hist = df_historico['saldo_consolidado'].tolist()
         
-        # Para proyección futura, calcular con burn_rate de proyectos ACTIVOS
-        proyectos = datos.get('proyectos', [])
-        burn_rate_activos = 0
-        
-        for proyecto in proyectos:
-            estado = proyecto.get('estado', '')
-            if estado == 'ACTIVO':
-                burn_rate_activos += proyecto.get('burn_rate_real', 0)
-        
-        # Si no hay proyectos activos, usar burn_rate consolidado
-        if burn_rate_activos == 0:
-            estado_caja = datos.get('estado_caja', {})
-            burn_rate_activos = estado_caja.get('burn_rate', 0)
-        
-        # Construir proyección
-        saldo_actual = saldos_hist[-1] if saldos_hist else 0
-        
-        semanas_proy = [0]  # Incluye semana actual
-        saldos_proy = [saldo_actual]
-        
-        for i in range(1, 7):
-            saldo_futuro = max(0, saldo_actual - (burn_rate_activos * i))
-            semanas_proy.append(i)
-            saldos_proy.append(saldo_futuro)
+        # Para proyección futura, usar el saldo_consolidado ya calculado en el df
+        # (que ya incluye la proyección con gastos fijos)
+        if not df_futuro.empty:
+            semanas_proy = (df_futuro['semana_consolidada'] - semana_actual).tolist()
+            saldos_proy = df_futuro['saldo_consolidado'].tolist()
+            
+            # Incluir punto actual en ambas listas
+            semanas_proy = [0] + semanas_proy
+            saldos_proy = [saldos_hist[-1]] + saldos_proy if saldos_hist else saldos_proy
+        else:
+            # No hay datos futuros, crear proyección simple
+            saldo_actual = saldos_hist[-1] if saldos_hist else 0
+            
+            # Calcular burn_rate de proyectos ACTIVOS
+            proyectos = datos.get('proyectos', [])
+            burn_rate_activos = 0
+            
+            for proyecto in proyectos:
+                estado = proyecto.get('estado', '')
+                if estado == 'ACTIVO':
+                    burn_rate_activos += proyecto.get('burn_rate_real', 0)
+            
+            # Si no hay proyectos activos, usar burn_rate consolidado
+            if burn_rate_activos == 0:
+                estado_caja = datos.get('estado_caja', {})
+                burn_rate_activos = estado_caja.get('burn_rate', 0)
+            
+            semanas_proy = [0]
+            saldos_proy = [saldo_actual]
+            
+            for i in range(1, 7):
+                saldo_futuro = max(0, saldo_actual - (burn_rate_activos * i))
+                semanas_proy.append(i)
+                saldos_proy.append(saldo_futuro)
         
         # Crear gráfico CUADRADO
         fig, ax = plt.subplots(figsize=(2.8, 2.8))
         
-        # Línea histórica (azul) - DATOS REALES DEL DF_CONSOLIDADO
+        # Línea histórica (azul) - SALDO CONSOLIDADO REAL
         ax.plot(semanas_hist, saldos_hist, 
                 color='#3b82f6', linewidth=2, marker='o', markersize=3,
                 label='Histórico', zorder=3)
