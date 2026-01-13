@@ -1211,7 +1211,7 @@ def convertir_json_a_datos(json_data: Dict) -> Dict:
     # Construir estructura de datos
     datos = {
         'timestamp': timestamp,
-        'semana_actual': json_data.get('semana_actual', 0),
+        'semana_actual': metadata.get('semana_actual', 0),  # ✅ FIX: Leer desde metadata
         'gastos_fijos_mensuales': json_data.get('gastos_fijos_mensuales', 50000000),
         'df_consolidado': df_consolidado,
         'estado_caja': estado_caja,
