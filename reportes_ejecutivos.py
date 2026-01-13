@@ -1015,3 +1015,207 @@ if __name__ == "__main__":
     print("1. generar_reporte_gerencial_pdf(datos)")
     print("2. generar_reporte_inversiones_pdf(datos)")
     print("\nMódulo listo para importar")
+
+
+# ============================================================================
+# INTERFAZ STREAMLIT - MÓDULO DE REPORTES
+# ============================================================================
+
+def main():
+    """
+    Función principal del módulo de reportes (interfaz Streamlit)
+    """
+    import streamlit as st
+    import json
+    
+    st.title("📊 Reportes Ejecutivos")
+    st.markdown("---")
+    
+    # ========================================================================
+    # TABS: Desde Consolidado / Desde JSON
+    # ========================================================================
+    
+    tab1, tab2 = st.tabs(["📈 Desde Datos Consolidados", "📁 Desde Archivo JSON"])
+    
+    # ========================================================================
+    # TAB 1: GENERAR DESDE DATOS CONSOLIDADOS
+    # ========================================================================
+    
+    with tab1:
+        st.markdown("### Generar Reporte desde Multiproyecto Activo")
+        
+        # Verificar si hay datos en session_state
+        if 'datos_reportes' in st.session_state:
+            datos = st.session_state.datos_reportes
+            timestamp = datos.get('timestamp', datetime.now())
+            
+            # Mostrar info de datos
+            col1, col2 = st.columns(2)
+            with col1:
+                st.metric("Fecha de Datos", timestamp.strftime('%d/%m/%Y %H:%M'))
+            with col2:
+                edad_minutos = (datetime.now() - timestamp).total_seconds() / 60
+                if edad_minutos < 5:
+                    st.success(f"✅ Actualizado hace {edad_minutos:.0f} minutos")
+                else:
+                    st.warning(f"⚠️ Datos con {edad_minutos:.0f} minutos de antigüedad")
+            
+            st.markdown("---")
+            
+            # Resumen de datos
+            estado = datos.get('estado_caja', {})
+            
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                saldo = estado.get('saldo_total', 0)
+                st.metric("Saldo Total", f"${saldo/1_000_000:.1f}M")
+            with col2:
+                burn_rate = estado.get('burn_rate', 0)
+                st.metric("Burn Rate", f"${burn_rate/1_000_000:.1f}M/semana")
+            with col3:
+                proyectos = estado.get('total_proyectos', 0)
+                st.metric("Proyectos", proyectos)
+            
+            st.markdown("---")
+            
+            # Botón para generar reporte
+            if st.button("📄 Generar Reporte PDF", type="primary", use_container_width=True):
+                with st.spinner("Generando reporte PDF..."):
+                    try:
+                        # Generar PDF
+                        pdf_bytes = generar_reporte_gerencial_pdf(datos)
+                        
+                        # Ofrecer descarga
+                        filename = f"Reporte_Gerencial_{timestamp.strftime('%Y%m%d_%H%M')}.pdf"
+                        
+                        st.success("✅ Reporte generado exitosamente")
+                        
+                        st.download_button(
+                            label="💾 Descargar Reporte PDF",
+                            data=pdf_bytes,
+                            file_name=filename,
+                            mime="application/pdf",
+                            use_container_width=True
+                        )
+                        
+                    except Exception as e:
+                        st.error(f"❌ Error generando reporte: {str(e)}")
+                        with st.expander("Ver detalles del error"):
+                            import traceback
+                            st.code(traceback.format_exc())
+        
+        else:
+            st.warning("⚠️ No hay datos consolidados disponibles")
+            st.info("👉 Ve al módulo **Multiproyecto** y consolida los proyectos primero")
+            
+            if st.button("🔙 Ir a Multiproyecto"):
+                st.session_state.modulo_actual = 'multiproyecto'
+                st.rerun()
+    
+    # ========================================================================
+    # TAB 2: GENERAR DESDE JSON
+    # ========================================================================
+    
+    with tab2:
+        st.markdown("### Generar Reporte desde Archivo JSON")
+        st.caption("Carga un archivo JSON exportado desde Multiproyecto")
+        
+        # Upload de archivo
+        uploaded_file = st.file_uploader(
+            "Selecciona archivo JSON",
+            type=['json'],
+            help="Sube un JSON exportado desde el módulo Multiproyecto"
+        )
+        
+        if uploaded_file is not None:
+            try:
+                # Leer JSON
+                json_data = json.load(uploaded_file)
+                
+                # Mostrar info del JSON
+                metadata = json_data.get('metadata', {})
+                
+                col1, col2, col3 = st.columns(3)
+                with col1:
+                    version = metadata.get('version', 'N/A')
+                    st.metric("Versión JSON", version)
+                with col2:
+                    fecha_export = metadata.get('fecha_exportacion', 'N/A')
+                    st.metric("Fecha Export", fecha_export[:10] if len(fecha_export) > 10 else fecha_export)
+                with col3:
+                    proyectos_json = len(json_data.get('proyectos', []))
+                    st.metric("Proyectos", proyectos_json)
+                
+                st.markdown("---")
+                
+                # Convertir JSON a formato de datos
+                datos_desde_json = convertir_json_a_datos(json_data)
+                
+                # Botón para generar
+                if st.button("📄 Generar Reporte desde JSON", type="primary", use_container_width=True):
+                    with st.spinner("Generando reporte PDF desde JSON..."):
+                        try:
+                            # Generar PDF
+                            pdf_bytes = generar_reporte_gerencial_pdf(datos_desde_json)
+                            
+                            # Ofrecer descarga
+                            timestamp_str = metadata.get('fecha_exportacion', datetime.now().isoformat())[:19]
+                            timestamp_str = timestamp_str.replace(':', '').replace('-', '')
+                            filename = f"Reporte_JSON_{timestamp_str}.pdf"
+                            
+                            st.success("✅ Reporte generado exitosamente desde JSON")
+                            
+                            st.download_button(
+                                label="💾 Descargar Reporte PDF",
+                                data=pdf_bytes,
+                                file_name=filename,
+                                mime="application/pdf",
+                                use_container_width=True
+                            )
+                            
+                        except Exception as e:
+                            st.error(f"❌ Error generando reporte: {str(e)}")
+                            with st.expander("Ver detalles del error"):
+                                import traceback
+                                st.code(traceback.format_exc())
+                
+            except json.JSONDecodeError:
+                st.error("❌ Error: El archivo no es un JSON válido")
+            except Exception as e:
+                st.error(f"❌ Error procesando archivo: {str(e)}")
+        
+        else:
+            st.info("👆 Sube un archivo JSON para comenzar")
+
+
+def convertir_json_a_datos(json_data: Dict) -> Dict:
+    """
+    Convierte JSON exportado al formato esperado por generar_reporte_gerencial_pdf
+    """
+    metadata = json_data.get('metadata', {})
+    estado_caja = json_data.get('estado_caja', {})
+    proyectos = json_data.get('proyectos', [])
+    
+    # Reconstruir DataFrame si está disponible
+    df_consolidado = None
+    if 'df_consolidado' in json_data:
+        df_consolidado = reconstruir_dataframe_desde_json(json_data)
+    
+    # Parsear timestamp
+    fecha_str = metadata.get('fecha_exportacion', datetime.now().isoformat())
+    try:
+        timestamp = datetime.fromisoformat(fecha_str.replace('Z', '+00:00'))
+    except:
+        timestamp = datetime.now()
+    
+    # Construir estructura de datos
+    datos = {
+        'timestamp': timestamp,
+        'semana_actual': json_data.get('semana_actual', 0),
+        'gastos_fijos_mensuales': json_data.get('gastos_fijos_mensuales', 50000000),
+        'df_consolidado': df_consolidado,
+        'estado_caja': estado_caja,
+        'proyectos': proyectos
+    }
+    
+    return datos
