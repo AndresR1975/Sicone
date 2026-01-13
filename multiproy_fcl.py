@@ -81,6 +81,34 @@ from datetime import datetime, timedelta, date
 from typing import List, Dict, Tuple, Optional
 import os
 
+# ============================================================================
+# DIAGNÓSTICO TEMPORAL - BORRAR DESPUÉS
+# ============================================================================
+import streamlit as st
+
+st.write("### 🔍 Diagnóstico de Reportes")
+
+# Test 1: Verificar si el archivo existe
+import os
+existe = os.path.exists('reportes_ejecutivos.py')
+st.write(f"1. Archivo reportes_ejecutivos.py existe: {'✅' if existe else '❌'}")
+
+# Test 2: Intentar importar
+try:
+    from reportes_ejecutivos import (
+        generar_reporte_gerencial_pdf,
+        generar_reporte_inversiones_pdf
+    )
+    st.write("2. Import de funciones: ✅ EXITOSO")
+    st.write(f"   - generar_reporte_gerencial_pdf: ✅")
+    st.write(f"   - generar_reporte_inversiones_pdf: ✅")
+except Exception as e:
+    st.write(f"2. Import de funciones: ❌ ERROR")
+    st.error(f"Error: {e}")
+
+st.write("---")
+# ============================================================================
+
 # Importar módulo de inversiones temporales
 try:
     from inversiones_temporales import (
