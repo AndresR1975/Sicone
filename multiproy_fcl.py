@@ -81,8 +81,6 @@ from datetime import datetime, timedelta, date
 from typing import List, Dict, Tuple, Optional
 import os
 
-# ============================================================================
-
 # Importar módulo de inversiones temporales
 try:
     from inversiones_temporales import (
@@ -941,7 +939,7 @@ def render_exportar_json_simple(consolidador: ConsolidadorMultiproyecto, estado:
             
             json_data = {
                 "metadata": {
-                    "version": "2.1.5",
+                    "version": "2.1.6",  # Incrementada versión
                     "fecha_generacion": datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
                     "semana_actual": int(estado['semana']),
                     "total_proyectos": len(consolidador.proyectos),  # ✅ Total real
@@ -962,7 +960,8 @@ def render_exportar_json_simple(consolidador: ConsolidadorMultiproyecto, estado:
                     "total_proyectos": len(consolidador.proyectos)  # ✅ Total correcto
                 },
                 "df_consolidado": df_data,  # Datos del DataFrame
-                "proyectos": proyectos_completos  # Proyectos completos
+                "proyectos": proyectos_completos,  # Proyectos completos
+                "inversiones_temporales": st.session_state.get('datos_inversiones', None)  # ⭐ NUEVO
             }
             
             # Crear directorio si no existe
@@ -1897,6 +1896,92 @@ def render_inversiones_temporales(estado: Dict):
                     formatear_moneda(timeline_data['retorno_total']),
                     delta=f"+{(timeline_data['retorno_total']/timeline_data['capital_total']*100):.2f}%"
                 )
+        
+        # ====================================================================
+        # GUARDAR DATOS DE INVERSIONES EN SESSION_STATE PARA MÓDULO REPORTES
+        # ====================================================================
+        
+        # Calcular plazo promedio ponderado
+        if monto_total_inv > 0:
+            plazo_promedio = sum(
+                inv.monto * inv.plazo_dias for inv in inversiones
+            ) / monto_total_inv
+        else:
+            plazo_promedio = 0
+        
+        # Calcular fecha_inicio (hoy) y fechas de vencimiento
+        from datetime import datetime, timedelta, date
+        fecha_inicio = datetime.now().date()
+        
+        # Preparar lista de inversiones
+        inversiones_lista = []
+        for i, inv in enumerate(inversiones):
+            resultado = inv.calcular_retorno_neto()
+            fecha_vencimiento = fecha_inicio + timedelta(days=inv.plazo_dias)
+            
+            inversiones_lista.append({
+                'nombre': f"Inversión {i+1}",
+                'instrumento': inv.instrumento,
+                'monto': float(inv.monto),
+                'plazo_dias': int(inv.plazo_dias),
+                'tasa_ea': float(inv.tasa_ea),
+                'retorno_bruto': float(resultado['retorno_bruto']),
+                'retorno_neto': float(resultado['retorno_neto']),
+                'fecha_inicio': fecha_inicio.isoformat(),
+                'fecha_vencimiento': fecha_vencimiento.isoformat()
+            })
+        
+        # Determinar estado de liquidez
+        ratio_liquidez = riesgo['ratio_cobertura']
+        
+        if ratio_liquidez >= 1.5:
+            estado_liquidez = 'ESTABLE'
+        elif ratio_liquidez >= 1.0:
+            estado_liquidez = 'PRECAUCIÓN'
+        else:
+            estado_liquidez = 'CRÍTICO'
+        
+        # Generar alertas
+        alertas = []
+        
+        # Alerta de liquidez
+        if ratio_liquidez < 1.0:
+            alertas.append(f"⚠️ CRÍTICO: Liquidez post-inversión ({ratio_liquidez:.2f}x) por debajo del margen")
+        elif ratio_liquidez < 1.5:
+            alertas.append(f"⚠️ PRECAUCIÓN: Liquidez post-inversión ({ratio_liquidez:.2f}x) cerca del límite")
+        else:
+            alertas.append(f"✅ ESTABLE: Liquidez saludable post-inversión ({ratio_liquidez:.2f}x)")
+        
+        # Alerta de inversión porcentual
+        if porcentaje_usado > 70:
+            alertas.append(f"⚠️ Inversión alta: {porcentaje_usado:.1f}% del saldo total")
+        else:
+            alertas.append(f"✅ Inversión saludable: {porcentaje_usado:.1f}% del saldo total")
+        
+        # Alerta de próximo vencimiento
+        if inversiones:
+            inv_mas_corta = min(inversiones, key=lambda x: x.plazo_dias)
+            fecha_venc_cercana = fecha_inicio + timedelta(days=inv_mas_corta.plazo_dias)
+            alertas.append(f"ℹ️ Próximo vencimiento: {fecha_venc_cercana.strftime('%d/%m/%Y')}")
+        
+        # Guardar en session_state
+        st.session_state.datos_inversiones = {
+            'timestamp': datetime.now(),
+            'resumen': {
+                'total_invertido': float(monto_total_inv),
+                'retorno_neto_total': float(resumen['retorno_neto_total']),
+                'descuentos_totales': float(resumen['descuentos_totales']),
+                'plazo_promedio': float(plazo_promedio)
+            },
+            'inversiones': inversiones_lista,
+            'liquidez': {
+                'liquidez_post': float(riesgo['liquidez_post_inversion']),
+                'margen_total': float(excedente_info['margen_total']),
+                'ratio': float(ratio_liquidez),
+                'estado': estado_liquidez
+            },
+            'alertas': alertas[:3]  # Máximo 3 alertas
+        }
 
 
 # ============================================================================
