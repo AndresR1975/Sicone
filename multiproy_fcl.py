@@ -81,6 +81,15 @@ from datetime import datetime, timedelta, date
 from typing import List, Dict, Tuple, Optional
 import os
 
+st.write("### 🔎 Buscando uso de 'main'")
+
+# Mostrar dónde está el problema
+import inspect
+source = inspect.getsource(sys.modules[__name__])
+if 'main()' in source:
+    st.warning("⚠️ Se encontró llamada a main() en el código")
+else:
+    st.success("✅ No hay llamadas a main()")
 
 # ============================================================================
 
