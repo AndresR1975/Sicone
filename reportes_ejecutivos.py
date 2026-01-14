@@ -59,6 +59,79 @@ except ImportError:
 # FUNCIONES COMUNES - FORMATEO
 # ============================================================================
 
+def parsear_fecha(fecha_valor):
+    """
+    Convierte fecha desde múltiples formatos a objeto date
+    Maneja: str (ISO), date, datetime, None
+    
+    Args:
+        fecha_valor: Fecha en cualquier formato
+    
+    Returns:
+        date object o date.today() como fallback
+    """
+    if fecha_valor is None:
+        return date.today()
+    
+    # Si ya es date, retornar directamente
+    if isinstance(fecha_valor, date) and not isinstance(fecha_valor, datetime):
+        return fecha_valor
+    
+    # Si es datetime, convertir a date
+    if isinstance(fecha_valor, datetime):
+        return fecha_valor.date()
+    
+    # Si es string, parsear ISO format
+    if isinstance(fecha_valor, str):
+        try:
+            # Intentar parsear ISO format completo
+            return datetime.fromisoformat(fecha_valor).date()
+        except:
+            try:
+                # Intentar parsear solo la fecha (YYYY-MM-DD)
+                return datetime.strptime(fecha_valor[:10], '%Y-%m-%d').date()
+            except:
+                # Fallback
+                return date.today()
+    
+    # Fallback final
+    return date.today()
+
+
+def parsear_timestamp(timestamp_valor):
+    """
+    Convierte timestamp desde múltiples formatos a objeto datetime
+    Maneja: str (ISO), datetime, None
+    
+    Args:
+        timestamp_valor: Timestamp en cualquier formato
+    
+    Returns:
+        datetime object o datetime.now() como fallback
+    """
+    if timestamp_valor is None:
+        return datetime.now()
+    
+    # Si ya es datetime, retornar directamente
+    if isinstance(timestamp_valor, datetime):
+        return timestamp_valor
+    
+    # Si es string, parsear ISO format
+    if isinstance(timestamp_valor, str):
+        try:
+            return datetime.fromisoformat(timestamp_valor)
+        except:
+            try:
+                # Intentar sin timezone info
+                return datetime.fromisoformat(timestamp_valor.replace('Z', '+00:00'))
+            except:
+                # Fallback
+                return datetime.now()
+    
+    # Fallback final
+    return datetime.now()
+
+
 def formatear_moneda(valor: float) -> str:
     """
     Formatea valores monetarios en formato colombiano (compartido por ambos reportes)
@@ -722,13 +795,20 @@ def generar_timeline_vencimientos(inversiones: List[Dict], fecha_hoy: date) -> O
         
         fig, ax = plt.subplots(figsize=(5.5, 1.8))
         
-        inversiones_sort = sorted(inversiones, key=lambda x: x.get('fecha_vencimiento', fecha_hoy))
+        # Parsear fechas antes de ordenar
+        inversiones_con_fechas = []
+        for inv in inversiones:
+            inv_copia = inv.copy()
+            inv_copia['fecha_vencimiento_parsed'] = parsear_fecha(inv.get('fecha_vencimiento', fecha_hoy))
+            inversiones_con_fechas.append(inv_copia)
+        
+        inversiones_sort = sorted(inversiones_con_fechas, key=lambda x: x['fecha_vencimiento_parsed'])
         
         colores = ['#3b82f6', '#60a5fa', '#93c5fd']
         
         for idx, inv in enumerate(inversiones_sort[:3]):
             nombre = inv.get('nombre', f'Inversión {idx+1}')
-            fecha_venc = inv.get('fecha_vencimiento', fecha_hoy)
+            fecha_venc = inv['fecha_vencimiento_parsed']  # Ya es date object
             dias = (fecha_venc - fecha_hoy).days
             
             ax.barh(idx, dias, left=0, height=0.6, color=colores[idx % len(colores)],
@@ -905,12 +985,15 @@ def generar_reporte_inversiones_pdf(datos: Dict) -> bytes:
     ]
     
     for inv in inversiones[:5]:
+        # Parsear fecha correctamente (puede venir como string desde JSON)
+        fecha_venc = parsear_fecha(inv.get('fecha_vencimiento'))
+        
         inversiones_data.append([
             inv.get('instrumento', 'N/A'),
             formatear_moneda(inv.get('monto', 0)),
             f"{inv.get('plazo_dias', 0)}d",
             formatear_moneda(inv.get('retorno_neto', 0)),
-            inv.get('fecha_vencimiento', date.today()).strftime('%d/%m/%Y')
+            fecha_venc.strftime('%d/%m/%Y')
         ])
     
     tabla_inversiones = Table(inversiones_data, colWidths=[1.5*inch, 1.3*inch, 0.9*inch, 1.3*inch, 1.3*inch])
@@ -1089,7 +1172,7 @@ def main():
             
             if "Gerencial" in tipo_reporte and tiene_multiproyecto:
                 datos = st.session_state.datos_reportes
-                timestamp = datos.get('timestamp', datetime.now())
+                timestamp = parsear_timestamp(datos.get('timestamp', datetime.now()))
                 
                 # Mostrar info de datos
                 col1, col2 = st.columns(2)
@@ -1152,7 +1235,7 @@ def main():
             
             elif "Inversiones" in tipo_reporte and tiene_inversiones:
                 datos_inv = st.session_state.datos_inversiones
-                timestamp = datos_inv.get('timestamp', datetime.now())
+                timestamp = parsear_timestamp(datos_inv.get('timestamp', datetime.now()))
                 
                 # Mostrar info de datos
                 col1, col2 = st.columns(2)

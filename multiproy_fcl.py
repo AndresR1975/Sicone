@@ -1966,7 +1966,7 @@ def render_inversiones_temporales(estado: Dict):
         
         # Guardar en session_state
         st.session_state.datos_inversiones = {
-            'timestamp': datetime.now(),
+            'timestamp': datetime.now().isoformat(),  # ✅ String ISO en vez de datetime object
             'resumen': {
                 'total_invertido': float(monto_total_inv),
                 'retorno_neto_total': float(resumen['retorno_neto_total']),
