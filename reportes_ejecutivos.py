@@ -787,6 +787,7 @@ def generar_pie_portafolio(inversiones: List[Dict]) -> Optional[bytes]:
 def generar_timeline_vencimientos(inversiones: List[Dict], fecha_hoy: date) -> Optional[bytes]:
     """
     Genera timeline tipo Gantt de vencimientos
+    Usa mismos colores y nombres que el pie chart
     (Usado en reporte inversiones)
     """
     try:
@@ -804,17 +805,54 @@ def generar_timeline_vencimientos(inversiones: List[Dict], fecha_hoy: date) -> O
         
         inversiones_sort = sorted(inversiones_con_fechas, key=lambda x: x['fecha_vencimiento_parsed'])
         
-        colores = ['#3b82f6', '#60a5fa', '#93c5fd']
+        # MISMOS COLORES QUE EL PIE CHART
+        colores_base = ['#3b82f6', '#22c55e', '#f97316', '#8b5cf6']
+        
+        # Crear mapeo instrumento → color (igual que pie chart)
+        instrumentos_unicos = []
+        for inv in inversiones:
+            instrumento = inv.get('instrumento', 'Otro')
+            if instrumento not in instrumentos_unicos:
+                instrumentos_unicos.append(instrumento)
+        
+        # Mapeo instrumento → color
+        mapeo_colores = {}
+        for idx, instr in enumerate(instrumentos_unicos):
+            mapeo_colores[instr] = colores_base[idx % len(colores_base)]
+        
+        # Contar ocurrencias de cada instrumento para agregar números si hay duplicados
+        conteo_instrumentos = {}
+        for inv in inversiones:
+            instrumento = inv.get('instrumento', 'Otro')
+            conteo_instrumentos[instrumento] = conteo_instrumentos.get(instrumento, 0) + 1
+        
+        # Para tracking de números por instrumento
+        num_por_instrumento = {}
         
         for idx, inv in enumerate(inversiones_sort[:3]):
-            nombre = inv.get('nombre', f'Inversión {idx+1}')
+            instrumento = inv.get('instrumento', 'Otro')
             fecha_venc = inv['fecha_vencimiento_parsed']  # Ya es date object
             dias = (fecha_venc - fecha_hoy).days
             
-            ax.barh(idx, dias, left=0, height=0.6, color=colores[idx % len(colores)],
+            # Obtener color del instrumento
+            color = mapeo_colores.get(instrumento, colores_base[0])
+            
+            # Determinar nombre a mostrar
+            if conteo_instrumentos[instrumento] > 1:
+                # Si hay múltiples inversiones del mismo instrumento, agregar número
+                if instrumento not in num_por_instrumento:
+                    num_por_instrumento[instrumento] = 1
+                else:
+                    num_por_instrumento[instrumento] += 1
+                nombre_display = f"{instrumento} {num_por_instrumento[instrumento]}"
+            else:
+                # Solo una inversión de este instrumento
+                nombre_display = instrumento
+            
+            ax.barh(idx, dias, left=0, height=0.6, color=color,
                    edgecolor='white', linewidth=1.5)
             
-            ax.text(dias / 2, idx, nombre, ha='center', va='center',
+            ax.text(dias / 2, idx, nombre_display, ha='center', va='center',
                    fontsize=6, color='white', fontweight='bold')
         
         ax.set_yticks(range(len(inversiones_sort[:3])))
