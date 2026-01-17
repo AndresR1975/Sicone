@@ -1,0 +1,398 @@
+"""
+SICONE - Módulo de Conciliación Financiera
+==========================================
+
+PROPÓSITO:
+----------
+Interfaz de conciliación que permite:
+- Configurar período de análisis
+- Cargar datos SICONE consolidados
+- Ingresar saldos reales separados por cuenta (Fiducuenta + Cuenta Bancaria)
+- Sumar para comparar vs consolidado SICONE
+- Documentar ajustes estructurados por cuenta
+- Calcular y visualizar resultados
+
+ARQUITECTURA SICONE:
+--------------------
+Este módulo se integra con el sistema de navegación personalizado de SICONE.
+NO usa st.set_page_config() porque ya está configurado en main.py.
+Exporta una función main() que es llamada desde main.py.
+
+AUTOR: Andrés
+FECHA: Enero 2025
+VERSIÓN: 1.0 MVP
+"""
+
+import streamlit as st
+import pandas as pd
+import plotly.graph_objects as go
+import plotly.express as px
+from datetime import datetime, date
+import json
+from pathlib import Path
+
+# Importar módulo core (lógica de negocio)
+try:
+    import conciliacion_core
+    from conciliacion_core import (
+        ConciliadorSICONE,
+        SaldosCuenta,
+        Ajuste,
+        ResultadoConciliacion,
+        formatear_moneda
+    )
+except ImportError as e:
+    st.error(f"❌ Error al importar conciliacion_core: {e}")
+    st.info("**Solución:** Asegúrese de que `conciliacion_core.py` esté en el mismo directorio")
+    st.stop()
+
+# ============================================================================
+# ESTILOS CSS PERSONALIZADOS
+# ============================================================================
+
+CUSTOM_CSS = """
+<style>
+    .info-box {
+        background-color: #e7f3ff;
+        padding: 15px;
+        border-radius: 5px;
+        border-left: 5px solid #2196F3;
+        margin: 10px 0;
+    }
+    .metric-card {
+        background-color: #f0f2f6;
+        padding: 20px;
+        border-radius: 10px;
+        border-left: 5px solid #1f77b4;
+    }
+</style>
+"""
+
+# ============================================================================
+# INICIALIZACIÓN DE SESSION STATE
+# ============================================================================
+
+def inicializar_session_state():
+    """Inicializa variables de session_state si no existen"""
+    if 'conciliador' not in st.session_state:
+        st.session_state.conciliador = None
+    
+    if 'ajustes_df' not in st.session_state:
+        st.session_state.ajustes_df = pd.DataFrame(columns=[
+            'Fecha', 'Cuenta', 'Categoría', 'Concepto', 
+            'Monto', 'Tipo', 'Evidencia', 'Observaciones'
+        ])
+    
+    if 'saldos_reales_configurados' not in st.session_state:
+        st.session_state.saldos_reales_configurados = False
+    
+    if 'datos_sicone_cargados' not in st.session_state:
+        st.session_state.datos_sicone_cargados = False
+    
+    if 'resultados_conciliacion' not in st.session_state:
+        st.session_state.resultados_conciliacion = None
+    
+    if 'mostrar_ayuda' not in st.session_state:
+        st.session_state.mostrar_ayuda = False
+
+# ============================================================================
+# FUNCIÓN PRINCIPAL (EXPORTADA PARA MAIN.PY)
+# ============================================================================
+
+def main():
+    """
+    Función principal del módulo de conciliación.
+    
+    Esta función es llamada desde main.py cuando el usuario selecciona
+    el módulo de Conciliación.
+    
+    NOTA: NO incluye st.set_page_config() porque ya está configurado en main.py
+    """
+    
+    # Aplicar estilos
+    st.markdown(CUSTOM_CSS, unsafe_allow_html=True)
+    
+    # Inicializar session state
+    inicializar_session_state()
+    
+    # ========================================================================
+    # HEADER
+    # ========================================================================
+    
+    col_titulo, col_ayuda = st.columns([4, 1])
+    
+    with col_titulo:
+        st.title("🔍 Conciliación Financiera SICONE")
+    
+    with col_ayuda:
+        if st.button("❓ Ayuda", use_container_width=True):
+            st.session_state.mostrar_ayuda = not st.session_state.mostrar_ayuda
+    
+    if st.session_state.mostrar_ayuda:
+        st.markdown("""
+        <div class='info-box'>
+            <h4 style='margin: 0; color: #1976D2;'>💡 Cómo Funciona Este Módulo</h4>
+            <ul style='margin: 10px 0 0 0;'>
+                <li><strong>SICONE</strong> trabaja con saldo consolidado total</li>
+                <li><strong>Realidad bancaria</strong> tiene 2 cuentas separadas:
+                    <ul>
+                        <li>🏦 <strong>Fiducuenta:</strong> Reserva de efectivo con rendimientos</li>
+                        <li>💳 <strong>Cuenta Bancaria:</strong> Operación diaria de proyectos</li>
+                    </ul>
+                </li>
+                <li><strong>Este módulo</strong> compara la suma de cuentas reales vs SICONE</li>
+            </ul>
+        </div>
+        """, unsafe_allow_html=True)
+    
+    st.markdown("""
+    <div class='info-box'>
+        <h4 style='margin: 0; color: #1976D2;'>Verificación de Precisión SICONE</h4>
+        <p style='margin: 5px 0 0 0; color: #555;'>
+            Compara proyecciones del modelo contra realidad bancaria y documenta diferencias.
+        </p>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    st.divider()
+    
+    # ========================================================================
+    # SIDEBAR: ESTADO DEL PROCESO
+    # ========================================================================
+    
+    with st.sidebar:
+        st.subheader("Estado del Proceso")
+        
+        estado_items = [
+            ("📅 Período", st.session_state.conciliador is not None),
+            ("📊 Datos SICONE", st.session_state.datos_sicone_cargados),
+            ("💰 Saldos Reales", st.session_state.saldos_reales_configurados),
+            ("🔍 Conciliación", st.session_state.resultados_conciliacion is not None)
+        ]
+        
+        for item, completado in estado_items:
+            icon = "✅" if completado else "⭕"
+            st.text(f"{icon} {item}")
+    
+    # ========================================================================
+    # PASO 1: CONFIGURACIÓN DEL PERÍODO
+    # ========================================================================
+    
+    with st.expander("📅 PASO 1: Configuración del Período", expanded=not st.session_state.conciliador):
+        st.markdown("""
+        **Instrucciones:** Define el período que deseas conciliar.
+        """)
+        
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            fecha_inicio = st.date_input(
+                "Fecha de Inicio",
+                value=date(2025, 1, 1)
+            )
+        
+        with col2:
+            fecha_fin = st.date_input(
+                "Fecha de Fin",
+                value=date(2025, 1, 31)
+            )
+        
+        if fecha_inicio >= fecha_fin:
+            st.error("⚠️ La fecha de inicio debe ser anterior a la fecha de fin")
+        else:
+            dias_periodo = (fecha_fin - fecha_inicio).days + 1
+            st.info(f"📊 Período: {dias_periodo} días")
+            
+            if st.button("✅ Confirmar Período", type="primary"):
+                st.session_state.conciliador = ConciliadorSICONE(
+                    fecha_inicio=fecha_inicio.isoformat(),
+                    fecha_fin=fecha_fin.isoformat()
+                )
+                st.success(f"✅ Período configurado")
+                st.rerun()
+    
+    # ========================================================================
+    # PASO 2: CARGA DE DATOS SICONE
+    # ========================================================================
+    
+    if st.session_state.conciliador:
+        with st.expander("📊 PASO 2: Datos SICONE", expanded=not st.session_state.datos_sicone_cargados):
+            uploaded_json = st.file_uploader(
+                "📁 Selecciona consolidado_multiproyecto.json",
+                type=['json']
+            )
+            
+            if uploaded_json and st.button("📥 Cargar JSON", type="primary"):
+                with st.spinner("Cargando..."):
+                    try:
+                        datos = json.load(uploaded_json)
+                        success = st.session_state.conciliador.cargar_datos_sicone(datos_dict=datos)
+                        
+                        if success:
+                            st.session_state.datos_sicone_cargados = True
+                            st.success("✅ Datos cargados")
+                            st.rerun()
+                        else:
+                            st.error("❌ Error al cargar datos")
+                    except Exception as e:
+                        st.error(f"❌ Error: {str(e)}")
+    
+    # ========================================================================
+    # PASO 3: SALDOS REALES
+    # ========================================================================
+    
+    if st.session_state.datos_sicone_cargados:
+        with st.expander("💰 PASO 3: Saldos Reales", expanded=not st.session_state.saldos_reales_configurados):
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                st.markdown("### 🏦 Fiducuenta")
+                fidu_ini = st.number_input("Saldo Inicial ($)", min_value=0.0, step=1000000.0, key="fidu_ini")
+                fidu_fin = st.number_input("Saldo Final ($)", min_value=0.0, step=1000000.0, key="fidu_fin")
+            
+            with col2:
+                st.markdown("### 💳 Cuenta Bancaria")
+                banco_ini = st.number_input("Saldo Inicial ($)", min_value=0.0, step=1000000.0, key="banco_ini")
+                banco_fin = st.number_input("Saldo Final ($)", min_value=0.0, step=1000000.0, key="banco_fin")
+            
+            if all([fidu_ini, fidu_fin, banco_ini, banco_fin]):
+                st.divider()
+                if st.button("✅ Confirmar Saldos", type="primary"):
+                    saldos_fidu = SaldosCuenta("Fiducuenta", fidu_ini, fidu_fin, "Manual")
+                    saldos_banco = SaldosCuenta("Cuenta Bancaria", banco_ini, banco_fin, "Manual")
+                    st.session_state.conciliador.set_saldos_reales(saldos_fidu, saldos_banco)
+                    st.session_state.saldos_reales_configurados = True
+                    st.success("✅ Saldos configurados")
+                    st.rerun()
+    
+    # ========================================================================
+    # PASO 4: AJUSTES
+    # ========================================================================
+    
+    if st.session_state.saldos_reales_configurados:
+        with st.expander("📝 PASO 4: Ajustes", expanded=True):
+            with st.form("form_ajuste", clear_on_submit=True):
+                col1, col2, col3 = st.columns(3)
+                
+                with col1:
+                    fecha_aj = st.date_input("Fecha", value=datetime.now().date())
+                    cuenta_aj = st.selectbox("Cuenta", ["Fiducuenta", "Cuenta Bancaria", "Ambas"])
+                
+                with col2:
+                    categoria_aj = st.selectbox("Categoría", Ajuste.CATEGORIAS_VALIDAS)
+                    tipo_aj = st.selectbox("Tipo", ["Ingreso", "Egreso"])
+                
+                with col3:
+                    monto_aj = st.number_input("Monto ($)", min_value=0.0, step=100000.0)
+                
+                concepto_aj = st.text_input("Concepto")
+                
+                if st.form_submit_button("➕ Agregar", type="primary"):
+                    if monto_aj > 0 and concepto_aj:
+                        ajuste = Ajuste(
+                            fecha=fecha_aj.isoformat(),
+                            cuenta=cuenta_aj,
+                            categoria=categoria_aj,
+                            concepto=concepto_aj,
+                            monto=monto_aj,
+                            tipo=tipo_aj
+                        )
+                        
+                        exito, msg = st.session_state.conciliador.agregar_ajuste(ajuste)
+                        if exito:
+                            nuevo_registro = pd.DataFrame([{
+                                'Fecha': fecha_aj,
+                                'Cuenta': cuenta_aj,
+                                'Categoría': categoria_aj,
+                                'Concepto': concepto_aj,
+                                'Monto': monto_aj,
+                                'Tipo': tipo_aj,
+                                'Evidencia': '',
+                                'Observaciones': ''
+                            }])
+                            st.session_state.ajustes_df = pd.concat([
+                                st.session_state.ajustes_df, 
+                                nuevo_registro
+                            ], ignore_index=True)
+                            st.success(msg)
+                            st.rerun()
+            
+            if not st.session_state.ajustes_df.empty:
+                st.subheader("📋 Ajustes Registrados")
+                st.dataframe(st.session_state.ajustes_df, use_container_width=True)
+    
+    # ========================================================================
+    # PASO 5: CÁLCULO
+    # ========================================================================
+    
+    if st.session_state.saldos_reales_configurados:
+        st.divider()
+        col1, col2, col3 = st.columns([2, 1, 2])
+        with col2:
+            if st.button("🔍 CALCULAR", type="primary", use_container_width=True):
+                with st.spinner("Calculando..."):
+                    try:
+                        resultados = st.session_state.conciliador.calcular_conciliacion()
+                        st.session_state.resultados_conciliacion = resultados
+                        st.success("✅ Listo")
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"❌ Error: {str(e)}")
+    
+    # ========================================================================
+    # RESULTADOS
+    # ========================================================================
+    
+    if st.session_state.resultados_conciliacion:
+        st.divider()
+        st.header("📊 Resultados")
+        
+        resultados = st.session_state.resultados_conciliacion
+        
+        # Métricas
+        col1, col2, col3 = st.columns(3)
+        
+        saldo_real_total = sum(r.saldo_final_real for r in resultados.values())
+        diferencia_total = sum(r.diferencia_residual for r in resultados.values())
+        precision = 100 * (1 - abs(diferencia_total) / abs(saldo_real_total)) if saldo_real_total != 0 else 0
+        
+        with col1:
+            st.metric("Saldo Real Total", formatear_moneda(saldo_real_total))
+        with col2:
+            st.metric("Diferencia", formatear_moneda(abs(diferencia_total)))
+        with col3:
+            status = "✅ OK" if precision >= 98 else "⚠️ REVISAR" if precision >= 95 else "🚨 CRÍTICO"
+            st.metric("Precisión", f"{precision:.2f}%", delta=status)
+        
+        # Gráficos por cuenta
+        for cuenta, resultado in resultados.items():
+            with st.expander(f"🏦 {cuenta}", expanded=True):
+                fig = go.Figure(go.Waterfall(
+                    x=["Inicial", "Ingresos", "Egresos", "Ajustes", "Final"],
+                    y=[
+                        resultado.saldo_inicial_sicone,
+                        resultado.ingresos_sicone,
+                        -resultado.egresos_sicone,
+                        resultado.ajustes_ingresos - resultado.ajustes_egresos,
+                        resultado.saldo_conciliado
+                    ],
+                    text=[formatear_moneda(v) for v in [
+                        resultado.saldo_inicial_sicone,
+                        resultado.ingresos_sicone,
+                        resultado.egresos_sicone,
+                        resultado.ajustes_ingresos - resultado.ajustes_egresos,
+                        resultado.saldo_conciliado
+                    ]],
+                    textposition="outside"
+                ))
+                fig.update_layout(title=f"Conciliación {cuenta}", height=400)
+                st.plotly_chart(fig, use_container_width=True)
+
+# ============================================================================
+# ENTRY POINT
+# ============================================================================
+
+if __name__ == "__main__":
+    # Si se ejecuta directamente (para testing)
+    st.set_page_config(page_title="Conciliación", page_icon="🔍", layout="wide")
+    main()
