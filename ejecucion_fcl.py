@@ -4160,6 +4160,21 @@ def render_paso_5_analisis_egresos():
     render_grafica_tesoreria(metricas_tesoreria)
     
     st.markdown("---")
+
+    contratos_cartera = st.session_state.get('contratos_cartera_input', [])
+    
+    # ✅ VALIDACIÓN PREVENTIVA
+    if not contratos_cartera:
+        st.error("⚠️ ADVERTENCIA: No se detectaron datos de cartera")
+        st.error("Esto puede deberse a:")
+        st.error("• Problema de carga de session_state")
+        st.error("• Aplicación reactivada desde hibernación")
+        st.error("• Datos no guardados correctamente")
+        st.info("💡 SOLUCIÓN: Recarga la página o vuelve al Paso 2")
+        
+        # Detener ejecución para evitar cálculos incorrectos
+        st.stop()
+
     
     # ========================================================================
     # DETALLES ADICIONALES
