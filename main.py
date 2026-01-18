@@ -3,11 +3,8 @@ SICONE - Sistema Integrado de Construcción Eficiente
 Punto de entrada principal de la plataforma
 
 Versión: 1.0
-Fecha: Enero 2026
+Fecha: Diciembre 2025
 Autor: Andrés Restrepo & Daniel
-
-MODIFICACIONES:
-- Agregado módulo de Conciliación Financiera (Enero 2026)
 """
 
 import streamlit as st
@@ -178,9 +175,9 @@ MODULOS_DISPONIBLES = {
         'version': 'v1.0'
     },
     'conciliacion': {
-        'nombre': 'Conciliación',
+        'nombre': 'Conciliación Financiera',
         'icono': '🔍',
-        'descripcion': 'Verificación de precisión SICONE vs realidad bancaria',
+        'descripcion': 'Comparar proyecciones SICONE vs saldos reales bancarios',
         'estado': 'activo',
         'version': 'v1.0'
     }
@@ -240,50 +237,64 @@ def render_home():
             
             # Botón de acceso
             if modulo['estado'] == 'activo':
-                if st.button(f"▶ Abrir {modulo['nombre']}", key=f"btn_{key}", use_container_width=True):
+                if st.button(
+                    f"{modulo['icono']} Abrir {modulo['nombre']}", 
+                    key=f"btn_{key}",
+                    use_container_width=True,
+                    type="primary"
+                ):
                     st.session_state.modulo_actual = key
                     st.rerun()
+            else:
+                st.button(
+                    f"⏳ Próximamente",
+                    key=f"btn_{key}",
+                    use_container_width=True,
+                    disabled=True
+                )
     
-    # Estadísticas rápidas (si hay datos)
+    # Estadísticas rápidas
+    st.markdown("---")
+    st.markdown("### 📊 Panel de Control")
+    
     try:
         stats = get_estadisticas()
-        if stats['total_proyectos'] > 0 or stats['total_cotizaciones'] > 0:
-            st.markdown("---")
-            st.markdown("### 📊 Estadísticas Rápidas")
-            
-            cols = st.columns(3)
-            
-            with cols[0]:
-                st.markdown(f"""
-                <div class="metric-card">
-                    <h3 style="margin: 0; color: #3b82f6;">🏗️ Proyectos</h3>
-                    <p style="font-size: 2rem; font-weight: bold; margin: 10px 0;">{stats['total_proyectos']}</p>
-                    <p style="color: #6b7280; margin: 0;">Totales</p>
-                </div>
-                """, unsafe_allow_html=True)
-            
-            with cols[1]:
-                st.markdown(f"""
-                <div class="metric-card">
-                    <h3 style="margin: 0; color: #10b981;">📝 Cotizaciones</h3>
-                    <p style="font-size: 2rem; font-weight: bold; margin: 10px 0;">{stats['total_cotizaciones']}</p>
-                    <p style="color: #6b7280; margin: 0;">Guardadas</p>
-                </div>
-                """, unsafe_allow_html=True)
-            
-            with cols[2]:
-                st.markdown(f"""
-                <div class="metric-card">
-                    <h3 style="margin: 0; color: #f59e0b;">⚡ Activos</h3>
-                    <p style="font-size: 2rem; font-weight: bold; margin: 10px 0;">{stats['proyectos_activos']}</p>
-                    <p style="color: #6b7280; margin: 0;">En Ejecución</p>
-                </div>
-                """, unsafe_allow_html=True)
+        
+        col1, col2, col3 = st.columns(3)
+        
+        with col1:
+            st.markdown(f"""
+            <div class="metric-card">
+                <h3 style="margin: 0; color: #3b82f6;">🏗️ Proyectos</h3>
+                <p style="font-size: 2rem; font-weight: bold; margin: 10px 0;">{stats['total_proyectos']}</p>
+                <p style="color: #6b7280; margin: 0;">Total registrados</p>
+            </div>
+            """, unsafe_allow_html=True)
+        
+        with col2:
+            st.markdown(f"""
+            <div class="metric-card">
+                <h3 style="margin: 0; color: #10b981;">✅ Activos</h3>
+                <p style="font-size: 2rem; font-weight: bold; margin: 10px 0;">{stats['proyectos_activos']}</p>
+                <p style="color: #6b7280; margin: 0;">En ejecución</p>
+            </div>
+            """, unsafe_allow_html=True)
+        
+        with col3:
+            st.markdown(f"""
+            <div class="metric-card">
+                <h3 style="margin: 0; color: #8b5cf6;">📈 Módulos</h3>
+                <p style="font-size: 2rem; font-weight: bold; margin: 10px 0;">{len([m for m in MODULOS_DISPONIBLES.values() if m['estado'] == 'activo'])}</p>
+                <p style="color: #6b7280; margin: 0;">Disponibles</p>
+            </div>
+            """, unsafe_allow_html=True)
+    
     except Exception as e:
-        pass  # Si no hay BD aún, no mostrar estadísticas
+        st.warning(f"No se pudieron cargar las estadísticas: {e}")
 
 def render_modulo_cotizaciones():
     """Renderiza el módulo de cotizaciones"""
+    # Botón de regreso
     with st.sidebar:
         if st.button("◄ Volver al Inicio", use_container_width=True):
             st.session_state.modulo_actual = None
@@ -292,16 +303,24 @@ def render_modulo_cotizaciones():
         st.markdown(f"👤 **Usuario:** {st.session_state.usuario_actual['nombre_completo']}")
         st.caption(f"Rol: {st.session_state.usuario_actual['rol']}")
     
+    # Importar y ejecutar el módulo de cotizaciones
     try:
         import cotizador_sicone
         cotizador_sicone.main()
+        
     except ImportError as e:
         st.error(f"❌ Error al importar el módulo de cotizaciones: {e}")
+        st.info("**Solución:** Asegúrese de que `cotizador_sicone.py` esté en el mismo directorio que `main.py`")
+    except AttributeError:
+        st.error("❌ Error: El módulo `cotizador_sicone.py` no tiene una función `main()`")
+        st.info("**Solución:** Verifique que el archivo tiene la estructura correcta")
     except Exception as e:
         st.error(f"❌ Error inesperado: {e}")
+        st.exception(e)
 
 def render_modulo_flujo_caja():
-    """Renderiza el módulo de Flujo de Caja"""
+    """Renderiza el módulo de Flujo de Caja con submenú Proyección/Cartera"""
+    # Botón de regreso
     with st.sidebar:
         if st.button("◄ Volver al Inicio", use_container_width=True):
             st.session_state.modulo_actual = None
@@ -310,6 +329,7 @@ def render_modulo_flujo_caja():
         st.markdown("---")
         st.markdown("### 📊 Flujo de Caja")
         
+        # Inicializar submodulo si no existe
         if 'submodulo_fcl' not in st.session_state:
             st.session_state.submodulo_fcl = 'proyeccion'
         
@@ -320,6 +340,7 @@ def render_modulo_flujo_caja():
             key='radio_submodulo_fcl'
         )
         
+        # Actualizar submodulo
         if "Proyección" in submodulo:
             st.session_state.submodulo_fcl = 'proyeccion'
         else:
@@ -327,60 +348,45 @@ def render_modulo_flujo_caja():
         
         st.markdown("---")
         st.markdown(f"👤 **Usuario:** {st.session_state.usuario_actual['nombre_completo']}")
+        st.caption(f"Rol: {st.session_state.usuario_actual['rol']}")
     
+    # Renderizar submódulo correspondiente
     if st.session_state.submodulo_fcl == 'proyeccion':
         try:
             import importlib
             import proyeccion_fcl
-            importlib.reload(proyeccion_fcl)
+            
+            if 'STREAMLIT_ENV' in os.environ:
+                importlib.reload(proyeccion_fcl)
+            
             proyeccion_fcl.main()
+        
         except ImportError as e:
             st.error(f"❌ Error al importar proyeccion_fcl: {e}")
-    else:
+        except Exception as e:
+            st.error(f"❌ Error inesperado: {e}")
+            st.exception(e)
+    
+    else:  # ejecucion
         try:
             import importlib
             import ejecucion_fcl
-            importlib.reload(ejecucion_fcl)
+            
+            if 'STREAMLIT_ENV' in os.environ:
+                importlib.reload(ejecucion_fcl)
+            
             ejecucion_fcl.main()
+        
         except ImportError as e:
             st.error(f"❌ Error al importar ejecucion_fcl: {e}")
+            st.info("**Solución:** Asegúrese de que `ejecucion_fcl.py` esté en el mismo directorio")
+        except Exception as e:
+            st.error(f"❌ Error inesperado: {e}")
+            st.exception(e)
 
 def render_modulo_multiproyecto():
     """Renderiza el módulo de Análisis Multiproyecto"""
-    with st.sidebar:
-        if st.button("◄ Volver al Inicio", use_container_width=True):
-            st.session_state.modulo_actual = None
-            st.rerun()
-        st.markdown("---")
-        st.markdown(f"👤 **Usuario:** {st.session_state.usuario_actual['nombre_completo']}")
-    
-    try:
-        import importlib
-        import multiproy_fcl
-        importlib.reload(multiproy_fcl)
-        multiproy_fcl.main()
-    except ImportError as e:
-        st.error(f"❌ Error al importar multiproy_fcl: {e}")
-
-def render_modulo_reportes():
-    """Renderiza el módulo de Reportes"""
-    with st.sidebar:
-        if st.button("◄ Volver al Inicio", use_container_width=True):
-            st.session_state.modulo_actual = None
-            st.rerun()
-        st.markdown("---")
-        st.markdown(f"👤 **Usuario:** {st.session_state.usuario_actual['nombre_completo']}")
-    
-    try:
-        import importlib
-        import reportes_ejecutivos
-        importlib.reload(reportes_ejecutivos)
-        reportes_ejecutivos.main()
-    except ImportError as e:
-        st.error(f"❌ Error al importar reportes_ejecutivos: {e}")
-
-def render_modulo_conciliacion():
-    """Renderiza el módulo de Conciliación Financiera"""
+    # Botón de regreso
     with st.sidebar:
         if st.button("◄ Volver al Inicio", use_container_width=True):
             st.session_state.modulo_actual = None
@@ -389,31 +395,91 @@ def render_modulo_conciliacion():
         st.markdown(f"👤 **Usuario:** {st.session_state.usuario_actual['nombre_completo']}")
         st.caption(f"Rol: {st.session_state.usuario_actual['rol']}")
     
+    # Importar y ejecutar el módulo de análisis multiproyecto
     try:
         import importlib
-        import sys
+        import multiproy_fcl
         
-        # Recargar módulo para usar versión más reciente
-        if 'conciliacion' in sys.modules:
-            import conciliacion
-            importlib.reload(conciliacion)
-        else:
-            import conciliacion
+        if 'STREAMLIT_ENV' in os.environ:
+            importlib.reload(multiproy_fcl)
         
-        # Ejecutar
-        if hasattr(conciliacion, 'main'):
-            conciliacion.main()
-        else:
-            st.error("❌ Error: conciliacion.py no tiene función main()")
+        multiproy_fcl.main()
     
     except ImportError as e:
-        st.error(f"❌ Error al importar el módulo de conciliación: {e}")
-        st.info("**Solución:** Asegúrese de que `conciliacion.py` y `conciliacion_core.py` estén en el mismo directorio")
+        st.error(f"❌ Error al importar el módulo de análisis multiproyecto: {e}")
+        st.info("**Solución:** Asegúrese de que `multiproy_fcl.py` esté en el mismo directorio que `main.py`")
     except AttributeError:
-        st.error("❌ Error: El módulo `conciliacion.py` no tiene una función `main()`")
+        st.error("❌ Error: El módulo `multiproy_fcl.py` no tiene una función `main()`")
+        st.info("**Solución:** Verifique que el archivo tiene la estructura correcta")
     except Exception as e:
         st.error(f"❌ Error inesperado: {e}")
         st.exception(e)
+
+def render_modulo_reportes():
+    """Renderiza el módulo de Reportes Ejecutivos"""
+    # Botón de regreso
+    with st.sidebar:
+        if st.button("◄ Volver al Inicio", use_container_width=True):
+            st.session_state.modulo_actual = None
+            st.rerun()
+        st.markdown("---")
+        st.markdown(f"👤 **Usuario:** {st.session_state.usuario_actual['nombre_completo']}")
+        st.caption(f"Rol: {st.session_state.usuario_actual['rol']}")
+    
+    # Importar y ejecutar el módulo de reportes
+    try:
+        import importlib
+        import reportes_ejecutivos
+        
+        if 'STREAMLIT_ENV' in os.environ:
+            importlib.reload(reportes_ejecutivos)
+        
+        reportes_ejecutivos.main()
+    
+    except ImportError as e:
+        st.error(f"❌ Error al importar el módulo de reportes: {e}")
+        st.info("**Solución:** Asegúrese de que `reportes_ejecutivos.py` esté en el mismo directorio que `main.py`")
+    except AttributeError:
+        st.error("❌ Error: El módulo `reportes_ejecutivos.py` no tiene una función `main()`")
+        st.info("**Solución:** Verifique que el archivo tiene la estructura correcta")
+    except Exception as e:
+        st.error(f"❌ Error inesperado: {e}")
+        st.exception(e)
+
+def render_modulo_conciliacion():
+    """Renderiza el módulo de Conciliación Financiera"""
+    # Botón de regreso
+    with st.sidebar:
+        if st.button("◄ Volver al Inicio", use_container_width=True):
+            st.session_state.modulo_actual = None
+            st.rerun()
+        st.markdown("---")
+        st.markdown(f"👤 **Usuario:** {st.session_state.usuario_actual['nombre_completo']}")
+        st.caption(f"Rol: {st.session_state.usuario_actual['rol']}")
+    
+    # Importar y ejecutar el módulo de conciliación
+    try:
+        import importlib
+        import conciliacion
+        
+        # Recargar en desarrollo
+        if 'STREAMLIT_ENV' in os.environ:
+            importlib.reload(conciliacion)
+        
+        # Ejecutar función main
+        conciliacion.main()
+    
+    except ImportError as e:
+        st.error(f"❌ Error al importar el módulo de conciliación: {e}")
+        st.info("**Solución:** Asegúrese de que `conciliacion.py` y `conciliacion_core.py` estén en el mismo directorio que `main.py`")
+    except AttributeError:
+        st.error("❌ Error: El módulo `conciliacion.py` no tiene una función `main()`")
+        st.info("**Solución:** Verifique que el archivo tiene la estructura correcta con la función main() exportada")
+    except Exception as e:
+        st.error(f"❌ Error inesperado en conciliación: {e}")
+        import traceback
+        with st.expander("Ver detalles del error"):
+            st.code(traceback.format_exc())
 
 # ============================================================================
 # MAIN - PUNTO DE ENTRADA

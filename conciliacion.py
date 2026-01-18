@@ -689,44 +689,92 @@ def main():
             status = "✅ OK" if precision >= 98 else "⚠️ REVISAR" if precision >= 95 else "🚨 CRÍTICO"
             st.metric("Precisión", f"{precision:.2f}%", delta=status)
         
-        # Gráficos mejorados
+        # Gráficos mejorados con colores y explicaciones
         st.subheader("📈 Análisis Visual")
         
-        # 1. Comparación SICONE vs Real
-        tab1, tab2, tab3 = st.tabs(["Comparación General", "Desglose de Ajustes", "Análisis por Cuenta"])
+        # Mostrar fórmula de conciliación
+        st.info("""
+        **💡 Fórmula de Conciliación:**
+        
+        `Saldo Final SICONE = Saldo Inicial + Ingresos SICONE - Egresos SICONE + Ajustes Neto`
+        
+        `Diferencia = Saldo Final SICONE - Saldo Final Real`
+        """)
+        
+        # Análisis de la diferencia
+        diferencia_total_val = sum(r.diferencia_residual for r in resultados.values())
+        
+        if abs(diferencia_total_val) > 1000:
+            if diferencia_total_val > 0:
+                st.warning(f"""
+                **📊 Interpretación:** SICONE proyecta **${abs(diferencia_total_val):,.0f} más** que el saldo real.
+                
+                **Posibles causas:**
+                - 💰 **Ingresos sobreestimados:** SICONE proyectó ingresos que no se recibieron
+                - 💸 **Egresos no registrados:** Gastos reales que no están en el modelo SICONE
+                - 🔄 **Timing:** Diferencias temporales en registro de transacciones
+                """)
+            else:
+                st.warning(f"""
+                **📊 Interpretación:** El saldo real es **${abs(diferencia_total_val):,.0f} mayor** que lo proyectado por SICONE.
+                
+                **Posibles causas:**
+                - 💰 **Ingresos adicionales:** Se recibieron ingresos no proyectados en SICONE
+                - 💸 **Egresos subestimados:** SICONE proyectó más gastos de los que realmente ocurrieron
+                - 🔄 **Timing:** Diferencias temporales en registro de transacciones
+                """)
+        else:
+            st.success(f"✅ **Excelente conciliación:** La diferencia es de solo ${abs(diferencia_total_val):,.0f}")
+        
+        # Tabs mejorados
+        tab1, tab2, tab3 = st.tabs(["📊 Comparación General", "🎯 Desglose de Ajustes", "🏦 Análisis por Cuenta"])
         
         with tab1:
-            # Gráfico de barras comparativo
+            # Gráfico de barras comparativo con colores mejorados
             fig_comp = go.Figure()
             
-            for cuenta, resultado in resultados.items():
-                fig_comp.add_trace(go.Bar(
-                    name=f"{cuenta} - SICONE",
-                    x=["Saldo Final"],
-                    y=[resultado.saldo_conciliado],
-                    text=[formatear_moneda(resultado.saldo_conciliado)],
-                    textposition='auto',
-                ))
+            # Colores: Azul para Real, Naranja para SICONE
+            colores_real = ['#3498db', '#5dade2']  # Azules
+            colores_sicone = ['#e67e22', '#f39c12']  # Naranjas
+            
+            cuentas = list(resultados.keys())
+            for i, (cuenta, resultado) in enumerate(resultados.items()):
                 fig_comp.add_trace(go.Bar(
                     name=f"{cuenta} - Real",
-                    x=["Saldo Final"],
+                    x=[cuenta],
                     y=[resultado.saldo_final_real],
                     text=[formatear_moneda(resultado.saldo_final_real)],
                     textposition='auto',
+                    marker_color=colores_real[i % len(colores_real)],
+                    legendgroup='real'
+                ))
+                fig_comp.add_trace(go.Bar(
+                    name=f"{cuenta} - SICONE",
+                    x=[cuenta],
+                    y=[resultado.saldo_conciliado],
+                    text=[formatear_moneda(resultado.saldo_conciliado)],
+                    textposition='auto',
+                    marker_color=colores_sicone[i % len(colores_sicone)],
+                    legendgroup='sicone'
                 ))
             
             fig_comp.update_layout(
-                title="Comparación Saldos: SICONE Proyectado vs Real",
+                title="Comparación: Saldos Reales (Azul) vs SICONE Proyectados (Naranja)",
                 barmode='group',
-                height=400,
-                yaxis_title="Monto ($)"
+                height=450,
+                yaxis_title="Monto ($)",
+                xaxis_title="Cuenta",
+                template="plotly_white"
             )
             st.plotly_chart(fig_comp, use_container_width=True)
             
-            # Tabla resumen
-            st.markdown("**Resumen de Conciliación:**")
+            # Tabla resumen mejorada
+            st.markdown("### 📋 Resumen Detallado")
             resumen_data = []
             for cuenta, resultado in resultados.items():
+                diferencia = resultado.diferencia_residual
+                estado = "✅ OK" if abs(diferencia) < 1000000 else "⚠️ Revisar" if abs(diferencia) < 10000000 else "🚨 Crítico"
+                
                 resumen_data.append({
                     'Cuenta': cuenta,
                     'Saldo Inicial': formatear_moneda(resultado.saldo_inicial_sicone),
@@ -735,7 +783,8 @@ def main():
                     'Ajustes Neto': formatear_moneda(resultado.ajustes_ingresos - resultado.ajustes_egresos),
                     'Saldo SICONE': formatear_moneda(resultado.saldo_conciliado),
                     'Saldo Real': formatear_moneda(resultado.saldo_final_real),
-                    'Diferencia': formatear_moneda(resultado.diferencia_residual),
+                    'Diferencia': formatear_moneda(abs(diferencia)),
+                    'Estado': estado,
                     'Precisión': f"{resultado.precision:.2f}%"
                 })
             
@@ -789,46 +838,107 @@ def main():
                 st.info("No hay ajustes registrados")
         
         with tab3:
-            # Waterfall por cuenta (mejorado)
+            # Waterfall mejorado con diferencia a la izquierda
+            st.markdown("### 🏦 Análisis Detallado por Cuenta")
+            
             for cuenta, resultado in resultados.items():
-                st.markdown(f"### 🏦 {cuenta}")
+                st.markdown(f"#### {cuenta}")
                 
+                # Métricas con colores
                 col1, col2, col3, col4 = st.columns(4)
                 col1.metric("Saldo Inicial", formatear_moneda(resultado.saldo_inicial_sicone))
                 col2.metric("Flujo Neto", formatear_moneda(resultado.ingresos_sicone - resultado.egresos_sicone))
                 col3.metric("Ajustes Neto", formatear_moneda(resultado.ajustes_ingresos - resultado.ajustes_egresos))
-                col4.metric("Diferencia", formatear_moneda(resultado.diferencia_residual),
-                          delta="✅" if abs(resultado.diferencia_residual) < 1000000 else "⚠️")
+                
+                diferencia_val = resultado.diferencia_residual
+                estado_icon = "✅" if abs(diferencia_val) < 1000000 else "⚠️"
+                col4.metric("Diferencia", formatear_moneda(abs(diferencia_val)), delta=estado_icon)
+                
+                # Fórmula específica de esta cuenta
+                st.info(f"""
+                **Fórmula para {cuenta}:**
+                
+                `{formatear_moneda(resultado.saldo_inicial_sicone)} (Inicial) + {formatear_moneda(resultado.ingresos_sicone)} (Ingresos) - {formatear_moneda(resultado.egresos_sicone)} (Egresos) + {formatear_moneda(resultado.ajustes_ingresos - resultado.ajustes_egresos)} (Ajustes) = {formatear_moneda(resultado.saldo_conciliado)} (SICONE)`
+                
+                `{formatear_moneda(resultado.saldo_conciliado)} (SICONE) - {formatear_moneda(resultado.saldo_final_real)} (Real) = {formatear_moneda(diferencia_val)} (Diferencia)`
+                """)
+                
+                # Waterfall mejorado - Diferencia primero a la izquierda
+                valores_waterfall = [
+                    diferencia_val,  # Diferencia primero (ROJO)
+                    resultado.saldo_final_real,  # Saldo Real (AZUL)
+                    resultado.ingresos_sicone,  # Ingresos
+                    -resultado.egresos_sicone,  # Egresos
+                    resultado.ajustes_ingresos - resultado.ajustes_egresos,  # Ajustes
+                    0  # Total = Saldo SICONE
+                ]
+                
+                etiquetas_waterfall = [
+                    "⚠️ Diferencia",
+                    "Saldo Real",
+                    "+ Ingresos",
+                    "- Egresos",
+                    "+ Ajustes",
+                    "= SICONE"
+                ]
+                
+                medidas = ["relative", "absolute", "relative", "relative", "relative", "total"]
+                
+                # Colores: Rojo para diferencia, Azul para Real, Naranja para SICONE, gris para flujos
+                colores = ['#e74c3c', '#3498db', '#95a5a6', '#95a5a6', '#95a5a6', '#e67e22']
                 
                 fig = go.Figure(go.Waterfall(
-                    x=["Inicial", "Ingresos", "Egresos", "Ajustes", "Final SICONE", "Final Real"],
-                    y=[
-                        resultado.saldo_inicial_sicone,
-                        resultado.ingresos_sicone,
-                        -resultado.egresos_sicone,
-                        resultado.ajustes_ingresos - resultado.ajustes_egresos,
-                        0,  # total
-                        resultado.saldo_final_real - resultado.saldo_conciliado  # diferencia
-                    ],
-                    measure=["absolute", "relative", "relative", "relative", "total", "relative"],
-                    text=[formatear_moneda(v) for v in [
-                        resultado.saldo_inicial_sicone,
+                    x=etiquetas_waterfall,
+                    y=valores_waterfall,
+                    measure=medidas,
+                    text=[formatear_moneda(abs(v)) for v in [
+                        diferencia_val,
+                        resultado.saldo_final_real,
                         resultado.ingresos_sicone,
                         resultado.egresos_sicone,
                         resultado.ajustes_ingresos - resultado.ajustes_egresos,
-                        resultado.saldo_conciliado,
-                        resultado.saldo_final_real
+                        resultado.saldo_conciliado
                     ]],
                     textposition="outside",
-                    connector={"line": {"color": "rgb(63, 63, 63)"}},
+                    connector={"line": {"color": "rgb(100, 100, 100)", "dash": "dot"}},
+                    increasing={"marker": {"color": "#2ecc71"}},
+                    decreasing={"marker": {"color": "#e74c3c"}},
+                    totals={"marker": {"color": "#e67e22"}}
                 ))
+                
                 fig.update_layout(
-                    title=f"Flujo de Conciliación - {cuenta}",
-                    height=400,
+                    title=f"Flujo de Conciliación - {cuenta}<br><sub>🔴 Diferencia | 🔵 Real | 🟠 SICONE</sub>",
+                    height=500,
                     showlegend=False,
-                    yaxis_title="Monto ($)"
+                    yaxis_title="Monto ($)",
+                    template="plotly_white",
+                    xaxis={'type': 'category'}
                 )
+                
                 st.plotly_chart(fig, use_container_width=True)
+                
+                # Explicación de la diferencia para esta cuenta
+                if abs(diferencia_val) > 1000:
+                    if diferencia_val > 0:
+                        st.warning(f"""
+                        **📊 Explicación para {cuenta}:**
+                        
+                        SICONE proyecta **${abs(diferencia_val):,.0f} más** que el saldo real.
+                        
+                        **Causas posibles:**
+                        - 💰 Ingresos sobreestimados: SICONE proyectó {formatear_moneda(resultado.ingresos_sicone)} pero no se recibieron completos
+                        - 💸 Egresos no registrados: Gastos reales que no están en el modelo SICONE
+                        """)
+                    else:
+                        st.info(f"""
+                        **📊 Explicación para {cuenta}:**
+                        
+                        El saldo real es **${abs(diferencia_val):,.0f} mayor** que lo proyectado.
+                        
+                        **Causas posibles:**
+                        - 💰 Ingresos adicionales no proyectados en SICONE
+                        - 💸 Egresos menores: SICONE proyectó {formatear_moneda(resultado.egresos_sicone)} pero los gastos reales fueron menores
+                        """)
                 
                 st.divider()
 
