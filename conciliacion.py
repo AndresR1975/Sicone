@@ -181,6 +181,16 @@ def main():
     with st.expander("📅 PASO 1: Configuración del Período", expanded=not st.session_state.conciliador):
         st.markdown("""
         **Instrucciones:** Define el período que deseas conciliar.
+        
+        ✅ **Ahora puedes usar cualquier rango de fechas** desde el inicio de tus proyectos.
+        
+        💡 **Ejemplos de períodos:**
+        - Desde mayo 2024 (inicio de proyectos más antiguos)
+        - Un mes específico (ej: diciembre 2025)
+        - Un trimestre completo
+        - Año completo 2024 o 2025
+        
+        📊 El sistema extraerá datos de todos los proyectos activos en ese período.
         """)
         
         col1, col2 = st.columns(2)
@@ -225,17 +235,89 @@ def main():
             if uploaded_json and st.button("📥 Cargar JSON", type="primary"):
                 with st.spinner("Cargando..."):
                     try:
+                        # Cargar JSON
                         datos = json.load(uploaded_json)
+                        
+                        # Verificar estructura básica
+                        if "df_consolidado" not in datos:
+                            st.error("❌ El JSON no contiene 'df_consolidado'. Verifica que sea el archivo correcto.")
+                            st.stop()
+                        
+                        # Intentar cargar datos
                         success = st.session_state.conciliador.cargar_datos_sicone(datos_dict=datos)
                         
                         if success:
                             st.session_state.datos_sicone_cargados = True
-                            st.success("✅ Datos cargados")
+                            
+                            # Mostrar datos extraídos
+                            datos_proc = st.session_state.conciliador.datos_sicone_procesados
+                            if datos_proc:
+                                st.success("✅ Datos cargados correctamente")
+                                
+                                metadata = datos_proc.get("metadata", {})
+                                consolidado = datos_proc.get("Consolidado", {})
+                                
+                                with st.expander("📋 Ver datos extraídos", expanded=True):
+                                    col1, col2, col3, col4 = st.columns(4)
+                                    with col1:
+                                        st.metric("Período", f"{metadata.get('fecha_inicio_real')} → {metadata.get('fecha_fin_real')}")
+                                    with col2:
+                                        st.metric("Semanas", metadata.get('semanas_analizadas', 0))
+                                    with col3:
+                                        st.metric("Proyectos", metadata.get('proyectos_procesados', 0))
+                                    with col4:
+                                        st.metric("Saldo Final", formatear_moneda(consolidado.get('saldo_final', 0)))
+                                    
+                                    st.divider()
+                                    
+                                    col_det1, col_det2, col_det3 = st.columns(3)
+                                    with col_det1:
+                                        st.metric("Saldo Inicial", formatear_moneda(consolidado.get('saldo_inicial', 0)))
+                                    with col_det2:
+                                        st.metric("Ingresos Período", formatear_moneda(consolidado.get('ingresos', 0)))
+                                    with col_det3:
+                                        st.metric("Egresos Período", formatear_moneda(consolidado.get('egresos', 0)))
+                                    
+                                    movimiento_neto = consolidado.get('saldo_final', 0) - consolidado.get('saldo_inicial', 0)
+                                    st.info(f"💰 **Movimiento Neto del Período:** {formatear_moneda(abs(movimiento_neto))} " + 
+                                           ("📈 (Aumento)" if movimiento_neto > 0 else "📉 (Disminución)"))
+                            
                             st.rerun()
                         else:
-                            st.error("❌ Error al cargar datos")
+                            st.error("❌ No se pudieron extraer datos del período seleccionado")
+                            
+                            # Intentar dar información útil sobre por qué falló
+                            if "proyectos" in datos:
+                                proyectos_activos = [p for p in datos["proyectos"] if p.get("estado") == "ACTIVO"]
+                                st.warning(f"⚠️ Se encontraron {len(proyectos_activos)} proyectos activos en el JSON")
+                                
+                                if proyectos_activos:
+                                    st.info("📅 **Posibles causas:**\n"
+                                           "- El período seleccionado no coincide con las fechas de ningún proyecto activo\n"
+                                           "- Los proyectos no tienen datos de tesorería para ese período\n\n"
+                                           "**Sugerencia:** Revisa las fechas de inicio de tus proyectos en el JSON")
+                                    
+                                    # Mostrar fechas de inicio de proyectos
+                                    with st.expander("🔍 Ver fechas de inicio de proyectos"):
+                                        for p in proyectos_activos[:5]:  # Máximo 5
+                                            nombre = p.get("nombre", "Sin nombre")
+                                            fecha_inicio = p.get("data", {}).get("proyecto", {}).get("fecha_inicio", "No disponible")
+                                            st.text(f"• {nombre}: {fecha_inicio}")
+                                else:
+                                    st.error("❌ No hay proyectos activos en el JSON")
+                            else:
+                                st.error("❌ El JSON no tiene la estructura esperada (falta 'proyectos')")
+                                st.info("Verifica que el archivo sea un 'consolidado_multiproyecto.json' válido")
+                    
+                    except json.JSONDecodeError as e:
+                        st.error(f"❌ Error al leer JSON: El archivo no es un JSON válido")
+                        st.exception(e)
+                    except KeyError as e:
+                        st.error(f"❌ Error de estructura: Falta la clave {str(e)} en el JSON")
+                        st.info("Verifica que el archivo sea un 'consolidado_multiproyecto.json' válido")
                     except Exception as e:
-                        st.error(f"❌ Error: {str(e)}")
+                        st.error(f"❌ Error inesperado: {str(e)}")
+                        st.exception(e)
     
     # ========================================================================
     # PASO 3: SALDOS REALES

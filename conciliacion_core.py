@@ -231,110 +231,205 @@ class ConciliadorSICONE:
     
     def _extraer_datos_periodo(self) -> Optional[Dict]:
         """
-        Extrae datos del período específico desde el JSON consolidado.
+        Extrae datos del período específico desde los proyectos individuales.
         
-        ESTRUCTURA DEL JSON CONSOLIDADO:
-        --------------------------------
+        NUEVA IMPLEMENTACIÓN - DATOS HISTÓRICOS COMPLETOS:
+        --------------------------------------------------
+        Extrae datos de proyectos[].data.tesoreria.metricas_semanales
+        que contiene el historial completo de cada proyecto desde su inicio.
+        
+        ESTRUCTURA DEL JSON:
+        -------------------
         {
-          "df_consolidado": {
-            "fechas": ["2025-12-08", "2025-12-15", ...],
-            "saldo_consolidado": [2351677236.77, ...],
-            "ingresos_proy_total": [0.0, 0.0, ...],
-            "egresos_proy_total": [30804103.67, ...],
-            "es_historica": [true, true, false, ...]
-          }
+          "proyectos": [
+            {
+              "nombre": "AVelez",
+              "estado": "ACTIVO",
+              "data": {
+                "proyecto": {
+                  "fecha_inicio": "2024-11-14"
+                },
+                "tesoreria": {
+                  "metricas_semanales": [
+                    {
+                      "semana": 1,
+                      "ingresos_acum": 0,
+                      "egresos_acum": 421850,
+                      "saldo_final_real": -421850
+                    },
+                    ...
+                  ]
+                }
+              }
+            }
+          ]
         }
         
-        LÓGICA DE EXTRACCIÓN:
-        ---------------------
-        1. Busca índice de semana donde fecha >= fecha_inicio
-        2. Busca índice de semana donde fecha <= fecha_fin
-        3. Extrae saldo inicial (primera semana del período)
-        4. Suma ingresos y egresos del período
-        5. Calcula saldo final
+        LÓGICA:
+        -------
+        1. Itera sobre todos los proyectos activos
+        2. Para cada proyecto, calcula fecha_inicio + semanas
+        3. Filtra semanas dentro del período solicitado
+        4. Calcula flujos del período (delta de acumulados)
+        5. Suma flujos de todos los proyectos
         
-        NOTA: El JSON solo tiene datos consolidados, sin distribución
-        por cuenta. Por ahora, retorna datos totales que luego se
-        distribuirán según proporciones del usuario.
+        CORRECCIÓN IMPORTANTE:
+        ----------------------
+        NO puedo sumar acumulados directamente porque cada proyecto
+        tiene su propia línea de tiempo. Debo:
+        1. Calcular flujos de cada proyecto POR SEPARADO
+        2. LUEGO sumar los flujos de todos los proyectos
         """
         if not self.datos_sicone:
             return None
         
         try:
-            # Obtener datos consolidados
-            df_consolidado = self.datos_sicone.get("df_consolidado", {})
+            from datetime import datetime, timedelta
             
-            if not df_consolidado:
-                print("⚠️ No se encontró 'df_consolidado' en el JSON")
+            # Obtener lista de proyectos
+            proyectos = self.datos_sicone.get("proyectos", [])
+            
+            if not proyectos:
+                print("⚠️ No se encontraron proyectos en el JSON")
                 return None
             
-            fechas = df_consolidado.get("fechas", [])
-            saldos = df_consolidado.get("saldo_consolidado", [])
-            ingresos = df_consolidado.get("ingresos_proy_total", [])
-            egresos = df_consolidado.get("egresos_proy_total", [])
-            es_historica = df_consolidado.get("es_historica", [])
+            # Convertir fechas del período a datetime
+            fecha_inicio_dt = datetime.fromisoformat(self.fecha_inicio)
+            fecha_fin_dt = datetime.fromisoformat(self.fecha_fin)
             
-            if not fechas:
-                print("⚠️ No hay fechas en df_consolidado")
+            print(f"🔍 Buscando datos para período: {self.fecha_inicio} a {self.fecha_fin}")
+            print(f"   Proyectos encontrados: {len(proyectos)}")
+            
+            # Acumuladores consolidados
+            ingresos_periodo_total = 0
+            egresos_periodo_total = 0
+            saldo_inicial_total = 0
+            saldo_final_total = 0
+            semanas_encontradas = 0
+            proyectos_con_datos = []
+            
+            # Procesar cada proyecto
+            for proyecto in proyectos:
+                nombre_proyecto = proyecto.get("nombre", "Sin nombre")
+                estado = proyecto.get("estado", "DESCONOCIDO")
+                
+                # Solo proyectos activos
+                if estado != "ACTIVO":
+                    continue
+                
+                data = proyecto.get("data", {})
+                if not data:
+                    continue
+                
+                # Obtener fecha de inicio del proyecto
+                info_proyecto = data.get("proyecto", {})
+                fecha_inicio_proyecto_str = info_proyecto.get("fecha_inicio")
+                
+                if not fecha_inicio_proyecto_str:
+                    print(f"   ⚠️ {nombre_proyecto}: Sin fecha de inicio, omitiendo")
+                    continue
+                
+                fecha_inicio_proyecto = datetime.fromisoformat(fecha_inicio_proyecto_str)
+                
+                # Obtener métricas semanales de tesorería
+                tesoreria = data.get("tesoreria", {})
+                metricas_semanales = tesoreria.get("metricas_semanales", [])
+                
+                if not metricas_semanales:
+                    print(f"   ⚠️ {nombre_proyecto}: Sin métricas semanales, omitiendo")
+                    continue
+                
+                print(f"   📊 {nombre_proyecto}: {len(metricas_semanales)} semanas disponibles desde {fecha_inicio_proyecto_str}")
+                
+                # Variables para este proyecto
+                semanas_en_periodo = []
+                
+                # Procesar cada semana del proyecto
+                for metrica in metricas_semanales:
+                    semana_num = metrica.get("semana", 0)
+                    
+                    # Calcular fecha de esta semana (inicio_proyecto + (semana-1)*7 días)
+                    fecha_semana = fecha_inicio_proyecto + timedelta(weeks=(semana_num - 1))
+                    
+                    # Verificar si esta semana está dentro del período solicitado
+                    if fecha_inicio_dt <= fecha_semana <= fecha_fin_dt:
+                        semanas_en_periodo.append({
+                            "semana": semana_num,
+                            "fecha": fecha_semana,
+                            "ingresos_acum": metrica.get("ingresos_acum", 0),
+                            "egresos_acum": metrica.get("egresos_acum", 0),
+                            "saldo_final": metrica.get("saldo_final_real", 0)
+                        })
+                
+                if semanas_en_periodo:
+                    # Ordenar por semana
+                    semanas_en_periodo.sort(key=lambda x: x["semana"])
+                    
+                    # Primera y última semana del período
+                    primera_semana = semanas_en_periodo[0]
+                    ultima_semana = semanas_en_periodo[-1]
+                    
+                    # Buscar la semana ANTERIOR a la primera del período para calcular saldo inicial
+                    semana_anterior = None
+                    for metrica in metricas_semanales:
+                        if metrica.get("semana") == primera_semana["semana"] - 1:
+                            semana_anterior = metrica
+                            break
+                    
+                    # Saldo inicial del período para este proyecto
+                    if semana_anterior:
+                        saldo_inicial_proyecto = semana_anterior.get("saldo_final_real", 0)
+                        ingresos_acum_anterior = semana_anterior.get("ingresos_acum", 0)
+                        egresos_acum_anterior = semana_anterior.get("egresos_acum", 0)
+                    else:
+                        # Si es la primera semana del proyecto, saldo inicial es 0
+                        saldo_inicial_proyecto = 0
+                        ingresos_acum_anterior = 0
+                        egresos_acum_anterior = 0
+                    
+                    # Flujos del período (diferencia entre última y acumulado anterior)
+                    ingresos_periodo_proyecto = ultima_semana["ingresos_acum"] - ingresos_acum_anterior
+                    egresos_periodo_proyecto = ultima_semana["egresos_acum"] - egresos_acum_anterior
+                    saldo_final_proyecto = ultima_semana["saldo_final"]
+                    
+                    # Acumular en totales consolidados
+                    saldo_inicial_total += saldo_inicial_proyecto
+                    ingresos_periodo_total += ingresos_periodo_proyecto
+                    egresos_periodo_total += egresos_periodo_proyecto
+                    saldo_final_total += saldo_final_proyecto
+                    semanas_encontradas += len(semanas_en_periodo)
+                    
+                    proyectos_con_datos.append({
+                        "nombre": nombre_proyecto,
+                        "semanas": len(semanas_en_periodo),
+                        "saldo_inicial": saldo_inicial_proyecto,
+                        "ingresos": ingresos_periodo_proyecto,
+                        "egresos": egresos_periodo_proyecto,
+                        "saldo_final": saldo_final_proyecto
+                    })
+                    
+                    print(f"      ✓ {len(semanas_en_periodo)} semanas en período")
+                    print(f"      → Saldo inicial: ${saldo_inicial_proyecto:,.0f}")
+                    print(f"      → Ingresos: ${ingresos_periodo_proyecto:,.0f}")
+                    print(f"      → Egresos: ${egresos_periodo_proyecto:,.0f}")
+                    print(f"      → Saldo final: ${saldo_final_proyecto:,.0f}")
+            
+            # Verificar que encontramos datos
+            if not proyectos_con_datos:
+                print(f"❌ No se encontraron datos para el período {self.fecha_inicio} a {self.fecha_fin}")
+                print(f"   Verifica que las fechas coincidan con los proyectos activos")
                 return None
             
-            # Convertir fecha_inicio y fecha_fin a strings para comparación
-            fecha_inicio_str = self.fecha_inicio
-            fecha_fin_str = self.fecha_fin
+            # Calcular saldo final proyectado para verificar coherencia
+            saldo_final_calculado = saldo_inicial_total + ingresos_periodo_total - egresos_periodo_total
             
-            # Encontrar índices del período
-            idx_inicio = None
-            idx_fin = None
-            
-            for i, fecha in enumerate(fechas):
-                if fecha >= fecha_inicio_str and idx_inicio is None:
-                    idx_inicio = i
-                if fecha <= fecha_fin_str:
-                    idx_fin = i
-            
-            # Validar que encontramos el período
-            if idx_inicio is None or idx_fin is None:
-                print(f"⚠️ Período {fecha_inicio_str} a {fecha_fin_str} no encontrado en datos")
-                print(f"   Fechas disponibles: {fechas[0]} a {fechas[-1]}")
-                return None
-            
-            if idx_fin < idx_inicio:
-                print(f"⚠️ Fecha fin anterior a fecha inicio")
-                return None
-            
-            # Extraer datos del período
-            # Saldo inicial: el saldo de la primera semana del período
-            saldo_inicial_consolidado = saldos[idx_inicio]
-            
-            # Sumar ingresos y egresos del período
-            ingresos_periodo = sum(ingresos[idx_inicio:idx_fin+1])
-            egresos_periodo = sum(egresos[idx_inicio:idx_fin+1])
-            
-            # Saldo final: el saldo de la última semana del período
-            saldo_final_consolidado = saldos[idx_fin]
-            
-            # Verificar si hay datos históricos en el período
-            tiene_historico = any(es_historica[idx_inicio:idx_fin+1])
-            
-            # Metadatos del período extraído
-            metadata_periodo = {
-                "idx_inicio": idx_inicio,
-                "idx_fin": idx_fin,
-                "fecha_inicio_real": fechas[idx_inicio],
-                "fecha_fin_real": fechas[idx_fin],
-                "semanas_analizadas": idx_fin - idx_inicio + 1,
-                "tiene_datos_historicos": tiene_historico
-            }
-            
-            # IMPORTANTE: Como el JSON solo tiene datos consolidados,
-            # retornamos los datos totales sin distribución por cuenta.
-            # La distribución se hará más adelante según input del usuario.
+            # Preparar datos consolidados
             datos = {
                 "Consolidado": {
-                    "saldo_inicial": saldo_inicial_consolidado,
-                    "ingresos": ingresos_periodo,
-                    "egresos": egresos_periodo,
-                    "saldo_final": saldo_final_consolidado
+                    "saldo_inicial": saldo_inicial_total,
+                    "ingresos": ingresos_periodo_total,
+                    "egresos": egresos_periodo_total,
+                    "saldo_final": saldo_final_total  # Usamos el saldo final real
                 },
                 "Fiducuenta": {
                     "saldo_inicial": 0,
@@ -348,13 +443,24 @@ class ConciliadorSICONE:
                     "egresos": 0,
                     "saldo_final": 0
                 },
-                "metadata": metadata_periodo
+                "metadata": {
+                    "fecha_inicio_real": self.fecha_inicio,
+                    "fecha_fin_real": self.fecha_fin,
+                    "proyectos_analizados": len(proyectos_con_datos),
+                    "semanas_totales": semanas_encontradas,
+                    "tiene_datos_historicos": True,
+                    "proyectos_detalle": proyectos_con_datos
+                }
             }
             
-            print(f"✅ Datos extraídos del período {metadata_periodo['fecha_inicio_real']} a {metadata_periodo['fecha_fin_real']}")
-            print(f"   Semanas: {metadata_periodo['semanas_analizadas']}")
-            print(f"   Saldo Inicial: ${saldo_inicial_consolidado:,.0f}")
-            print(f"   Saldo Final: ${saldo_final_consolidado:,.0f}")
+            print(f"\n✅ Datos consolidados extraídos:")
+            print(f"   Proyectos con datos: {len(proyectos_con_datos)}")
+            print(f"   Semanas totales: {semanas_encontradas}")
+            print(f"   Saldo Inicial Total: ${saldo_inicial_total:,.0f}")
+            print(f"   Ingresos Total: ${ingresos_periodo_total:,.0f}")
+            print(f"   Egresos Total: ${egresos_periodo_total:,.0f}")
+            print(f"   Saldo Final Total: ${saldo_final_total:,.0f}")
+            print(f"   Verificación: Calc=${saldo_final_calculado:,.0f} vs Real=${saldo_final_total:,.0f}")
             
             return datos
             
