@@ -480,6 +480,16 @@ def main():
             
             st.divider()
             
+            # DEBUG INFO - TEMPORAL
+            with st.expander("🔍 Debug Info", expanded=False):
+                st.write(f"Ajustes en conciliador: {len(st.session_state.conciliador.ajustes) if st.session_state.conciliador else 0}")
+                st.write(f"Filas en dataframe: {len(st.session_state.ajustes_df)}")
+                st.write(f"DataFrame vacío: {st.session_state.ajustes_df.empty}")
+                if st.session_state.conciliador and st.session_state.conciliador.ajustes:
+                    st.write("Ajustes en conciliador:")
+                    for i, aj in enumerate(st.session_state.conciliador.ajustes):
+                        st.write(f"  {i}: {aj.concepto} - ${aj.monto:,.0f}")
+            
             with st.form("form_ajuste", clear_on_submit=True):
                 col1, col2, col3 = st.columns(3)
                 
@@ -526,7 +536,27 @@ def main():
                             st.success(msg)
                             st.rerun()
             
-            if not st.session_state.ajustes_df.empty:
+            # Mostrar ajustes si existen EN EL CONCILIADOR (no solo en dataframe)
+            tiene_ajustes = (st.session_state.conciliador and 
+                           len(st.session_state.conciliador.ajustes) > 0)
+            
+            if tiene_ajustes:
+                # Sincronizar dataframe si está desincronizado
+                if st.session_state.ajustes_df.empty or len(st.session_state.ajustes_df) != len(st.session_state.conciliador.ajustes):
+                    datos_df = []
+                    for ajuste in st.session_state.conciliador.ajustes:
+                        datos_df.append({
+                            'Fecha': ajuste.fecha,
+                            'Cuenta': ajuste.cuenta,
+                            'Categoría': ajuste.categoria,
+                            'Concepto': ajuste.concepto,
+                            'Monto': ajuste.monto,
+                            'Tipo': ajuste.tipo,
+                            'Evidencia': ajuste.evidencia,
+                            'Observaciones': ajuste.observaciones
+                        })
+                    st.session_state.ajustes_df = pd.DataFrame(datos_df)
+                
                 st.divider()
                 st.markdown("### 📋 Ajustes Registrados")
                 
