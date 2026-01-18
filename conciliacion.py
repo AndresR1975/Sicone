@@ -433,50 +433,57 @@ def main():
                 )
                 
                 if archivo_ajustes is not None:
-                    try:
-                        ajustes_data = json.load(archivo_ajustes)
-                        
-                        # Limpiar todo
-                        st.session_state.conciliador.ajustes = []
-                        
-                        # Recrear dataframe desde cero
-                        datos_df = []
-                        
-                        # Cargar cada ajuste
-                        for aj_data in ajustes_data:
-                            ajuste = Ajuste(
-                                fecha=aj_data.get('fecha', ''),
-                                categoria=aj_data.get('categoria', ''),
-                                concepto=aj_data.get('concepto', ''),
-                                cuenta=aj_data.get('cuenta', 'Ambas'),
-                                tipo=aj_data.get('tipo', 'Ingreso'),
-                                monto=aj_data.get('monto', 0.0),
-                                observaciones=aj_data.get('observaciones', ''),
-                                evidencia=aj_data.get('evidencia', '')
-                            )
-                            st.session_state.conciliador.ajustes.append(ajuste)
-                            
-                            # Agregar al dataframe
-                            datos_df.append({
-                                'Fecha': aj_data.get('fecha', ''),
-                                'Cuenta': aj_data.get('cuenta', ''),
-                                'Categoría': aj_data.get('categoria', ''),
-                                'Concepto': aj_data.get('concepto', ''),
-                                'Monto': aj_data.get('monto', 0.0),
-                                'Tipo': aj_data.get('tipo', ''),
-                                'Evidencia': aj_data.get('evidencia', ''),
-                                'Observaciones': aj_data.get('observaciones', '')
-                            })
-                        
-                        # Recrear dataframe completo
-                        st.session_state.ajustes_df = pd.DataFrame(datos_df)
-                        
-                        st.success(f"✅ {len(ajustes_data)} ajustes importados")
-                        time.sleep(0.5)  # Pequeña pausa para que se vea el mensaje
-                        st.rerun()
+                    # Evitar procesamiento múltiple (prevenir loop infinito)
+                    archivo_id = f"{archivo_ajustes.name}_{archivo_ajustes.size}"
                     
-                    except Exception as e:
-                        st.error(f"❌ Error: {str(e)}")
+                    if st.session_state.get('ultimo_archivo_procesado') != archivo_id:
+                        try:
+                            ajustes_data = json.load(archivo_ajustes)
+                            
+                            # Limpiar todo
+                            st.session_state.conciliador.ajustes = []
+                            
+                            # Recrear dataframe desde cero
+                            datos_df = []
+                            
+                            # Cargar cada ajuste
+                            for aj_data in ajustes_data:
+                                ajuste = Ajuste(
+                                    fecha=aj_data.get('fecha', ''),
+                                    categoria=aj_data.get('categoria', ''),
+                                    concepto=aj_data.get('concepto', ''),
+                                    cuenta=aj_data.get('cuenta', 'Ambas'),
+                                    tipo=aj_data.get('tipo', 'Ingreso'),
+                                    monto=aj_data.get('monto', 0.0),
+                                    observaciones=aj_data.get('observaciones', ''),
+                                    evidencia=aj_data.get('evidencia', '')
+                                )
+                                st.session_state.conciliador.ajustes.append(ajuste)
+                                
+                                # Agregar al dataframe
+                                datos_df.append({
+                                    'Fecha': aj_data.get('fecha', ''),
+                                    'Cuenta': aj_data.get('cuenta', ''),
+                                    'Categoría': aj_data.get('categoria', ''),
+                                    'Concepto': aj_data.get('concepto', ''),
+                                    'Monto': aj_data.get('monto', 0.0),
+                                    'Tipo': aj_data.get('tipo', ''),
+                                    'Evidencia': aj_data.get('evidencia', ''),
+                                    'Observaciones': aj_data.get('observaciones', '')
+                                })
+                            
+                            # Recrear dataframe completo
+                            st.session_state.ajustes_df = pd.DataFrame(datos_df)
+                            
+                            # Marcar archivo como procesado
+                            st.session_state.ultimo_archivo_procesado = archivo_id
+                            
+                            st.success(f"✅ {len(ajustes_data)} ajustes importados")
+                            time.sleep(0.5)
+                            st.rerun()
+                        
+                        except Exception as e:
+                            st.error(f"❌ Error: {str(e)}")
             
             st.divider()
             
