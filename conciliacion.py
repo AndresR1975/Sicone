@@ -373,6 +373,95 @@ def main():
     
     if st.session_state.saldos_reales_configurados:
         with st.expander("📝 PASO 4: Ajustes", expanded=True):
+            
+            # Botones de exportar/importar ajustes
+            col_tools1, col_tools2, col_tools3 = st.columns([1, 1, 2])
+            
+            with col_tools1:
+                if st.session_state.conciliador and st.session_state.conciliador.ajustes:
+                    # Preparar datos para exportar
+                    ajustes_export = []
+                    for ajuste in st.session_state.conciliador.ajustes:
+                        ajustes_export.append({
+                            "fecha": ajuste.fecha,
+                            "categoria": ajuste.categoria,
+                            "concepto": ajuste.concepto,
+                            "cuenta": ajuste.cuenta,
+                            "tipo": ajuste.tipo,
+                            "monto": ajuste.monto,
+                            "observaciones": ajuste.observaciones,
+                            "evidencia": ajuste.evidencia
+                        })
+                    
+                    ajustes_json = json.dumps(ajustes_export, indent=2, ensure_ascii=False)
+                    
+                    st.download_button(
+                        label="📥 Exportar Ajustes",
+                        data=ajustes_json,
+                        file_name=f"ajustes_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json",
+                        mime="application/json",
+                        help="Descarga los ajustes actuales en formato JSON",
+                        use_container_width=True
+                    )
+            
+            with col_tools2:
+                archivo_ajustes = st.file_uploader(
+                    "Importar",
+                    type=['json'],
+                    help="Carga ajustes desde un archivo JSON",
+                    key="import_ajustes",
+                    label_visibility="collapsed"
+                )
+                
+                if archivo_ajustes is not None:
+                    try:
+                        ajustes_data = json.load(archivo_ajustes)
+                        
+                        # Limpiar ajustes actuales
+                        st.session_state.conciliador.ajustes = []
+                        st.session_state.ajustes_df = pd.DataFrame(columns=[
+                            'Fecha', 'Cuenta', 'Categoría', 'Concepto', 
+                            'Monto', 'Tipo', 'Evidencia', 'Observaciones'
+                        ])
+                        
+                        # Cargar ajustes del JSON
+                        for aj_data in ajustes_data:
+                            ajuste = Ajuste(
+                                fecha=aj_data.get('fecha', ''),
+                                categoria=aj_data.get('categoria', ''),
+                                concepto=aj_data.get('concepto', ''),
+                                cuenta=aj_data.get('cuenta', 'Ambas'),
+                                tipo=aj_data.get('tipo', 'Ingreso'),
+                                monto=aj_data.get('monto', 0.0),
+                                observaciones=aj_data.get('observaciones', ''),
+                                evidencia=aj_data.get('evidencia', '')
+                            )
+                            st.session_state.conciliador.ajustes.append(ajuste)
+                            
+                            # Agregar al dataframe
+                            nuevo_registro = pd.DataFrame([{
+                                'Fecha': aj_data.get('fecha', ''),
+                                'Cuenta': aj_data.get('cuenta', ''),
+                                'Categoría': aj_data.get('categoria', ''),
+                                'Concepto': aj_data.get('concepto', ''),
+                                'Monto': aj_data.get('monto', 0.0),
+                                'Tipo': aj_data.get('tipo', ''),
+                                'Evidencia': aj_data.get('evidencia', ''),
+                                'Observaciones': aj_data.get('observaciones', '')
+                            }])
+                            st.session_state.ajustes_df = pd.concat([
+                                st.session_state.ajustes_df, 
+                                nuevo_registro
+                            ], ignore_index=True)
+                        
+                        st.success(f"✅ {len(ajustes_data)} ajustes importados")
+                        st.rerun()
+                    
+                    except Exception as e:
+                        st.error(f"❌ Error: {str(e)}")
+            
+            st.divider()
+            
             with st.form("form_ajuste", clear_on_submit=True):
                 col1, col2, col3 = st.columns(3)
                 
