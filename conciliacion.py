@@ -281,6 +281,16 @@ def main():
                                     movimiento_neto = consolidado.get('saldo_final', 0) - consolidado.get('saldo_inicial', 0)
                                     st.info(f"💰 **Movimiento Neto del Período:** {formatear_moneda(abs(movimiento_neto))} " + 
                                            ("📈 (Aumento)" if movimiento_neto > 0 else "📉 (Disminución)"))
+                                    
+                                    # Mostrar desglose de egresos por proyecto si está disponible
+                                    if 'proyectos_detalle' in metadata:
+                                        with st.expander("📊 Desglose por Proyecto"):
+                                            proyectos_df = pd.DataFrame(metadata['proyectos_detalle'])
+                                            proyectos_df['saldo_inicial'] = proyectos_df['saldo_inicial'].apply(lambda x: formatear_moneda(x))
+                                            proyectos_df['ingresos'] = proyectos_df['ingresos'].apply(lambda x: formatear_moneda(x))
+                                            proyectos_df['egresos'] = proyectos_df['egresos'].apply(lambda x: formatear_moneda(x))
+                                            proyectos_df['saldo_final'] = proyectos_df['saldo_final'].apply(lambda x: formatear_moneda(x))
+                                            st.dataframe(proyectos_df, use_container_width=True)
                             
                             st.rerun()
                         else:
@@ -329,13 +339,23 @@ def main():
             
             with col1:
                 st.markdown("### 🏦 Fiducuenta")
-                fidu_ini = st.number_input("Saldo Inicial ($)", min_value=0.0, step=1000000.0, key="fidu_ini")
-                fidu_fin = st.number_input("Saldo Final ($)", min_value=0.0, step=1000000.0, key="fidu_fin")
+                st.caption("Ingrese los saldos según extracto de la Fiducuenta")
+                fidu_ini = st.number_input("Saldo Inicial ($)", min_value=0.0, step=1000000.0, format="%.2f", key="fidu_ini", help="Saldo al inicio del período según extracto")
+                if fidu_ini > 0:
+                    st.caption(f"💰 {formatear_moneda(fidu_ini)}")
+                fidu_fin = st.number_input("Saldo Final ($)", min_value=0.0, step=1000000.0, format="%.2f", key="fidu_fin", help="Saldo al final del período según extracto")
+                if fidu_fin > 0:
+                    st.caption(f"💰 {formatear_moneda(fidu_fin)}")
             
             with col2:
                 st.markdown("### 💳 Cuenta Bancaria")
-                banco_ini = st.number_input("Saldo Inicial ($)", min_value=0.0, step=1000000.0, key="banco_ini")
-                banco_fin = st.number_input("Saldo Final ($)", min_value=0.0, step=1000000.0, key="banco_fin")
+                st.caption("Ingrese los saldos según extracto de la Cuenta Bancaria")
+                banco_ini = st.number_input("Saldo Inicial ($)", min_value=0.0, step=1000000.0, format="%.2f", key="banco_ini", help="Saldo al inicio del período según extracto")
+                if banco_ini > 0:
+                    st.caption(f"💰 {formatear_moneda(banco_ini)}")
+                banco_fin = st.number_input("Saldo Final ($)", min_value=0.0, step=1000000.0, format="%.2f", key="banco_fin", help="Saldo al final del período según extracto")
+                if banco_fin > 0:
+                    st.caption(f"💰 {formatear_moneda(banco_fin)}")
             
             if all([fidu_ini, fidu_fin, banco_ini, banco_fin]):
                 st.divider()
@@ -365,7 +385,7 @@ def main():
                     tipo_aj = st.selectbox("Tipo", ["Ingreso", "Egreso"])
                 
                 with col3:
-                    monto_aj = st.number_input("Monto ($)", min_value=0.0, step=100000.0)
+                    monto_aj = st.number_input("Monto ($)", min_value=0.0, step=100000.0, format="%.2f", help="Ingrese el monto del ajuste")
                 
                 concepto_aj = st.text_input("Concepto")
                 
