@@ -29,6 +29,7 @@ import plotly.graph_objects as go
 import plotly.express as px
 from datetime import datetime, date
 import json
+import time
 from pathlib import Path
 
 # Importar módulo core (lógica de negocio)
@@ -417,14 +418,13 @@ def main():
                     try:
                         ajustes_data = json.load(archivo_ajustes)
                         
-                        # Limpiar ajustes actuales
+                        # Limpiar todo
                         st.session_state.conciliador.ajustes = []
-                        st.session_state.ajustes_df = pd.DataFrame(columns=[
-                            'Fecha', 'Cuenta', 'Categoría', 'Concepto', 
-                            'Monto', 'Tipo', 'Evidencia', 'Observaciones'
-                        ])
                         
-                        # Cargar ajustes del JSON
+                        # Recrear dataframe desde cero
+                        datos_df = []
+                        
+                        # Cargar cada ajuste
                         for aj_data in ajustes_data:
                             ajuste = Ajuste(
                                 fecha=aj_data.get('fecha', ''),
@@ -439,7 +439,7 @@ def main():
                             st.session_state.conciliador.ajustes.append(ajuste)
                             
                             # Agregar al dataframe
-                            nuevo_registro = pd.DataFrame([{
+                            datos_df.append({
                                 'Fecha': aj_data.get('fecha', ''),
                                 'Cuenta': aj_data.get('cuenta', ''),
                                 'Categoría': aj_data.get('categoria', ''),
@@ -448,13 +448,13 @@ def main():
                                 'Tipo': aj_data.get('tipo', ''),
                                 'Evidencia': aj_data.get('evidencia', ''),
                                 'Observaciones': aj_data.get('observaciones', '')
-                            }])
-                            st.session_state.ajustes_df = pd.concat([
-                                st.session_state.ajustes_df, 
-                                nuevo_registro
-                            ], ignore_index=True)
+                            })
+                        
+                        # Recrear dataframe completo
+                        st.session_state.ajustes_df = pd.DataFrame(datos_df)
                         
                         st.success(f"✅ {len(ajustes_data)} ajustes importados")
+                        time.sleep(0.5)  # Pequeña pausa para que se vea el mensaje
                         st.rerun()
                     
                     except Exception as e:
