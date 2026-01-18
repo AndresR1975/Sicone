@@ -836,6 +836,9 @@ def main():
 # ENTRY POINT
 # ============================================================================
 
+# Exportar función main para que sea accesible desde main.py
+__all__ = ['main']
+
 if __name__ == "__main__":
     # Si se ejecuta directamente (para testing)
     st.set_page_config(page_title="Conciliación", page_icon="🔍", layout="wide")
