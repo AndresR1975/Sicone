@@ -509,7 +509,32 @@ def main():
                             st.rerun()
             
             if not st.session_state.ajustes_df.empty:
-                st.subheader("📋 Ajustes Registrados")
+                st.divider()
+                st.markdown("### 📋 Ajustes Registrados")
+                
+                # Resumen rápido primero
+                col_sum1, col_sum2, col_sum3 = st.columns(3)
+                total_ingresos_ajustes = st.session_state.ajustes_df[st.session_state.ajustes_df['Tipo'] == 'Ingreso']['Monto'].sum()
+                total_egresos_ajustes = st.session_state.ajustes_df[st.session_state.ajustes_df['Tipo'] == 'Egreso']['Monto'].sum()
+                
+                with col_sum1:
+                    st.metric("📈 Total Ingresos", formatear_moneda(total_ingresos_ajustes))
+                with col_sum2:
+                    st.metric("📉 Total Egresos", formatear_moneda(total_egresos_ajustes))
+                with col_sum3:
+                    st.metric("💰 Efecto Neto", formatear_moneda(total_ingresos_ajustes - total_egresos_ajustes))
+                
+                st.caption(f"**Total de ajustes:** {len(st.session_state.ajustes_df)}")
+                
+                # Tabla simple para vista rápida
+                st.markdown("**Vista Rápida:**")
+                df_display = st.session_state.ajustes_df.copy()
+                df_display['Monto'] = df_display['Monto'].apply(lambda x: f"${x:,.0f}")
+                st.dataframe(df_display[['Fecha', 'Cuenta', 'Categoría', 'Concepto', 'Tipo', 'Monto']], 
+                           use_container_width=True, hide_index=True)
+                
+                st.divider()
+                st.markdown("**Detalles y Edición:**")
                 
                 # Mostrar tabla editable
                 for idx, row in st.session_state.ajustes_df.iterrows():
@@ -611,21 +636,6 @@ def main():
                                     if st.form_submit_button("❌ Cancelar", use_container_width=True):
                                         st.session_state[f'editing_{idx}'] = False
                                         st.rerun()
-                
-                # Tabla resumen
-                st.divider()
-                st.caption("**Resumen de Ajustes:**")
-                
-                total_ingresos_ajustes = st.session_state.ajustes_df[st.session_state.ajustes_df['Tipo'] == 'Ingreso']['Monto'].sum()
-                total_egresos_ajustes = st.session_state.ajustes_df[st.session_state.ajustes_df['Tipo'] == 'Egreso']['Monto'].sum()
-                
-                col_sum1, col_sum2, col_sum3 = st.columns(3)
-                with col_sum1:
-                    st.metric("Total Ingresos", formatear_moneda(total_ingresos_ajustes))
-                with col_sum2:
-                    st.metric("Total Egresos", formatear_moneda(total_egresos_ajustes))
-                with col_sum3:
-                    st.metric("Efecto Neto", formatear_moneda(total_ingresos_ajustes - total_egresos_ajustes))
     
     # ========================================================================
     # PASO 5: CÁLCULO
