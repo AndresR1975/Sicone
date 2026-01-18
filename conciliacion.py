@@ -84,6 +84,24 @@ def inicializar_session_state():
             'Monto', 'Tipo', 'Evidencia', 'Observaciones'
         ])
     
+    # CRÍTICO: Sincronizar dataframe con ajustes del conciliador
+    if 'conciliador' in st.session_state and st.session_state.conciliador is not None:
+        if st.session_state.conciliador.ajustes and st.session_state.ajustes_df.empty:
+            # Reconstruir dataframe desde ajustes
+            datos_df = []
+            for ajuste in st.session_state.conciliador.ajustes:
+                datos_df.append({
+                    'Fecha': ajuste.fecha,
+                    'Cuenta': ajuste.cuenta,
+                    'Categoría': ajuste.categoria,
+                    'Concepto': ajuste.concepto,
+                    'Monto': ajuste.monto,
+                    'Tipo': ajuste.tipo,
+                    'Evidencia': ajuste.evidencia,
+                    'Observaciones': ajuste.observaciones
+                })
+            st.session_state.ajustes_df = pd.DataFrame(datos_df)
+    
     if 'saldos_reales_configurados' not in st.session_state:
         st.session_state.saldos_reales_configurados = False
     
@@ -643,17 +661,28 @@ def main():
     
     if st.session_state.saldos_reales_configurados:
         st.divider()
-        col1, col2, col3 = st.columns([2, 1, 2])
-        with col2:
-            if st.button("🔍 CALCULAR", type="primary", use_container_width=True):
-                with st.spinner("Calculando..."):
-                    try:
-                        resultados = st.session_state.conciliador.calcular_conciliacion()
-                        st.session_state.resultados_conciliacion = resultados
-                        st.success("✅ Listo")
-                        st.rerun()
-                    except Exception as e:
-                        st.error(f"❌ Error: {str(e)}")
+        
+        # Validar que el conciliador existe
+        if not st.session_state.conciliador:
+            st.error("⚠️ Error: Conciliador no inicializado. Por favor recarga los datos.")
+        else:
+            col1, col2, col3 = st.columns([2, 1, 2])
+            with col2:
+                if st.button("🔍 CALCULAR", type="primary", use_container_width=True, key="btn_calcular"):
+                    with st.spinner("Calculando..."):
+                        try:
+                            resultados = st.session_state.conciliador.calcular_conciliacion()
+                            st.session_state.resultados_conciliacion = resultados
+                            st.success("✅ Conciliación calculada")
+                            time.sleep(0.3)
+                            st.rerun()
+                        except AttributeError as e:
+                            st.error(f"❌ Error de método: {str(e)}")
+                            st.info("💡 Intenta recargar el JSON en PASO 2")
+                        except Exception as e:
+                            st.error(f"❌ Error al calcular: {str(e)}")
+                            import traceback
+                            st.code(traceback.format_exc())
     
     # ========================================================================
     # RESULTADOS
