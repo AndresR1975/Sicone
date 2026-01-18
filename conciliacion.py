@@ -510,7 +510,122 @@ def main():
             
             if not st.session_state.ajustes_df.empty:
                 st.subheader("📋 Ajustes Registrados")
-                st.dataframe(st.session_state.ajustes_df, use_container_width=True)
+                
+                # Mostrar tabla editable
+                for idx, row in st.session_state.ajustes_df.iterrows():
+                    with st.expander(f"#{idx} - {row['Concepto'][:50]}... ({formatear_moneda(row['Monto'])})"):
+                        col_info1, col_info2, col_info3 = st.columns(3)
+                        
+                        with col_info1:
+                            st.text(f"📅 Fecha: {row['Fecha']}")
+                            st.text(f"🏦 Cuenta: {row['Cuenta']}")
+                        
+                        with col_info2:
+                            st.text(f"📂 Categoría: {row['Categoría']}")
+                            st.text(f"💰 Monto: {formatear_moneda(row['Monto'])}")
+                        
+                        with col_info3:
+                            st.text(f"🔄 Tipo: {row['Tipo']}")
+                        
+                        if row['Observaciones']:
+                            st.caption(f"📝 Obs: {row['Observaciones']}")
+                        
+                        # Botones de acción
+                        col_btn1, col_btn2, col_btn3 = st.columns([1, 1, 4])
+                        
+                        with col_btn1:
+                            if st.button("✏️ Editar", key=f"edit_{idx}", use_container_width=True):
+                                st.session_state[f'editing_{idx}'] = True
+                                st.rerun()
+                        
+                        with col_btn2:
+                            if st.button("🗑️ Eliminar", key=f"delete_{idx}", use_container_width=True, type="secondary"):
+                                # Eliminar del dataframe
+                                st.session_state.ajustes_df = st.session_state.ajustes_df.drop(idx).reset_index(drop=True)
+                                # Eliminar del conciliador
+                                st.session_state.conciliador.ajustes.pop(idx)
+                                st.success(f"✅ Ajuste #{idx} eliminado")
+                                st.rerun()
+                        
+                        # Formulario de edición si está activado
+                        if st.session_state.get(f'editing_{idx}', False):
+                            st.divider()
+                            st.markdown("**Editar Ajuste:**")
+                            
+                            with st.form(f"form_edit_{idx}"):
+                                col_ed1, col_ed2, col_ed3 = st.columns(3)
+                                
+                                with col_ed1:
+                                    fecha_ed = st.date_input("Fecha", value=pd.to_datetime(row['Fecha']).date(), key=f"fecha_ed_{idx}")
+                                    cuenta_ed = st.selectbox("Cuenta", ["Fiducuenta", "Cuenta Bancaria", "Ambas"], 
+                                                            index=["Fiducuenta", "Cuenta Bancaria", "Ambas"].index(row['Cuenta']), 
+                                                            key=f"cuenta_ed_{idx}")
+                                
+                                with col_ed2:
+                                    categoria_ed = st.selectbox("Categoría", Ajuste.CATEGORIAS_VALIDAS,
+                                                               index=Ajuste.CATEGORIAS_VALIDAS.index(row['Categoría']),
+                                                               key=f"cat_ed_{idx}")
+                                    tipo_ed = st.selectbox("Tipo", ["Ingreso", "Egreso"],
+                                                          index=["Ingreso", "Egreso"].index(row['Tipo']),
+                                                          key=f"tipo_ed_{idx}")
+                                
+                                with col_ed3:
+                                    monto_ed = st.number_input("Monto ($)", value=float(row['Monto']), 
+                                                              min_value=0.0, step=100000.0, format="%.2f",
+                                                              key=f"monto_ed_{idx}")
+                                
+                                concepto_ed = st.text_input("Concepto", value=row['Concepto'], key=f"concepto_ed_{idx}")
+                                observaciones_ed = st.text_area("Observaciones", value=row.get('Observaciones', ''), key=f"obs_ed_{idx}")
+                                
+                                col_save, col_cancel = st.columns(2)
+                                
+                                with col_save:
+                                    if st.form_submit_button("💾 Guardar", type="primary", use_container_width=True):
+                                        # Actualizar en dataframe
+                                        st.session_state.ajustes_df.at[idx, 'Fecha'] = fecha_ed
+                                        st.session_state.ajustes_df.at[idx, 'Cuenta'] = cuenta_ed
+                                        st.session_state.ajustes_df.at[idx, 'Categoría'] = categoria_ed
+                                        st.session_state.ajustes_df.at[idx, 'Concepto'] = concepto_ed
+                                        st.session_state.ajustes_df.at[idx, 'Monto'] = monto_ed
+                                        st.session_state.ajustes_df.at[idx, 'Tipo'] = tipo_ed
+                                        st.session_state.ajustes_df.at[idx, 'Observaciones'] = observaciones_ed
+                                        
+                                        # Actualizar en conciliador
+                                        ajuste_actualizado = Ajuste(
+                                            fecha=fecha_ed.isoformat(),
+                                            categoria=categoria_ed,
+                                            concepto=concepto_ed,
+                                            cuenta=cuenta_ed,
+                                            tipo=tipo_ed,
+                                            monto=monto_ed,
+                                            observaciones=observaciones_ed
+                                        )
+                                        st.session_state.conciliador.ajustes[idx] = ajuste_actualizado
+                                        
+                                        # Desactivar modo edición
+                                        st.session_state[f'editing_{idx}'] = False
+                                        st.success(f"✅ Ajuste #{idx} actualizado")
+                                        st.rerun()
+                                
+                                with col_cancel:
+                                    if st.form_submit_button("❌ Cancelar", use_container_width=True):
+                                        st.session_state[f'editing_{idx}'] = False
+                                        st.rerun()
+                
+                # Tabla resumen
+                st.divider()
+                st.caption("**Resumen de Ajustes:**")
+                
+                total_ingresos_ajustes = st.session_state.ajustes_df[st.session_state.ajustes_df['Tipo'] == 'Ingreso']['Monto'].sum()
+                total_egresos_ajustes = st.session_state.ajustes_df[st.session_state.ajustes_df['Tipo'] == 'Egreso']['Monto'].sum()
+                
+                col_sum1, col_sum2, col_sum3 = st.columns(3)
+                with col_sum1:
+                    st.metric("Total Ingresos", formatear_moneda(total_ingresos_ajustes))
+                with col_sum2:
+                    st.metric("Total Egresos", formatear_moneda(total_egresos_ajustes))
+                with col_sum3:
+                    st.metric("Efecto Neto", formatear_moneda(total_ingresos_ajustes - total_egresos_ajustes))
     
     # ========================================================================
     # PASO 5: CÁLCULO
