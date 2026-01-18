@@ -536,183 +536,71 @@ def main():
                             st.success(msg)
                             st.rerun()
             
-            # Mostrar ajustes si existen EN EL CONCILIADOR (no solo en dataframe)
-            tiene_ajustes = (st.session_state.conciliador and 
-                           len(st.session_state.conciliador.ajustes) > 0)
-            
-            if tiene_ajustes:
-                # Sincronizar dataframe si está desincronizado
-                if st.session_state.ajustes_df.empty or len(st.session_state.ajustes_df) != len(st.session_state.conciliador.ajustes):
-                    datos_df = []
-                    for ajuste in st.session_state.conciliador.ajustes:
-                        datos_df.append({
-                            'Fecha': ajuste.fecha,
-                            'Cuenta': ajuste.cuenta,
-                            'Categoría': ajuste.categoria,
-                            'Concepto': ajuste.concepto,
-                            'Monto': ajuste.monto,
-                            'Tipo': ajuste.tipo,
-                            'Evidencia': ajuste.evidencia,
-                            'Observaciones': ajuste.observaciones
-                        })
-                    st.session_state.ajustes_df = pd.DataFrame(datos_df)
+            # MOSTRAR AJUSTES - VERSIÓN SIMPLIFICADA QUE SÍ FUNCIONA
+            if st.session_state.conciliador and st.session_state.conciliador.ajustes:
+                # Forzar sincronización SIEMPRE
+                datos_df = []
+                for ajuste in st.session_state.conciliador.ajustes:
+                    datos_df.append({
+                        'Fecha': ajuste.fecha,
+                        'Cuenta': ajuste.cuenta,
+                        'Categoría': ajuste.categoria,
+                        'Concepto': ajuste.concepto,
+                        'Monto': ajuste.monto,
+                        'Tipo': ajuste.tipo,
+                        'Evidencia': ajuste.evidencia,
+                        'Observaciones': ajuste.observaciones
+                    })
+                st.session_state.ajustes_df = pd.DataFrame(datos_df)
                 
                 st.divider()
                 st.markdown("### 📋 Ajustes Registrados")
                 
-                # Resumen rápido primero
-                col_sum1, col_sum2, col_sum3 = st.columns(3)
-                total_ingresos_ajustes = st.session_state.ajustes_df[st.session_state.ajustes_df['Tipo'] == 'Ingreso']['Monto'].sum()
-                total_egresos_ajustes = st.session_state.ajustes_df[st.session_state.ajustes_df['Tipo'] == 'Egreso']['Monto'].sum()
+                # Métricas
+                total_ing = st.session_state.ajustes_df[st.session_state.ajustes_df['Tipo'] == 'Ingreso']['Monto'].sum()
+                total_egr = st.session_state.ajustes_df[st.session_state.ajustes_df['Tipo'] == 'Egreso']['Monto'].sum()
                 
-                with col_sum1:
-                    st.metric("📈 Total Ingresos", formatear_moneda(total_ingresos_ajustes))
-                with col_sum2:
-                    st.metric("📉 Total Egresos", formatear_moneda(total_egresos_ajustes))
-                with col_sum3:
-                    st.metric("💰 Efecto Neto", formatear_moneda(total_ingresos_ajustes - total_egresos_ajustes))
+                col1, col2, col3 = st.columns(3)
+                col1.metric("Ingresos", f"${total_ing:,.0f}")
+                col2.metric("Egresos", f"${total_egr:,.0f}")
+                col3.metric("Neto", f"${(total_ing - total_egr):,.0f}")
                 
-                st.caption(f"**Total de ajustes:** {len(st.session_state.ajustes_df)}")
+                # Tabla
+                st.dataframe(st.session_state.ajustes_df[['Fecha', 'Cuenta', 'Categoría', 'Concepto', 'Tipo', 'Monto']], 
+                           use_container_width=True, hide_index=False)
                 
-                # Tabla simple para vista rápida
-                st.markdown("**Vista Rápida:**")
-                df_display = st.session_state.ajustes_df.copy()
-                df_display['Monto'] = df_display['Monto'].apply(lambda x: f"${x:,.0f}")
-                st.dataframe(df_display[['Fecha', 'Cuenta', 'Categoría', 'Concepto', 'Tipo', 'Monto']], 
-                           use_container_width=True, hide_index=True)
-                
-                st.divider()
-                st.markdown("**Detalles y Edición:**")
-                
-                # Mostrar tabla editable
-                for idx, row in st.session_state.ajustes_df.iterrows():
-                    with st.expander(f"#{idx} - {row['Concepto'][:50]}... ({formatear_moneda(row['Monto'])})"):
-                        col_info1, col_info2, col_info3 = st.columns(3)
-                        
-                        with col_info1:
-                            st.text(f"📅 Fecha: {row['Fecha']}")
-                            st.text(f"🏦 Cuenta: {row['Cuenta']}")
-                        
-                        with col_info2:
-                            st.text(f"📂 Categoría: {row['Categoría']}")
-                            st.text(f"💰 Monto: {formatear_moneda(row['Monto'])}")
-                        
-                        with col_info3:
-                            st.text(f"🔄 Tipo: {row['Tipo']}")
-                        
-                        if row['Observaciones']:
-                            st.caption(f"📝 Obs: {row['Observaciones']}")
-                        
-                        # Botones de acción
-                        col_btn1, col_btn2, col_btn3 = st.columns([1, 1, 4])
-                        
-                        with col_btn1:
-                            if st.button("✏️ Editar", key=f"edit_{idx}", use_container_width=True):
-                                st.session_state[f'editing_{idx}'] = True
-                                st.rerun()
-                        
-                        with col_btn2:
-                            if st.button("🗑️ Eliminar", key=f"delete_{idx}", use_container_width=True, type="secondary"):
-                                # Eliminar del dataframe
-                                st.session_state.ajustes_df = st.session_state.ajustes_df.drop(idx).reset_index(drop=True)
-                                # Eliminar del conciliador
-                                st.session_state.conciliador.ajustes.pop(idx)
-                                st.success(f"✅ Ajuste #{idx} eliminado")
-                                st.rerun()
-                        
-                        # Formulario de edición si está activado
-                        if st.session_state.get(f'editing_{idx}', False):
-                            st.divider()
-                            st.markdown("**Editar Ajuste:**")
-                            
-                            with st.form(f"form_edit_{idx}"):
-                                col_ed1, col_ed2, col_ed3 = st.columns(3)
-                                
-                                with col_ed1:
-                                    fecha_ed = st.date_input("Fecha", value=pd.to_datetime(row['Fecha']).date(), key=f"fecha_ed_{idx}")
-                                    cuenta_ed = st.selectbox("Cuenta", ["Fiducuenta", "Cuenta Bancaria", "Ambas"], 
-                                                            index=["Fiducuenta", "Cuenta Bancaria", "Ambas"].index(row['Cuenta']), 
-                                                            key=f"cuenta_ed_{idx}")
-                                
-                                with col_ed2:
-                                    categoria_ed = st.selectbox("Categoría", Ajuste.CATEGORIAS_VALIDAS,
-                                                               index=Ajuste.CATEGORIAS_VALIDAS.index(row['Categoría']),
-                                                               key=f"cat_ed_{idx}")
-                                    tipo_ed = st.selectbox("Tipo", ["Ingreso", "Egreso"],
-                                                          index=["Ingreso", "Egreso"].index(row['Tipo']),
-                                                          key=f"tipo_ed_{idx}")
-                                
-                                with col_ed3:
-                                    monto_ed = st.number_input("Monto ($)", value=float(row['Monto']), 
-                                                              min_value=0.0, step=100000.0, format="%.2f",
-                                                              key=f"monto_ed_{idx}")
-                                
-                                concepto_ed = st.text_input("Concepto", value=row['Concepto'], key=f"concepto_ed_{idx}")
-                                observaciones_ed = st.text_area("Observaciones", value=row.get('Observaciones', ''), key=f"obs_ed_{idx}")
-                                
-                                col_save, col_cancel = st.columns(2)
-                                
-                                with col_save:
-                                    if st.form_submit_button("💾 Guardar", type="primary", use_container_width=True):
-                                        # Actualizar en dataframe
-                                        st.session_state.ajustes_df.at[idx, 'Fecha'] = fecha_ed
-                                        st.session_state.ajustes_df.at[idx, 'Cuenta'] = cuenta_ed
-                                        st.session_state.ajustes_df.at[idx, 'Categoría'] = categoria_ed
-                                        st.session_state.ajustes_df.at[idx, 'Concepto'] = concepto_ed
-                                        st.session_state.ajustes_df.at[idx, 'Monto'] = monto_ed
-                                        st.session_state.ajustes_df.at[idx, 'Tipo'] = tipo_ed
-                                        st.session_state.ajustes_df.at[idx, 'Observaciones'] = observaciones_ed
-                                        
-                                        # Actualizar en conciliador
-                                        ajuste_actualizado = Ajuste(
-                                            fecha=fecha_ed.isoformat(),
-                                            categoria=categoria_ed,
-                                            concepto=concepto_ed,
-                                            cuenta=cuenta_ed,
-                                            tipo=tipo_ed,
-                                            monto=monto_ed,
-                                            observaciones=observaciones_ed
-                                        )
-                                        st.session_state.conciliador.ajustes[idx] = ajuste_actualizado
-                                        
-                                        # Desactivar modo edición
-                                        st.session_state[f'editing_{idx}'] = False
-                                        st.success(f"✅ Ajuste #{idx} actualizado")
-                                        st.rerun()
-                                
-                                with col_cancel:
-                                    if st.form_submit_button("❌ Cancelar", use_container_width=True):
-                                        st.session_state[f'editing_{idx}'] = False
-                                        st.rerun()
+                # Botones eliminar
+                st.caption("**Eliminar ajustes:**")
+                cols = st.columns(10)
+                for idx in range(len(st.session_state.ajustes_df)):
+                    with cols[idx % 10]:
+                        if st.button(f"🗑️ #{idx}", key=f"del_{idx}"):
+                            st.session_state.conciliador.ajustes.pop(idx)
+                            st.rerun()
     
     # ========================================================================
     # PASO 5: CÁLCULO
     # ========================================================================
     
-    if st.session_state.saldos_reales_configurados:
+    if st.session_state.saldos_reales_configurados and st.session_state.conciliador:
         st.divider()
+        st.subheader("🔍 Calcular Conciliación")
         
-        # Validar que el conciliador existe
-        if not st.session_state.conciliador:
-            st.error("⚠️ Error: Conciliador no inicializado. Por favor recarga los datos.")
-        else:
-            col1, col2, col3 = st.columns([2, 1, 2])
-            with col2:
-                if st.button("🔍 CALCULAR", type="primary", use_container_width=True, key="btn_calcular"):
+        col1, col2, col3 = st.columns([2, 1, 2])
+        with col2:
+            if st.button("CALCULAR", type="primary", use_container_width=True):
+                try:
                     with st.spinner("Calculando..."):
-                        try:
-                            resultados = st.session_state.conciliador.calcular_conciliacion()
-                            st.session_state.resultados_conciliacion = resultados
-                            st.success("✅ Conciliación calculada")
-                            time.sleep(0.3)
-                            st.rerun()
-                        except AttributeError as e:
-                            st.error(f"❌ Error de método: {str(e)}")
-                            st.info("💡 Intenta recargar el JSON en PASO 2")
-                        except Exception as e:
-                            st.error(f"❌ Error al calcular: {str(e)}")
-                            import traceback
-                            st.code(traceback.format_exc())
+                        resultados = st.session_state.conciliador.calcular_conciliacion()
+                        st.session_state.resultados_conciliacion = resultados
+                    st.success("✅ Listo!")
+                    time.sleep(0.5)
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"❌ Error al calcular: {str(e)}")
+                    with st.expander("Ver detalles del error"):
+                        import traceback
+                        st.code(traceback.format_exc())
     
     # ========================================================================
     # RESULTADOS
