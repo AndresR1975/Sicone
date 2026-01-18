@@ -576,14 +576,69 @@ def main():
                 st.dataframe(st.session_state.ajustes_df[['Fecha', 'Cuenta', 'Categoría', 'Concepto', 'Tipo', 'Monto']], 
                            use_container_width=True, hide_index=False)
                 
-                # Botones eliminar
-                st.caption("**Eliminar ajustes:**")
-                cols = st.columns(10)
+                # Botones eliminar y editar
+                st.caption("**Acciones:**")
                 for idx in range(len(st.session_state.ajustes_df)):
-                    with cols[idx % 10]:
-                        if st.button(f"🗑️ #{idx}", key=f"del_{idx}"):
+                    col1, col2, col3 = st.columns([5, 1, 1])
+                    with col1:
+                        row = st.session_state.ajustes_df.iloc[idx]
+                        st.text(f"#{idx}: {row['Concepto'][:40]}... - {row['Tipo']} ${row['Monto']:,.0f}")
+                    with col2:
+                        if st.button("✏️", key=f"edit_{idx}", help="Editar"):
+                            st.session_state[f'editando_{idx}'] = True
+                            st.rerun()
+                    with col3:
+                        if st.button("🗑️", key=f"del_{idx}", help="Eliminar"):
                             st.session_state.conciliador.ajustes.pop(idx)
                             st.rerun()
+                
+                # Formularios de edición
+                for idx in range(len(st.session_state.ajustes_df)):
+                    if st.session_state.get(f'editando_{idx}', False):
+                        with st.expander(f"✏️ Editando Ajuste #{idx}", expanded=True):
+                            row = st.session_state.ajustes_df.iloc[idx]
+                            
+                            with st.form(f"form_edit_{idx}"):
+                                col1, col2, col3 = st.columns(3)
+                                
+                                with col1:
+                                    fecha_ed = st.date_input("Fecha", value=pd.to_datetime(row['Fecha']).date())
+                                    cuenta_ed = st.selectbox("Cuenta", ["Fiducuenta", "Cuenta Bancaria", "Ambas"],
+                                                            index=["Fiducuenta", "Cuenta Bancaria", "Ambas"].index(row['Cuenta']))
+                                
+                                with col2:
+                                    categoria_ed = st.selectbox("Categoría", Ajuste.CATEGORIAS_VALIDAS,
+                                                               index=Ajuste.CATEGORIAS_VALIDAS.index(row['Categoría']))
+                                    tipo_ed = st.selectbox("Tipo", ["Ingreso", "Egreso"],
+                                                          index=["Ingreso", "Egreso"].index(row['Tipo']))
+                                
+                                with col3:
+                                    monto_ed = st.number_input("Monto ($)", value=float(row['Monto']),
+                                                              min_value=0.0, step=100000.0, format="%.2f")
+                                
+                                concepto_ed = st.text_input("Concepto", value=row['Concepto'])
+                                
+                                col_save, col_cancel = st.columns(2)
+                                with col_save:
+                                    if st.form_submit_button("💾 Guardar", type="primary", use_container_width=True):
+                                        # Actualizar en conciliador
+                                        ajuste_actualizado = Ajuste(
+                                            fecha=fecha_ed.isoformat(),
+                                            categoria=categoria_ed,
+                                            concepto=concepto_ed,
+                                            cuenta=cuenta_ed,
+                                            tipo=tipo_ed,
+                                            monto=monto_ed
+                                        )
+                                        st.session_state.conciliador.ajustes[idx] = ajuste_actualizado
+                                        st.session_state[f'editando_{idx}'] = False
+                                        st.success("✅ Ajuste actualizado")
+                                        st.rerun()
+                                
+                                with col_cancel:
+                                    if st.form_submit_button("❌ Cancelar", use_container_width=True):
+                                        st.session_state[f'editando_{idx}'] = False
+                                        st.rerun()
     
     # ========================================================================
     # PASO 5: CÁLCULO
@@ -634,29 +689,148 @@ def main():
             status = "✅ OK" if precision >= 98 else "⚠️ REVISAR" if precision >= 95 else "🚨 CRÍTICO"
             st.metric("Precisión", f"{precision:.2f}%", delta=status)
         
-        # Gráficos por cuenta
-        for cuenta, resultado in resultados.items():
-            with st.expander(f"🏦 {cuenta}", expanded=True):
+        # Gráficos mejorados
+        st.subheader("📈 Análisis Visual")
+        
+        # 1. Comparación SICONE vs Real
+        tab1, tab2, tab3 = st.tabs(["Comparación General", "Desglose de Ajustes", "Análisis por Cuenta"])
+        
+        with tab1:
+            # Gráfico de barras comparativo
+            fig_comp = go.Figure()
+            
+            for cuenta, resultado in resultados.items():
+                fig_comp.add_trace(go.Bar(
+                    name=f"{cuenta} - SICONE",
+                    x=["Saldo Final"],
+                    y=[resultado.saldo_conciliado],
+                    text=[formatear_moneda(resultado.saldo_conciliado)],
+                    textposition='auto',
+                ))
+                fig_comp.add_trace(go.Bar(
+                    name=f"{cuenta} - Real",
+                    x=["Saldo Final"],
+                    y=[resultado.saldo_final_real],
+                    text=[formatear_moneda(resultado.saldo_final_real)],
+                    textposition='auto',
+                ))
+            
+            fig_comp.update_layout(
+                title="Comparación Saldos: SICONE Proyectado vs Real",
+                barmode='group',
+                height=400,
+                yaxis_title="Monto ($)"
+            )
+            st.plotly_chart(fig_comp, use_container_width=True)
+            
+            # Tabla resumen
+            st.markdown("**Resumen de Conciliación:**")
+            resumen_data = []
+            for cuenta, resultado in resultados.items():
+                resumen_data.append({
+                    'Cuenta': cuenta,
+                    'Saldo Inicial': formatear_moneda(resultado.saldo_inicial_sicone),
+                    'Ingresos': formatear_moneda(resultado.ingresos_sicone),
+                    'Egresos': formatear_moneda(resultado.egresos_sicone),
+                    'Ajustes Neto': formatear_moneda(resultado.ajustes_ingresos - resultado.ajustes_egresos),
+                    'Saldo SICONE': formatear_moneda(resultado.saldo_conciliado),
+                    'Saldo Real': formatear_moneda(resultado.saldo_final_real),
+                    'Diferencia': formatear_moneda(resultado.diferencia_residual),
+                    'Precisión': f"{resultado.precision:.2f}%"
+                })
+            
+            df_resumen = pd.DataFrame(resumen_data)
+            st.dataframe(df_resumen, use_container_width=True, hide_index=True)
+        
+        with tab2:
+            # Desglose de ajustes
+            st.markdown("**Impacto de Ajustes:**")
+            
+            if st.session_state.conciliador.ajustes:
+                # Agrupar por tipo y cuenta
+                ajustes_por_tipo = {}
+                for ajuste in st.session_state.conciliador.ajustes:
+                    key = f"{ajuste.tipo} - {ajuste.categoria}"
+                    if key not in ajustes_por_tipo:
+                        ajustes_por_tipo[key] = 0
+                    ajustes_por_tipo[key] += ajuste.monto if ajuste.tipo == "Ingreso" else -ajuste.monto
+                
+                # Gráfico de torta
+                fig_ajustes = go.Figure(data=[go.Pie(
+                    labels=list(ajustes_por_tipo.keys()),
+                    values=[abs(v) for v in ajustes_por_tipo.values()],
+                    hole=.3,
+                    textinfo='label+percent+value',
+                    texttemplate='%{label}<br>%{value:$,.0f}<br>(%{percent})'
+                )])
+                fig_ajustes.update_layout(
+                    title="Distribución de Ajustes por Categoría",
+                    height=500
+                )
+                st.plotly_chart(fig_ajustes, use_container_width=True)
+                
+                # Tabla de ajustes
+                st.markdown("**Detalle de Ajustes:**")
+                ajustes_data = []
+                for i, ajuste in enumerate(st.session_state.conciliador.ajustes):
+                    ajustes_data.append({
+                        '#': i,
+                        'Fecha': ajuste.fecha,
+                        'Categoría': ajuste.categoria,
+                        'Concepto': ajuste.concepto,
+                        'Tipo': ajuste.tipo,
+                        'Monto': formatear_moneda(ajuste.monto),
+                        'Cuenta': ajuste.cuenta
+                    })
+                
+                df_ajustes = pd.DataFrame(ajustes_data)
+                st.dataframe(df_ajustes, use_container_width=True, hide_index=True)
+            else:
+                st.info("No hay ajustes registrados")
+        
+        with tab3:
+            # Waterfall por cuenta (mejorado)
+            for cuenta, resultado in resultados.items():
+                st.markdown(f"### 🏦 {cuenta}")
+                
+                col1, col2, col3, col4 = st.columns(4)
+                col1.metric("Saldo Inicial", formatear_moneda(resultado.saldo_inicial_sicone))
+                col2.metric("Flujo Neto", formatear_moneda(resultado.ingresos_sicone - resultado.egresos_sicone))
+                col3.metric("Ajustes Neto", formatear_moneda(resultado.ajustes_ingresos - resultado.ajustes_egresos))
+                col4.metric("Diferencia", formatear_moneda(resultado.diferencia_residual),
+                          delta="✅" if abs(resultado.diferencia_residual) < 1000000 else "⚠️")
+                
                 fig = go.Figure(go.Waterfall(
-                    x=["Inicial", "Ingresos", "Egresos", "Ajustes", "Final"],
+                    x=["Inicial", "Ingresos", "Egresos", "Ajustes", "Final SICONE", "Final Real"],
                     y=[
                         resultado.saldo_inicial_sicone,
                         resultado.ingresos_sicone,
                         -resultado.egresos_sicone,
                         resultado.ajustes_ingresos - resultado.ajustes_egresos,
-                        resultado.saldo_conciliado
+                        0,  # total
+                        resultado.saldo_final_real - resultado.saldo_conciliado  # diferencia
                     ],
+                    measure=["absolute", "relative", "relative", "relative", "total", "relative"],
                     text=[formatear_moneda(v) for v in [
                         resultado.saldo_inicial_sicone,
                         resultado.ingresos_sicone,
                         resultado.egresos_sicone,
                         resultado.ajustes_ingresos - resultado.ajustes_egresos,
-                        resultado.saldo_conciliado
+                        resultado.saldo_conciliado,
+                        resultado.saldo_final_real
                     ]],
-                    textposition="outside"
+                    textposition="outside",
+                    connector={"line": {"color": "rgb(63, 63, 63)"}},
                 ))
-                fig.update_layout(title=f"Conciliación {cuenta}", height=400)
+                fig.update_layout(
+                    title=f"Flujo de Conciliación - {cuenta}",
+                    height=400,
+                    showlegend=False,
+                    yaxis_title="Monto ($)"
+                )
                 st.plotly_chart(fig, use_container_width=True)
+                
+                st.divider()
 
 # ============================================================================
 # ENTRY POINT
