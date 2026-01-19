@@ -447,7 +447,11 @@ def render_modulo_reportes():
         st.exception(e)
 
 def render_modulo_conciliacion():
-    """Renderiza el módulo de Conciliación Financiera"""
+    """Renderiza el módulo de Conciliación Financiera - VERSIÓN DEBUG"""
+    
+    # LOG DE DEBUG
+    debug_info = []
+    
     # Botón de regreso
     with st.sidebar:
         if st.button("◄ Volver al Inicio", use_container_width=True):
@@ -457,39 +461,158 @@ def render_modulo_conciliacion():
         st.markdown(f"👤 **Usuario:** {st.session_state.usuario_actual['nombre_completo']}")
         st.caption(f"Rol: {st.session_state.usuario_actual['rol']}")
     
-    # Importar y ejecutar el módulo de conciliación
+    # MODO DEBUG ACTIVADO
+    st.warning("🔍 MODO DEBUG ACTIVADO")
+    
     try:
+        debug_info.append("✅ PASO 1: Iniciando importación...")
+        
         import importlib
         import sys
+        import os
         
-        # FORZAR LIMPIEZA DE CACHÉ - CRÍTICO
-        # Remover módulos del caché para forzar recarga
+        debug_info.append(f"✅ PASO 2: Python version: {sys.version}")
+        debug_info.append(f"✅ PASO 3: Working directory: {os.getcwd()}")
+        
+        # Verificar archivos
+        if os.path.exists('conciliacion.py'):
+            debug_info.append("✅ PASO 4: conciliacion.py EXISTE")
+            file_size = os.path.getsize('conciliacion.py')
+            debug_info.append(f"   - Tamaño: {file_size} bytes")
+        else:
+            debug_info.append("❌ PASO 4: conciliacion.py NO EXISTE")
+            st.error("conciliacion.py no encontrado")
+            st.code("\n".join(debug_info))
+            return
+        
+        if os.path.exists('conciliacion_core.py'):
+            debug_info.append("✅ PASO 5: conciliacion_core.py EXISTE")
+        else:
+            debug_info.append("⚠️ PASO 5: conciliacion_core.py NO EXISTE (puede ser normal)")
+        
+        # LIMPIEZA DE CACHÉ
+        debug_info.append("✅ PASO 6: Limpiando caché...")
         modulos_a_limpiar = ['conciliacion', 'conciliacion_core']
         for modulo in modulos_a_limpiar:
             if modulo in sys.modules:
                 del sys.modules[modulo]
+                debug_info.append(f"   - Eliminado {modulo} del caché")
         
-        # Ahora importar fresco
-        import conciliacion
-        import conciliacion_core
+        # IMPORTAR
+        debug_info.append("✅ PASO 7: Importando conciliacion...")
+        try:
+            import conciliacion
+            debug_info.append("✅ PASO 8: import conciliacion EXITOSO")
+        except Exception as e:
+            debug_info.append(f"❌ PASO 8: import conciliacion FALLÓ: {e}")
+            st.error(f"Error al importar: {e}")
+            st.code("\n".join(debug_info))
+            import traceback
+            st.code(traceback.format_exc())
+            return
         
-        # Recargar para asegurar versión más reciente
-        importlib.reload(conciliacion_core)
-        importlib.reload(conciliacion)
+        # IMPORTAR CORE (si existe)
+        debug_info.append("✅ PASO 9: Intentando importar conciliacion_core...")
+        try:
+            import conciliacion_core
+            debug_info.append("✅ PASO 10: import conciliacion_core EXITOSO")
+        except ImportError:
+            debug_info.append("⚠️ PASO 10: conciliacion_core no disponible (OK si es versión simple)")
+        except Exception as e:
+            debug_info.append(f"❌ PASO 10: Error importando conciliacion_core: {e}")
         
-        # Ejecutar función main
-        conciliacion.main()
+        # RECARGAR
+        debug_info.append("✅ PASO 11: Recargando módulos...")
+        try:
+            if 'conciliacion_core' in sys.modules:
+                importlib.reload(conciliacion_core)
+                debug_info.append("   - conciliacion_core recargado")
+            importlib.reload(conciliacion)
+            debug_info.append("   - conciliacion recargado")
+        except Exception as e:
+            debug_info.append(f"⚠️ PASO 11: Error en reload: {e}")
+        
+        # INSPECCIONAR MÓDULO
+        debug_info.append("✅ PASO 12: Inspeccionando módulo conciliacion...")
+        debug_info.append(f"   - Tipo: {type(conciliacion)}")
+        debug_info.append(f"   - Archivo: {getattr(conciliacion, '__file__', 'N/A')}")
+        
+        # LISTAR ATRIBUTOS
+        debug_info.append("✅ PASO 13: Atributos del módulo:")
+        attrs = [x for x in dir(conciliacion) if not x.startswith('_')]
+        debug_info.append(f"   - Públicos: {attrs[:20]}")  # Primeros 20
+        
+        # VERIFICAR __all__
+        if hasattr(conciliacion, '__all__'):
+            debug_info.append(f"✅ PASO 14: __all__ = {conciliacion.__all__}")
+        else:
+            debug_info.append("❌ PASO 14: NO tiene __all__")
+        
+        # VERIFICAR main
+        debug_info.append("✅ PASO 15: Verificando función main...")
+        if hasattr(conciliacion, 'main'):
+            debug_info.append("✅ PASO 16: conciliacion.main EXISTE")
+            debug_info.append(f"   - Tipo: {type(conciliacion.main)}")
+            debug_info.append(f"   - Es callable: {callable(conciliacion.main)}")
+            
+            if callable(conciliacion.main):
+                debug_info.append("✅ PASO 17: main es callable - Intentando ejecutar...")
+                
+                # Mostrar debug hasta aquí
+                with st.expander("📋 LOG DE DEBUG (hasta antes de ejecutar main)", expanded=False):
+                    st.code("\n".join(debug_info))
+                
+                # EJECUTAR
+                try:
+                    debug_info.append("✅ PASO 18: Ejecutando conciliacion.main()...")
+                    conciliacion.main()
+                    debug_info.append("✅ PASO 19: Ejecución COMPLETADA sin errores")
+                except Exception as e:
+                    debug_info.append(f"❌ PASO 18: ERROR al ejecutar main(): {e}")
+                    debug_info.append(f"   - Tipo de error: {type(e).__name__}")
+                    
+                    st.error(f"❌ Error al ejecutar main(): {e}")
+                    
+                    with st.expander("📋 LOG DE DEBUG COMPLETO", expanded=True):
+                        st.code("\n".join(debug_info))
+                    
+                    with st.expander("📋 STACK TRACE COMPLETO", expanded=True):
+                        import traceback
+                        st.code(traceback.format_exc())
+                    
+                    # Información adicional
+                    st.markdown("### 🔍 Información Adicional")
+                    st.json({
+                        "error_type": type(e).__name__,
+                        "error_message": str(e),
+                        "module_file": getattr(conciliacion, '__file__', 'N/A'),
+                        "has_main": hasattr(conciliacion, 'main'),
+                        "main_callable": callable(getattr(conciliacion, 'main', None)),
+                        "module_attributes": attrs[:30]
+                    })
+            else:
+                debug_info.append("❌ PASO 17: main NO es callable")
+                st.error("conciliacion.main no es callable")
+                st.code("\n".join(debug_info))
+        else:
+            debug_info.append("❌ PASO 16: conciliacion.main NO EXISTE")
+            st.error("conciliacion NO tiene función main")
+            
+            with st.expander("📋 LOG DE DEBUG COMPLETO", expanded=True):
+                st.code("\n".join(debug_info))
+            
+            st.markdown("### 🔍 Atributos disponibles en el módulo:")
+            st.code(str(attrs))
     
-    except ImportError as e:
-        st.error(f"❌ Error al importar el módulo de conciliación: {e}")
-        st.info("**Solución:** Asegúrese de que `conciliacion.py` y `conciliacion_core.py` estén en el mismo directorio que `main.py`")
-    except AttributeError:
-        st.error("❌ Error: El módulo `conciliacion.py` no tiene una función `main()`")
-        st.info("**Solución:** Verifique que el archivo tiene la estructura correcta con la función main() exportada")
     except Exception as e:
-        st.error(f"❌ Error inesperado en conciliación: {e}")
-        import traceback
-        with st.expander("Ver detalles del error"):
+        debug_info.append(f"❌ ERROR GENERAL: {e}")
+        st.error(f"❌ Error inesperado: {e}")
+        
+        with st.expander("📋 LOG DE DEBUG COMPLETO", expanded=True):
+            st.code("\n".join(debug_info))
+        
+        with st.expander("📋 STACK TRACE", expanded=True):
+            import traceback
             st.code(traceback.format_exc())
 
 # ============================================================================
