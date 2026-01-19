@@ -451,35 +451,69 @@ def main():
         with tab1:
             st.markdown("### 📋 Flujo Completo de Conciliación")
             
-            # Extraer datos del JSON si están disponibles
+            # Extraer datos REALES del JSON
             datos_sicone = st.session_state.datos_sicone
+            proyectos = datos_sicone.get('proyectos', [])
             
-            # Calcular flujos del período desde los proyectos
+            # INGRESOS Y EGRESOS DEL PERÍODO
             ingresos_periodo = 0
             egresos_proyectos = 0
             
-            # Intentar extraer desde proyectos
-            proyectos = datos_sicone.get('proyectos', [])
-            if proyectos:
-                for proyecto in proyectos:
-                    if isinstance(proyecto, dict):
-                        ingresos_periodo += proyecto.get('ingresos', 0)
-                        egresos_proyectos += proyecto.get('egresos', 0)
+            # Fechas del período en formato ISO
+            fecha_inicio_str = st.session_state.fecha_inicio.isoformat()
+            fecha_fin_str = st.session_state.fecha_fin.isoformat()
             
-            # Si no hay datos de proyectos, calcular implícitamente
-            if ingresos_periodo == 0 and egresos_proyectos == 0:
-                # Calcular desde metadata del JSON
-                estado_caja = datos_sicone.get('estado_caja', {})
+            for proyecto in proyectos:
+                if not isinstance(proyecto, dict):
+                    continue
                 
-                # El saldo total del estado_caja ya incluye todos los flujos
-                # Usamos una estimación simple para mostrar en la tabla
-                # (Los valores exactos vienen del cálculo de conciliación)
-                flujo_neto_estimado = res['saldo_inicial_sicone'] - res['saldo_inicial_real']
+                data = proyecto.get('data', {})
                 
-                # Distribución estimada 70% ingresos, 30% egresos
-                total_flujo = abs(flujo_neto_estimado)
-                ingresos_periodo = total_flujo * 0.7
-                egresos_proyectos = total_flujo * 0.3
+                # === EGRESOS REALES (filtrables por fecha) ===
+                egresos_data = data.get('egresos', {})
+                egresos_semanales = egresos_data.get('egresos_semanales', [])
+                
+                for semana in egresos_semanales:
+                    if isinstance(semana, dict):
+                        fecha_semana = semana.get('fecha_inicio', '')
+                        # Filtrar por rango de fechas
+                        if fecha_inicio_str <= fecha_semana <= fecha_fin_str:
+                            egresos_proyectos += semana.get('total', 0)
+                
+                # === INGRESOS ===
+                # LIMITACIÓN ACTUAL: No hay ingresos reales por fecha en el JSON
+                # Solo existe total agregado en data.totales.total_ingresos
+                # Por ahora NO sumamos ingresos aquí porque no son del período específico
+                # TODO: Implementar captura de ingresos por fecha en módulo FCL
+            
+            # ADVERTENCIA si no hay datos
+            if egresos_proyectos == 0:
+                st.warning("""
+                ⚠️ **No se encontraron egresos en el período seleccionado**
+                
+                Esto puede deberse a:
+                - El período seleccionado no tiene registros de gastos
+                - El JSON consolidado no contiene datos de ejecución real
+                - Las fechas están fuera del rango de datos disponibles
+                
+                Verifique que el JSON consolidado incluya datos del módulo "Ejecución Real FCL".
+                """)
+            
+            # NOTA IMPORTANTE sobre ingresos
+            if ingresos_periodo == 0:
+                st.info("""
+                ℹ️ **Ingresos del período: No disponibles**
+                
+                **Limitación actual del sistema:**
+                El JSON consolidado NO contiene ingresos reales desglosados por fecha.
+                Solo contiene el total de ingresos del proyecto completo.
+                
+                **Para incluir ingresos por período:**
+                1. El módulo "Ejecución Real FCL" debe capturar ingresos con fechas
+                2. El JSON consolidado debe incluir ingresos_semanales (similar a egresos_semanales)
+                
+                Por ahora, la tabla mostrará solo los egresos filtrados por fecha.
+                """)
             
             # Gastos fijos
             metadata = datos_sicone.get('metadata', {})
