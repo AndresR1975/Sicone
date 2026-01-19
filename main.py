@@ -460,11 +460,22 @@ def render_modulo_conciliacion():
     # Importar y ejecutar el módulo de conciliación
     try:
         import importlib
-        import conciliacion
+        import sys
         
-        # Recargar en desarrollo
-        if 'STREAMLIT_ENV' in os.environ:
-            importlib.reload(conciliacion)
+        # FORZAR LIMPIEZA DE CACHÉ - CRÍTICO
+        # Remover módulos del caché para forzar recarga
+        modulos_a_limpiar = ['conciliacion', 'conciliacion_core']
+        for modulo in modulos_a_limpiar:
+            if modulo in sys.modules:
+                del sys.modules[modulo]
+        
+        # Ahora importar fresco
+        import conciliacion
+        import conciliacion_core
+        
+        # Recargar para asegurar versión más reciente
+        importlib.reload(conciliacion_core)
+        importlib.reload(conciliacion)
         
         # Ejecutar función main
         conciliacion.main()
