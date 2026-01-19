@@ -386,20 +386,27 @@ def main():
         
         **Paso 1: Ajuste Inicial (Automático)**
         ```
-        Ajuste Inicial = Saldo Inicial SICONE - Saldo Inicial Real
-        {formatear_moneda(res['ajuste_inicial'])} = {formatear_moneda(res['saldo_inicial_sicone'])} - {formatear_moneda(res['saldo_inicial_real'])}
+        Saldo Inicial Real:        {formatear_moneda(res['saldo_inicial_real'])}
+        + Ajuste Inicial:          {formatear_moneda(res['ajuste_inicial'])}
+        ────────────────────────────────────────────────
+        = Saldo Inicial SICONE:    {formatear_moneda(res['saldo_inicial_sicone'])}
         ```
+        El ajuste inicial se suma al Saldo Inicial Real para igualarlo con el Saldo Inicial SICONE
         
-        **Paso 2: Saldo Final SICONE Ajustado**
+        **Paso 2: Saldo Final SICONE**
         ```
-        Saldo Final SICONE = Saldo Inicial SICONE + Ajuste Inicial + Ajustes del Período
-        {formatear_moneda(res['saldo_sicone_ajustado'])} = {formatear_moneda(res['saldo_inicial_sicone'])} + {formatear_moneda(res['ajuste_inicial'])} + {formatear_moneda(res['ajustes_neto'])}
+        Saldo Inicial SICONE:      {formatear_moneda(res['saldo_inicial_sicone'])}
+        + Ajustes del Período:     {formatear_moneda(res['ajustes_neto'])}
+        ────────────────────────────────────────────────
+        = Saldo Final SICONE:      {formatear_moneda(res['saldo_sicone_ajustado'])}
         ```
         
         **Paso 3: Diferencia a Conciliar**
         ```
-        Diferencia = Saldo Final SICONE - Saldo Final Real
-        {formatear_moneda(res['diferencia'])} = {formatear_moneda(res['saldo_sicone_ajustado'])} - {formatear_moneda(res['saldo_final_real'])}
+        Saldo Final SICONE:        {formatear_moneda(res['saldo_sicone_ajustado'])}
+        - Saldo Final Real:        {formatear_moneda(res['saldo_final_real'])}
+        ────────────────────────────────────────────────
+        = Diferencia:              {formatear_moneda(res['diferencia'])}
         ```
         """)
         
@@ -728,6 +735,9 @@ def main():
                 
                 No se requiere ajuste inicial. El Saldo Inicial SICONE y el Saldo Inicial Real son iguales.
                 """)
+
+# Exportar main para que pueda ser importado desde main.py
+__all__ = ['main']
 
 if __name__ == "__main__":
     st.set_page_config(page_title="Conciliación", page_icon="🔍", layout="wide")
