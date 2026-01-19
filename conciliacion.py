@@ -488,6 +488,10 @@ def main():
             ingresos_no_modelados = res['ajustes_ing']
             egresos_no_modelados = res['ajustes_egr']
             
+            # Formatear fechas para mostrar
+            fecha_inicio_display = st.session_state.fecha_inicio.strftime('%d/%m/%Y')
+            fecha_fin_display = st.session_state.fecha_fin.strftime('%d/%m/%Y')
+            
             # Construir tabla paso a paso
             tabla_flujo = [
                 {
@@ -510,7 +514,7 @@ def main():
                 },
                 {
                     'Concepto': '📈 + Ingresos del Período',
-                    'Fórmula': f"Proyectos ({st.session_state.fecha_inicio} a {st.session_state.fecha_fin})",
+                    'Fórmula': f"Proyectos ({fecha_inicio_display} a {fecha_fin_display})",
                     'Monto': formatear_moneda(ingresos_periodo),
                     'Acumulado': formatear_moneda(res['saldo_inicial_sicone'] + ingresos_periodo)
                 },
@@ -705,6 +709,10 @@ def main():
             st.markdown("### 💡 Ajuste Inicial Automático")
             
             if res['ajuste_inicial'] != 0:
+                # Formatear fechas correctamente
+                fecha_inicio_str = st.session_state.fecha_inicio.strftime('%Y-%m-%d')
+                fecha_fin_str = st.session_state.fecha_fin.strftime('%Y-%m-%d')
+                
                 st.info(f"""
                 **Ajuste Inicial Calculado:** {formatear_moneda(abs(res['ajuste_inicial']))} ({'Ingreso' if res['ajuste_inicial'] > 0 else 'Egreso'})
                 
@@ -719,7 +727,7 @@ def main():
                 ```
                 
                 **Interpretación:**
-                - Este ajuste representa TODO lo anterior al período de análisis ({st.session_state.fecha_inicio} a {st.session_state.fecha_fin})
+                - Este ajuste representa TODO lo anterior al período de análisis ({fecha_inicio_str} a {fecha_fin_str})
                 - Permite validar SOLO los flujos del período actual
                 - "Esto es lo anterior al período, después te ocupas de ello"
                 - Los ajustes adicionales se aplican a los flujos del período
@@ -735,9 +743,6 @@ def main():
                 
                 No se requiere ajuste inicial. El Saldo Inicial SICONE y el Saldo Inicial Real son iguales.
                 """)
-
-# Exportar main para que pueda ser importado desde main.py
-__all__ = ['main']
 
 if __name__ == "__main__":
     st.set_page_config(page_title="Conciliación", page_icon="🔍", layout="wide")
