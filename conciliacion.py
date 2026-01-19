@@ -73,7 +73,7 @@ def main():
             # Extraer saldo del estado_caja
             saldo_sicone = datos.get('estado_caja', {}).get('saldo_total', 0)
             
-            st.success(f"✅ Datos cargados - Saldo SICONE: {formatear_moneda(saldo_sicone)}")
+            st.success(f"✅ Datos cargados - Saldo Inicial SICONE: {formatear_moneda(saldo_sicone)}")
             
         except Exception as e:
             st.error(f"Error al cargar JSON: {e}")
@@ -148,7 +148,7 @@ def main():
         
         st.warning("""
         ⚠️ **IMPORTANTE:** 
-        - El sistema calcula AUTOMÁTICAMENTE el ajuste inicial para normalizar el punto de partida
+        - El sistema calcula AUTOMÁTICAMENTE el ajuste inicial para igualar el Saldo Inicial Real con el Saldo Inicial SICONE
         - **NO incluyas** un ajuste manual de "diferencia histórica inicial" en el JSON
         - Solo registra aquí los ajustes ADICIONALES del período (ingresos/egresos no modelados, etc.)
         """)
@@ -321,41 +321,40 @@ def main():
         if st.button("CALCULAR", type="primary", use_container_width=True):
             # CÁLCULO CON AJUSTE INICIAL AUTOMÁTICO
             
-            # 1. Extraer saldo SICONE del JSON
-            saldo_sicone_json = st.session_state.datos_sicone.get('estado_caja', {}).get('saldo_total', 0)
+            # 1. Extraer Saldo Inicial SICONE del JSON
+            saldo_inicial_sicone_json = st.session_state.datos_sicone.get('estado_caja', {}).get('saldo_total', 0)
             
-            # 2. Saldos reales
+            # 2. Saldos reales (inicial y final)
             saldo_inicial_real = sum(st.session_state.saldos_iniciales.values())
             saldo_final_real = sum(st.session_state.saldos_finales.values())
             
             # 3. AJUSTE INICIAL AUTOMÁTICO
-            # Normaliza el punto de partida
+            # Iguala el Saldo Inicial Real con el Saldo Inicial SICONE
             # Hace que ambos partan del mismo valor para validar flujos del período
-            ajuste_inicial_auto = saldo_sicone_json - saldo_inicial_real
+            ajuste_inicial_auto = saldo_inicial_sicone_json - saldo_inicial_real
             
-            # 4. Ajustes del período (del usuario)
+            # 4. Ajustes del período (del usuario, sin incluir ajuste inicial)
             ajustes_ing = sum(a['monto'] for a in st.session_state.ajustes if a['tipo'] == 'Ingreso')
             ajustes_egr = sum(a['monto'] for a in st.session_state.ajustes if a['tipo'] == 'Egreso')
             ajustes_periodo_neto = ajustes_ing - ajustes_egr
             
-            # 5. Saldo SICONE Ajustado TOTAL
-            # = Saldo SICONE + Ajuste Inicial Automático + Ajustes del Período
-            # Nota: Ajuste inicial ya está "incluido" en saldo_sicone_json
-            # pero lo separamos conceptualmente para claridad
-            saldo_sicone_ajustado = saldo_sicone_json + ajustes_periodo_neto
+            # 5. Saldo Final SICONE Ajustado
+            # = Saldo Inicial SICONE + Ajustes del Período
+            # Nota: Ajuste inicial ya está "incluido" conceptualmente en saldo_inicial_sicone_json
+            saldo_final_sicone_ajustado = saldo_inicial_sicone_json + ajustes_periodo_neto
             
             # 6. Diferencia final
-            # Lo que SICONE proyecta vs lo que realmente hay
-            diferencia = saldo_sicone_ajustado - saldo_final_real
+            # Lo que SICONE proyecta al final vs lo que realmente hay al final
+            diferencia = saldo_final_sicone_ajustado - saldo_final_real
             precision = 100 * (1 - abs(diferencia) / abs(saldo_final_real)) if saldo_final_real != 0 else 0
             
             # Guardar resultados
             st.session_state.resultados = {
-                'saldo_inicial_sicone': saldo_sicone_json,
+                'saldo_inicial_sicone': saldo_inicial_sicone_json,
                 'saldo_inicial_real': saldo_inicial_real,
                 'ajuste_inicial': ajuste_inicial_auto,  # Calculado automáticamente
                 'ajustes_neto': ajustes_periodo_neto,    # Del usuario
-                'saldo_sicone_ajustado': saldo_sicone_ajustado,
+                'saldo_sicone_ajustado': saldo_final_sicone_ajustado,
                 'saldo_final_real': saldo_final_real,
                 'diferencia': diferencia,
                 'precision': precision,
@@ -387,19 +386,19 @@ def main():
         
         **Paso 1: Ajuste Inicial (Automático)**
         ```
-        Ajuste Inicial = Saldo SICONE - Saldo Inicial Real
+        Ajuste Inicial = Saldo Inicial SICONE - Saldo Inicial Real
         {formatear_moneda(res['ajuste_inicial'])} = {formatear_moneda(res['saldo_inicial_sicone'])} - {formatear_moneda(res['saldo_inicial_real'])}
         ```
         
-        **Paso 2: Saldo SICONE Ajustado**
+        **Paso 2: Saldo Final SICONE Ajustado**
         ```
-        Saldo SICONE Ajustado = Saldo SICONE + Ajuste Inicial + Ajustes del Período
+        Saldo Final SICONE = Saldo Inicial SICONE + Ajuste Inicial + Ajustes del Período
         {formatear_moneda(res['saldo_sicone_ajustado'])} = {formatear_moneda(res['saldo_inicial_sicone'])} + {formatear_moneda(res['ajuste_inicial'])} + {formatear_moneda(res['ajustes_neto'])}
         ```
         
-        **Paso 3: Diferencia**
+        **Paso 3: Diferencia a Conciliar**
         ```
-        Diferencia = Saldo SICONE Ajustado - Saldo Final Real
+        Diferencia = Saldo Final SICONE - Saldo Final Real
         {formatear_moneda(res['diferencia'])} = {formatear_moneda(res['saldo_sicone_ajustado'])} - {formatear_moneda(res['saldo_final_real'])}
         ```
         """)
@@ -408,9 +407,9 @@ def main():
         if abs(res['diferencia']) > 1000:
             if res['diferencia'] > 0:
                 st.warning(f"""
-                **📊 Interpretación:** SICONE proyecta **{formatear_moneda(abs(res['diferencia']))} más** que el saldo real.
+                **📊 Interpretación:** El Saldo Final SICONE proyecta **{formatear_moneda(abs(res['diferencia']))} más** que el saldo real.
                 
-                - **Saldo SICONE Ajustado:** {formatear_moneda(res['saldo_sicone_ajustado'])}
+                - **Saldo Final SICONE Ajustado:** {formatear_moneda(res['saldo_sicone_ajustado'])}
                 - **Saldo Final Real:** {formatear_moneda(res['saldo_final_real'])}
                 - **Diferencia:** {formatear_moneda(abs(res['diferencia']))}
                 
@@ -421,10 +420,10 @@ def main():
                 """)
             else:
                 st.warning(f"""
-                **📊 Interpretación:** El saldo real es **{formatear_moneda(abs(res['diferencia']))} mayor** que lo proyectado.
+                **📊 Interpretación:** El saldo real es **{formatear_moneda(abs(res['diferencia']))} mayor** que el Saldo Final SICONE proyectado.
                 
                 - **Saldo Final Real:** {formatear_moneda(res['saldo_final_real'])}
-                - **Saldo SICONE Ajustado:** {formatear_moneda(res['saldo_sicone_ajustado'])}
+                - **Saldo Final SICONE Ajustado:** {formatear_moneda(res['saldo_sicone_ajustado'])}
                 - **Diferencia:** {formatear_moneda(abs(res['diferencia']))}
                 
                 **Posibles causas:**
@@ -661,7 +660,7 @@ def main():
             
             # Waterfall consolidado
             fig = go.Figure(go.Waterfall(
-                x=["Saldo SICONE", "+ Ajustes", "= SICONE Ajustado", "vs Saldo Real", "= Diferencia"],
+                x=["Saldo Inicial SICONE", "+ Ajustes", "= Saldo Final SICONE", "vs Saldo Final Real", "= Diferencia"],
                 y=[
                     res['saldo_inicial_sicone'],
                     res['ajustes_neto'],
@@ -702,7 +701,7 @@ def main():
                 st.info(f"""
                 **Ajuste Inicial Calculado:** {formatear_moneda(abs(res['ajuste_inicial']))} ({'Ingreso' if res['ajuste_inicial'] > 0 else 'Egreso'})
                 
-                **Propósito:** Normalizar el punto de partida para validar los flujos del período.
+                **Propósito:** Igualar el Saldo Inicial Real con el Saldo Inicial SICONE para validar los flujos del período.
                 
                 **Cálculo:**
                 ```
@@ -721,13 +720,13 @@ def main():
                 **Validación:**
                 Con este ajuste, ambos puntos de partida son iguales, permitiendo comparar:
                 - ✅ Flujos proyectados SICONE vs Flujos reales del período
-                - ✅ Saldo final proyectado vs Saldo final real
+                - ✅ Saldo Final SICONE proyectado vs Saldo Final Real
                 """)
             else:
                 st.success("""
                 ✅ **Saldos iniciales coinciden exactamente**
                 
-                No se requiere ajuste inicial. Los saldos iniciales de SICONE y las cuentas reales son iguales.
+                No se requiere ajuste inicial. El Saldo Inicial SICONE y el Saldo Inicial Real son iguales.
                 """)
 
 if __name__ == "__main__":
