@@ -441,68 +441,177 @@ def main():
         
         tab1, tab2, tab3 = st.tabs(["📊 Comparación General", "🎯 Desglose de Ajustes", "🏦 Análisis Consolidado"])
         
-        # TAB 1: Comparación General
+        # TAB 1: Tabla Detallada Completa
         with tab1:
-            st.markdown("### Comparación: Saldos Reales (Azul) vs SICONE Proyectados (Naranja)")
+            st.markdown("### 📋 Flujo Completo de Conciliación")
             
-            # Gráfico de barras
-            fig_comp = go.Figure()
+            # Extraer datos del JSON si están disponibles
+            datos_sicone = st.session_state.datos_sicone
+            df_consolidado = datos_sicone.get('df_consolidado', [])
             
-            # Por cuenta
-            for i, (cuenta, saldo) in enumerate(st.session_state.saldos_finales.items()):
-                # Real
-                fig_comp.add_trace(go.Bar(
-                    name=f"{cuenta} - Real",
-                    x=[cuenta],
-                    y=[saldo],
-                    text=[formatear_moneda(saldo)],
-                    textposition='auto',
-                    marker_color='#3498db',
-                    legendgroup='real'
-                ))
-                # SICONE (proporcional)
-                proporcion = saldo / res['saldo_final_real'] if res['saldo_final_real'] > 0 else 0.5
-                saldo_sicone_cuenta = res['saldo_sicone_ajustado'] * proporcion
-                fig_comp.add_trace(go.Bar(
-                    name=f"{cuenta} - SICONE",
-                    x=[cuenta],
-                    y=[saldo_sicone_cuenta],
-                    text=[formatear_moneda(saldo_sicone_cuenta)],
-                    textposition='auto',
-                    marker_color='#e67e22',
-                    legendgroup='sicone'
-                ))
+            # Calcular flujos del período si hay df_consolidado
+            ingresos_periodo = 0
+            egresos_proyectos = 0
             
-            fig_comp.update_layout(
-                barmode='group',
-                height=450,
-                yaxis_title="Monto ($)",
-                xaxis_title="Cuenta",
-                template="plotly_white"
-            )
-            st.plotly_chart(fig_comp, use_container_width=True)
-            
-            # Tabla resumen
-            st.markdown("### 📋 Resumen Detallado")
-            
-            resumen_data = []
-            for cuenta, saldo_final in st.session_state.saldos_finales.items():
-                saldo_inicial = st.session_state.saldos_iniciales.get(cuenta, 0)
-                proporcion = saldo_final / res['saldo_final_real'] if res['saldo_final_real'] > 0 else 0.5
-                saldo_sicone_cuenta = res['saldo_sicone_ajustado'] * proporcion
-                diferencia_cuenta = saldo_sicone_cuenta - saldo_final
+            if df_consolidado:
+                # Filtrar por fechas del período
+                fecha_inicio_str = st.session_state.fecha_inicio.isoformat()
+                fecha_fin_str = st.session_state.fecha_fin.isoformat()
                 
-                resumen_data.append({
-                    'Cuenta': cuenta,
-                    'Saldo Inicial': formatear_moneda(saldo_inicial),
-                    'Saldo Final Real': formatear_moneda(saldo_final),
-                    'Saldo Final SICONE': formatear_moneda(saldo_sicone_cuenta),
-                    'Diferencia': formatear_moneda(abs(diferencia_cuenta)),
-                    'Estado': "✅" if abs(diferencia_cuenta) < 1000000 else "⚠️"
-                })
+                for fila in df_consolidado:
+                    fecha_fila = fila.get('fecha', '')
+                    if fecha_inicio_str <= fecha_fila <= fecha_fin_str:
+                        ingresos_periodo += fila.get('ingresos_total', 0)
+                        egresos_proyectos += fila.get('egresos_total', 0)
             
-            df_resumen = pd.DataFrame(resumen_data)
-            st.dataframe(df_resumen, use_container_width=True, hide_index=True)
+            # Si no hay df_consolidado, usar diferencia entre saldo inicial y ajustes
+            if ingresos_periodo == 0 and egresos_proyectos == 0:
+                # Flujo neto implícito
+                flujo_neto_sicone = res['saldo_inicial_sicone'] - res['saldo_inicial_real'] - res['ajuste_inicial']
+                ingresos_periodo = abs(flujo_neto_sicone) if flujo_neto_sicone > 0 else 0
+                egresos_proyectos = abs(flujo_neto_sicone) if flujo_neto_sicone < 0 else 0
+            
+            # Gastos fijos
+            metadata = datos_sicone.get('metadata', {})
+            gastos_fijos_mensuales = metadata.get('gastos_fijos_mensuales', 0)
+            meses_periodo = (st.session_state.fecha_fin.year - st.session_state.fecha_inicio.year) * 12 + \
+                           (st.session_state.fecha_fin.month - st.session_state.fecha_inicio.month) + 1
+            gastos_fijos_periodo = gastos_fijos_mensuales * meses_periodo
+            
+            # Ajustes separados
+            ingresos_no_modelados = res['ajustes_ing']
+            egresos_no_modelados = res['ajustes_egr']
+            
+            # Construir tabla paso a paso
+            tabla_flujo = [
+                {
+                    'Concepto': '💰 Saldo Real Inicial (Cuentas)',
+                    'Fórmula': f"{formatear_moneda(st.session_state.saldos_iniciales.get('Fiducuenta', 0))} + {formatear_moneda(st.session_state.saldos_iniciales.get('Cuenta Bancaria', 0))}",
+                    'Monto': formatear_moneda(res['saldo_inicial_real']),
+                    'Acumulado': formatear_moneda(res['saldo_inicial_real'])
+                },
+                {
+                    'Concepto': '⚙️ + Ajuste Inicial (Automático)',
+                    'Fórmula': 'Normalización del punto de partida',
+                    'Monto': formatear_moneda(res['ajuste_inicial']),
+                    'Acumulado': formatear_moneda(res['saldo_inicial_real'] + res['ajuste_inicial'])
+                },
+                {
+                    'Concepto': '🏗️ = SALDO INICIAL SICONE',
+                    'Fórmula': 'Punto de partida normalizado',
+                    'Monto': formatear_moneda(res['saldo_inicial_sicone']),
+                    'Acumulado': formatear_moneda(res['saldo_inicial_sicone'])
+                },
+                {
+                    'Concepto': '📈 + Ingresos del Período',
+                    'Fórmula': f"Proyectos ({st.session_state.fecha_inicio} a {st.session_state.fecha_fin})",
+                    'Monto': formatear_moneda(ingresos_periodo),
+                    'Acumulado': formatear_moneda(res['saldo_inicial_sicone'] + ingresos_periodo)
+                },
+                {
+                    'Concepto': '📉 - Egresos Proyectos',
+                    'Fórmula': 'Costos directos de proyectos',
+                    'Monto': formatear_moneda(egresos_proyectos),
+                    'Acumulado': formatear_moneda(res['saldo_inicial_sicone'] + ingresos_periodo - egresos_proyectos)
+                },
+                {
+                    'Concepto': '💸 - Costos y Gastos Fijos',
+                    'Fórmula': f"{formatear_moneda(gastos_fijos_mensuales)}/mes × {meses_periodo} meses",
+                    'Monto': formatear_moneda(gastos_fijos_periodo),
+                    'Acumulado': formatear_moneda(res['saldo_inicial_sicone'] + ingresos_periodo - egresos_proyectos - gastos_fijos_periodo)
+                },
+                {
+                    'Concepto': '💰 + Ingresos No Modelados',
+                    'Fórmula': f"{len([a for a in st.session_state.ajustes if a['tipo']=='Ingreso'])} ajustes",
+                    'Monto': formatear_moneda(ingresos_no_modelados),
+                    'Acumulado': formatear_moneda(res['saldo_inicial_sicone'] + ingresos_periodo - egresos_proyectos - gastos_fijos_periodo + ingresos_no_modelados)
+                },
+                {
+                    'Concepto': '💸 - Egresos No Modelados',
+                    'Fórmula': f"{len([a for a in st.session_state.ajustes if a['tipo']=='Egreso'])} ajustes",
+                    'Monto': formatear_moneda(egresos_no_modelados),
+                    'Acumulado': formatear_moneda(res['saldo_sicone_ajustado'])
+                },
+                {
+                    'Concepto': '🎯 = SALDO FINAL SICONE',
+                    'Fórmula': 'Proyección al final del período',
+                    'Monto': formatear_moneda(res['saldo_sicone_ajustado']),
+                    'Acumulado': formatear_moneda(res['saldo_sicone_ajustado'])
+                },
+                {
+                    'Concepto': '💰 - Saldo Real Final (Cuentas)',
+                    'Fórmula': f"{formatear_moneda(st.session_state.saldos_finales.get('Fiducuenta', 0))} + {formatear_moneda(st.session_state.saldos_finales.get('Cuenta Bancaria', 0))}",
+                    'Monto': formatear_moneda(res['saldo_final_real']),
+                    'Acumulado': formatear_moneda(res['saldo_sicone_ajustado'] - res['saldo_final_real'])
+                },
+                {
+                    'Concepto': '⚠️ = DIFERENCIA A CONCILIAR',
+                    'Fórmula': 'SICONE - Real',
+                    'Monto': formatear_moneda(res['diferencia']),
+                    'Acumulado': formatear_moneda(res['diferencia'])
+                }
+            ]
+            
+            df_flujo = pd.DataFrame(tabla_flujo)
+            
+            # Aplicar estilos
+            def highlight_totales(row):
+                if '=' in row['Concepto']:
+                    return ['background-color: #e8f4f8; font-weight: bold'] * len(row)
+                elif 'DIFERENCIA' in row['Concepto']:
+                    return ['background-color: #ffe8e8; font-weight: bold'] * len(row)
+                else:
+                    return [''] * len(row)
+            
+            st.dataframe(
+                df_flujo.style.apply(highlight_totales, axis=1),
+                use_container_width=True,
+                hide_index=True,
+                height=500
+            )
+            
+            # Interpretación
+            st.markdown("### 💡 Interpretación")
+            
+            diferencia_vs_ajuste = abs(res['diferencia']) - abs(res['ajuste_inicial'])
+            
+            if abs(diferencia_vs_ajuste) < 100000:  # Menos de 100k de diferencia
+                st.success(f"""
+                ✅ **Excelente validación del período**
+                
+                - Ajuste inicial: {formatear_moneda(abs(res['ajuste_inicial']))}
+                - Diferencia final: {formatear_moneda(abs(res['diferencia']))}
+                - Variación: {formatear_moneda(abs(diferencia_vs_ajuste))}
+                
+                **Conclusión:** Los flujos del período están bien modelados. La diferencia se mantiene casi igual al ajuste inicial,
+                lo que indica que SICONE proyecta correctamente los ingresos y egresos del período analizado.
+                
+                El tema de fondo es el ajuste inicial (histórico), no los flujos actuales.
+                """)
+            else:
+                if abs(res['diferencia']) > abs(res['ajuste_inicial']):
+                    st.warning(f"""
+                    ⚠️ **La diferencia aumentó durante el período**
+                    
+                    - Ajuste inicial: {formatear_moneda(abs(res['ajuste_inicial']))}
+                    - Diferencia final: {formatear_moneda(abs(res['diferencia']))}
+                    - Incremento: {formatear_moneda(abs(res['diferencia']) - abs(res['ajuste_inicial']))}
+                    
+                    **Posibles causas:**
+                    - Ingresos proyectados mayores a los reales
+                    - Egresos reales mayores a los proyectados
+                    - Revisar ajustes del período
+                    """)
+                else:
+                    st.info(f"""
+                    📊 **La diferencia disminuyó durante el período**
+                    
+                    - Ajuste inicial: {formatear_moneda(abs(res['ajuste_inicial']))}
+                    - Diferencia final: {formatear_moneda(abs(res['diferencia']))}
+                    - Mejora: {formatear_moneda(abs(res['ajuste_inicial']) - abs(res['diferencia']))}
+                    
+                    **Conclusión:** Los flujos del período ayudaron a reducir la diferencia histórica.
+                    """)
         
         # TAB 2: Desglose de Ajustes
         with tab2:
