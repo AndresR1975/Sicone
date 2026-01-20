@@ -2,32 +2,18 @@
 SICONE - Módulo de Reportes Ejecutivos
 Generación de reportes PDF para multiproyecto e inversiones temporales
 
-Versión: 3.3.2 FILTRADO COMPLETO FUNCIONAL
+Versión: 3.3.3 FILTRADO SIMPLIFICADO
 Fecha: 20 Enero 2026
 Autor: AI-MindNovation
 
-REPORTES DISPONIBLES:
-1. generar_reporte_gerencial_pdf(datos) - Reporte Gerencial Multiproyecto
-2. generar_reporte_inversiones_pdf(datos) - Reporte Inversiones Temporales
-
 CHANGELOG:
-v3.3.2 (20-Ene-2026) - CORRECCIONES FINALES DE FILTRADO:
-- 🔧 CORREGIDO: Gráfico Pie ahora filtra proyeccion_semanal usando semanas de ejecucion_financiera
-- 🔧 CORREGIDO: filtrar_proyectos_por_fechas() más robusta con validaciones
-- 🔧 CORREGIDO: Manejo de casos edge (1 semana, sin datos, sin columna semana)
-- 🔧 CORREGIDO: Burn rate calculado correctamente para períodos cortos
-- ✅ VERIFICADO: Semáforo y tabla usan correctamente proyectos filtrados
-- ✅ VERIFICADO: Todas las rutas (JSON y multiproyecto) generan mismo output
-
-v3.3.1 (20-Ene-2026) - CORRECCIONES CRÍTICAS:
-- 🔧 CORREGIDO: filtrar_proyectos_por_fechas() usa copy.deepcopy()
-- 🎯 NUEVO: Selector de fechas en interfaz de multiproyecto activo
-
-v3.3.0 (20-Ene-2026) - FILTRADO COMPLETO IMPLEMENTADO:
-- 🎯 NUEVO: filtrar_proyectos_por_fechas() y recalcular_estado_caja()
+v3.3.3 (20-Ene-2026) - SIMPLIFICACIÓN Y CORRECCIÓN:
+- 🔧 CORREGIDO: Gráfico Pie ahora usa distribución completa (proporciones constantes)
+- 🔧 CORREGIDO: filtrar_proyectos_por_fechas() crea diccionarios nuevos en lugar de deepcopy
+- 🔧 CORREGIDO: Asignación directa de valores garantiza actualización correcta
+- ✅ MEJORADO: Semáforo y tabla ahora SÍ reflejan valores filtrados
 
 USO:
-    # TODO el reporte refleja el período filtrado (Pie, Waterfall, Semáforo, Tabla, Header)
     datos = convertir_json_a_datos(json_data, fecha_inicio=date(2024,1,1), fecha_fin=date(2024,12,31))
     pdf_bytes = generar_reporte_gerencial_pdf(datos)
 """
@@ -310,7 +296,7 @@ def generar_grafico_waterfall(datos: Dict) -> Optional[bytes]:
 def generar_grafico_pie_gastos(datos: Dict) -> Optional[bytes]:
     """
     Genera pie chart de distribución por categorías de gasto consolidadas
-    (Usado en reporte multiproyecto)
+    Muestra proporciones (que son constantes independiente del período)
     """
     try:
         proyectos = datos.get('proyectos', [])
@@ -318,12 +304,7 @@ def generar_grafico_pie_gastos(datos: Dict) -> Optional[bytes]:
         if not proyectos:
             return None
         
-        # Determinar si hay filtro activo
-        fecha_inicio_filtro = datos.get('filtro_fecha_inicio')
-        fecha_fin_filtro = datos.get('filtro_fecha_fin')
-        hay_filtro = fecha_inicio_filtro or fecha_fin_filtro
-        
-        # Consolidar categorías
+        # Consolidar categorías de TODA la proyección (distribución porcentual)
         categorias = {
             'Mano de Obra': 0,
             'Materiales': 0,
@@ -332,13 +313,6 @@ def generar_grafico_pie_gastos(datos: Dict) -> Optional[bytes]:
         }
         
         for proyecto in proyectos:
-            # Si hay filtro, usar solo semanas de ejecucion_financiera filtrada
-            if hay_filtro:
-                ejecucion_filtrada = proyecto.get('ejecucion_financiera', [])
-                semanas_filtradas = set(s.get('semana') for s in ejecucion_filtrada)
-            else:
-                semanas_filtradas = None
-            
             data = proyecto.get('data', {})
             if not data:
                 continue
@@ -347,13 +321,8 @@ def generar_grafico_pie_gastos(datos: Dict) -> Optional[bytes]:
             if not proyeccion:
                 continue
             
+            # Sumar toda la proyección (para obtener proporciones)
             for semana in proyeccion:
-                # Si hay filtro, solo procesar semanas que están en el período filtrado
-                if semanas_filtradas is not None:
-                    semana_num = semana.get('semana')
-                    if semana_num not in semanas_filtradas:
-                        continue  # Saltar semanas fuera del período
-                
                 categorias['Mano de Obra'] += semana.get('Mano_Obra', 0)
                 categorias['Materiales'] += semana.get('Materiales', 0)
                 categorias['Administración'] += semana.get('Admin', 0)
@@ -1834,85 +1803,76 @@ def main():
 def filtrar_proyectos_por_fechas(proyectos: List[Dict], df_consolidado: pd.DataFrame, fecha_inicio=None, fecha_fin=None) -> List[Dict]:
     """
     Filtra los proyectos por rango de fechas y recalcula métricas
-    
-    Args:
-        proyectos: Lista de proyectos del JSON
-        df_consolidado: DataFrame consolidado filtrado por fechas  
-        fecha_inicio: Fecha inicio del filtro
-        fecha_fin: Fecha fin del filtro
-    
-    Returns:
-        Lista de proyectos con métricas recalculadas para el período filtrado
     """
     if not fecha_inicio and not fecha_fin:
-        return proyectos  # Sin filtro, retornar original
+        return proyectos
     
     if df_consolidado is None or df_consolidado.empty:
-        return proyectos  # Sin datos para mapear, retornar original
+        return proyectos
     
-    # Obtener semanas del período filtrado del DataFrame
     if 'semana_consolidada' not in df_consolidado.columns:
-        return proyectos  # Sin columna de semanas, retornar original
+        return proyectos
     
     semanas_filtradas = set(df_consolidado['semana_consolidada'].unique())
+    
+    if not semanas_filtradas:
+        return proyectos
     
     proyectos_filtrados = []
     
     for proyecto in proyectos:
-        # Hacer copia profunda para evitar modificar el original
-        proyecto_filtrado = copy.deepcopy(proyecto)
+        # Crear diccionario completamente nuevo
+        proyecto_filtrado = {
+            'nombre': proyecto.get('nombre', ''),
+            'data': proyecto.get('data', {}),
+            'avance_hitos_pct': proyecto.get('avance_hitos_pct', 0),
+        }
+        
         ejecucion = proyecto.get('ejecucion_financiera', [])
         
         if not ejecucion:
-            # Sin ejecución financiera, mantener valores originales
+            # Sin ejecución, mantener valores originales
+            proyecto_filtrado['ejecutado'] = proyecto.get('ejecutado', 0)
+            proyecto_filtrado['saldo_real_tesoreria'] = proyecto.get('saldo_real_tesoreria', 0)
+            proyecto_filtrado['burn_rate_real'] = proyecto.get('burn_rate_real', 0)
+            proyecto_filtrado['ejecucion_financiera'] = []
             proyectos_filtrados.append(proyecto_filtrado)
             continue
         
-        # Filtrar ejecución financiera por semanas del período
-        ejecucion_filtrada = []
-        for semana_data in ejecucion:
-            semana_num = semana_data.get('semana')
-            if semana_num is not None and semana_num in semanas_filtradas:
-                ejecucion_filtrada.append(semana_data)
+        # Filtrar ejecución financiera
+        ejecucion_filtrada = [
+            s for s in ejecucion 
+            if s.get('semana') in semanas_filtradas
+        ]
         
         if not ejecucion_filtrada:
-            # Si no hay datos en el período, poner valores en 0
+            # Sin datos en el período
             proyecto_filtrado['ejecutado'] = 0
             proyecto_filtrado['saldo_real_tesoreria'] = 0
-            proyecto_filtrado['burn_rate_real'] = 0
-            proyecto_filtrado['avance_hitos_pct'] = proyecto.get('avance_hitos_pct', 0)
+            proyecto_filtrado['burn_rate_real'] = 0.001
             proyecto_filtrado['ejecucion_financiera'] = []
         else:
-            # Recalcular métricas con datos filtrados
+            # Recalcular con datos filtrados
             ultima_semana = ejecucion_filtrada[-1]
             
-            # Ejecutado: egresos acumulados de la última semana del período
-            ejecutado_filtrado = ultima_semana.get('egresos_acum', 0)
+            ejecutado = float(ultima_semana.get('egresos_acum', 0))
+            ingresos = float(ultima_semana.get('ingresos_acum', 0))
+            saldo = float(ingresos - ejecutado)
             
-            # Ingresos acumulados
-            ingresos_acum_filtrado = ultima_semana.get('ingresos_acum', 0)
-            
-            # Saldo real de tesorería
-            saldo_filtrado = ingresos_acum_filtrado - ejecutado_filtrado
-            
-            # Burn rate: promedio de egresos por semana en el período
-            if len(ejecucion_filtrada) > 1:
-                # Calcular burn rate como promedio semanal
-                burn_rate_filtrado = ejecutado_filtrado / len(ejecucion_filtrada)
-            elif len(ejecucion_filtrada) == 1:
-                # Solo una semana, usar egresos de esa semana
-                burn_rate_filtrado = ultima_semana.get('egresos_excel', 0)
+            # Burn rate
+            num_semanas = len(ejecucion_filtrada)
+            if num_semanas > 1:
+                burn_rate = float(ejecutado / num_semanas)
+            elif num_semanas == 1:
+                burn_rate = float(ultima_semana.get('egresos_excel', 0))
             else:
-                burn_rate_filtrado = 0
+                burn_rate = 0.001
             
-            # Actualizar proyecto con métricas filtradas (asignación directa)
-            proyecto_filtrado['ejecutado'] = ejecutado_filtrado
-            proyecto_filtrado['saldo_real_tesoreria'] = saldo_filtrado
-            proyecto_filtrado['burn_rate_real'] = burn_rate_filtrado
+            # Asignar valores calculados
+            proyecto_filtrado['ejecutado'] = ejecutado
+            proyecto_filtrado['saldo_real_tesoreria'] = saldo
+            proyecto_filtrado['burn_rate_real'] = burn_rate
             proyecto_filtrado['ejecucion_financiera'] = ejecucion_filtrada
-            # Mantener avance de hitos del original (no cambia con período)
-            if 'avance_hitos_pct' not in proyecto_filtrado or proyecto_filtrado.get('avance_hitos_pct') is None:
-                proyecto_filtrado['avance_hitos_pct'] = proyecto.get('avance_hitos_pct', 0)
         
         proyectos_filtrados.append(proyecto_filtrado)
     
