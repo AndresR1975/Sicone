@@ -1274,6 +1274,7 @@ def render_paso_1_cargar_proyeccion():
                 # Cargar contratos_cartera_input
                 if 'contratos_cartera' in cartera:
                     st.session_state.contratos_cartera_input = cartera['contratos_cartera']
+                    st.success(f"✅ Cargados {len(cartera['contratos_cartera'])} contratos de cartera")
                 
                 # Reconstruir pagos_por_hito desde contratos_cartera
                 pagos_por_hito = {}
@@ -1372,12 +1373,16 @@ def render_paso_1_cargar_proyeccion():
             # Botón continuar
             st.markdown("---")
             
+            # DEBUG: Mostrar versión detectada
+            version = proyeccion_data.get('version')
+            st.caption(f"🔍 Debug: Versión detectada = {version} (tipo: {type(version).__name__})")
+            es_v3 = (str(version) == '3.0') if version else False
+            tiene_cartera = 'cartera' in proyeccion_data
+            st.caption(f"🔍 Debug: es_v3 = {es_v3}, tiene_cartera = {tiene_cartera}")
+            
             # Determinar a qué paso saltar
             # Detección robusta: acepta '3.0', 3.0, o "3.0"
-            version = proyeccion_data.get('version')
-            es_v3 = (str(version) == '3.0') if version else False
-            
-            if es_v3 and 'cartera' in proyeccion_data:
+            if es_v3 and tiene_cartera:
                 # JSON v3.0 con datos de cartera
                 st.subheader("⏭️ Seleccione el paso al que desea continuar:")
                 
@@ -1397,6 +1402,18 @@ def render_paso_1_cargar_proyeccion():
                     if st.button("💰 Paso 4: Ingresar Egresos", use_container_width=True):
                         st.session_state.paso_ejecucion = 4
                         st.rerun()
+                
+                # DEBUG: Mostrar estado de session_state
+                st.markdown("---")
+                st.caption("🔍 Debug: Estado de session_state")
+                st.caption(f"- proyeccion_cartera: {'✅ Existe' if 'proyeccion_cartera' in st.session_state else '❌ No existe'}")
+                st.caption(f"- contratos_cartera_input: {'✅ Existe' if 'contratos_cartera_input' in st.session_state else '❌ No existe'}")
+                st.caption(f"- pagos_por_hito: {'✅ Existe' if 'pagos_por_hito' in st.session_state else '❌ No existe'}")
+                if 'contratos_cartera_input' in st.session_state:
+                    st.caption(f"- Contratos cargados: {len(st.session_state.contratos_cartera_input)}")
+                if 'pagos_por_hito' in st.session_state:
+                    total_pagos = sum(len(p) for p in st.session_state.pagos_por_hito.values())
+                    st.caption(f"- Total pagos: {total_pagos}")
             else:
                 # JSON v2.0 sin datos de cartera
                 if st.button("▶️ Continuar a Ingreso de Cartera", type="primary", use_container_width=True):
@@ -2905,6 +2922,9 @@ def main():
             render_paso_2_ingresar_cartera()
     
     elif paso == 3:
+        # DEBUG: Verificar qué está en session_state
+        st.caption(f"🔍 Debug Paso 3: contratos_cartera_input existe = {'contratos_cartera_input' in st.session_state}")
+        
         if 'contratos_cartera_input' not in st.session_state:
             st.error("❌ No se han ingresado datos de cartera. Regresando al paso 2...")
             st.session_state.paso_ejecucion = 2
@@ -2913,6 +2933,9 @@ def main():
             render_paso_3_analisis()
     
     elif paso == 4:
+        # DEBUG: Verificar qué está en session_state
+        st.caption(f"🔍 Debug Paso 4: proyeccion_cartera existe = {'proyeccion_cartera' in st.session_state}")
+        
         if 'proyeccion_cartera' not in st.session_state:
             st.error("❌ No se ha cargado una proyección. Regresando al paso 1...")
             st.session_state.paso_ejecucion = 1
