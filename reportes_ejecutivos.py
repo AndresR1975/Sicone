@@ -2,7 +2,7 @@
 SICONE - Módulo de Reportes Ejecutivos
 Generación de reportes PDF para multiproyecto e inversiones temporales
 
-Versión: 3.3.0 FILTRADO COMPLETO
+Versión: 3.3.1 FILTRADO COMPLETO CORREGIDO
 Fecha: 20 Enero 2026
 Autor: AI-MindNovation
 
@@ -11,38 +11,28 @@ REPORTES DISPONIBLES:
 2. generar_reporte_inversiones_pdf(datos) - Reporte Inversiones Temporales
 
 CHANGELOG:
+v3.3.1 (20-Ene-2026) - CORRECCIONES CRÍTICAS:
+- 🔧 CORREGIDO: filtrar_proyectos_por_fechas() ahora usa copy.deepcopy() para evitar modificar originales
+- 🔧 CORREGIDO: Asignación directa de campos en lugar de .update() para garantizar actualización
+- 🎯 NUEVO: Selector de fechas agregado a interfaz de multiproyecto activo (faltaba)
+- 🎯 NUEVO: Aplicación de filtros en datos de session_state antes de generar PDF
+- ✅ CORREGIDO: generar_reporte_gerencial_pdf() ahora recibe datos filtrados correctamente
+
 v3.3.0 (20-Ene-2026) - FILTRADO COMPLETO IMPLEMENTADO:
 - 🎯 NUEVO: filtrar_proyectos_por_fechas() - Filtra ejecución financiera de cada proyecto
 - 🎯 NUEVO: recalcular_estado_caja() - Recalcula métricas consolidadas con datos filtrados
-- ✅ CORREGIDO: Gráfico Pie ahora refleja gastos del período filtrado
-- ✅ CORREGIDO: Gráfico Semáforo usa burn_rate recalculado del período
-- ✅ CORREGIDO: Tabla de proyectos muestra ejecutado/saldo/burn_rate del período
-- ✅ CORREGIDO: Métricas del header (saldo, burn rate, margen) reflejan período filtrado
-- ✅ MEJORADO: Waterfall usa TODO el período filtrado (no solo últimas 6 semanas)
-- ✅ MEJORADO: Waterfall funciona con períodos cortos (mínimo 2 semanas)
-
-v3.2.0 (20-Ene-2026) - FILTRADO DE FECHAS IMPLEMENTADO:
-- 🎯 NUEVO: Selector de período en interfaz Streamlit con 6 opciones
-- 🎯 NUEVO: Función convertir_json_a_datos() acepta parámetros fecha_inicio y fecha_fin
-- 🎯 NUEVO: Función reconstruir_dataframe_desde_json() aplica filtros de fechas al DataFrame
-- 🎯 NUEVO: Etiquetas dinámicas en gráfico Waterfall según período filtrado
-- 🎯 NUEVO: Indicador visual en PDF cuando hay filtro aplicado
-- ✨ MEJORA: Gráfico semáforo aumentado a 1.8"
-
-v3.1.0 (20-Ene-2026) - CORRECCIONES Y OPTIMIZACIÓN:
-- 🔧 CORRECCIÓN: gastos_fijos_mensuales ahora se lee desde metadata
-- 🔧 CORRECCIÓN: Eliminado límite hardcoded de 5 proyectos
-- 🎨 OPTIMIZACIÓN: Espacios reducidos para 6-7 proyectos en 1 página
+- ✅ CORREGIDO: Todos los gráficos y tablas reflejan período filtrado
 
 USO:
     from reportes_ejecutivos import generar_reporte_gerencial_pdf, generar_reporte_inversiones_pdf
     
-    # Con filtro de fechas - TODOS los elementos del reporte reflejan el período
+    # Ahora TODO el reporte refleja el período filtrado
     datos = convertir_json_a_datos(json_data, fecha_inicio=date(2024,1,1), fecha_fin=date(2024,12,31))
     pdf_bytes = generar_reporte_gerencial_pdf(datos)
 """
 
 import io
+import copy
 from datetime import datetime, date, timedelta
 from typing import Dict, List, Optional, Tuple
 import pandas as pd
@@ -1319,12 +1309,138 @@ def main():
                 
                 st.markdown("---")
                 
+                # ================================================================
+                # SELECTOR DE PERÍODO (FILTRO DE FECHAS) - MULTIPROYECTO ACTIVO
+                # ================================================================
+                
+                st.subheader("📅 Período del Reporte")
+                
+                # Obtener rango de fechas disponibles del DataFrame
+                df_consolidado = datos.get('df_consolidado')
+                if df_consolidado is not None and not df_consolidado.empty:
+                    fecha_min = df_consolidado['fecha'].min().date()
+                    fecha_max = df_consolidado['fecha'].max().date()
+                    
+                    st.caption(f"📊 Datos disponibles: {fecha_min.strftime('%d/%m/%Y')} - {fecha_max.strftime('%d/%m/%Y')}")
+                else:
+                    fecha_min = None
+                    fecha_max = None
+                
+                # Opciones de período
+                tipo_periodo = st.radio(
+                    "Selecciona el rango temporal:",
+                    [
+                        "📊 Ver Todo (Sin filtro)",
+                        "📅 Rango Personalizado",
+                        "⏮️ Últimas 12 semanas",
+                        "⏮️ Últimas 26 semanas (6 meses)",
+                        "▶️ Solo Históricas (hasta hoy)",
+                        "▶️ Solo Proyectadas (desde hoy)"
+                    ],
+                    help="Filtra los datos del reporte por período de tiempo",
+                    key="periodo_multiproyecto"
+                )
+                
+                # Variables para almacenar fechas de filtro
+                fecha_inicio_filtro = None
+                fecha_fin_filtro = None
+                
+                # Procesar según el tipo de período seleccionado
+                if tipo_periodo == "📅 Rango Personalizado":
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        fecha_inicio_filtro = st.date_input(
+                            "Fecha Inicio:",
+                            value=fecha_min if fecha_min else date.today(),
+                            min_value=fecha_min,
+                            max_value=fecha_max,
+                            help="Inicio del período a reportar",
+                            key="fecha_inicio_multiproyecto"
+                        )
+                    with col2:
+                        fecha_fin_filtro = st.date_input(
+                            "Fecha Fin:",
+                            value=fecha_max if fecha_max else date.today(),
+                            min_value=fecha_min,
+                            max_value=fecha_max,
+                            help="Fin del período a reportar",
+                            key="fecha_fin_multiproyecto"
+                        )
+                    
+                    # Validación
+                    if fecha_inicio_filtro and fecha_fin_filtro and fecha_inicio_filtro > fecha_fin_filtro:
+                        st.error("⚠️ La fecha de inicio debe ser anterior a la fecha fin")
+                
+                elif tipo_periodo == "⏮️ Últimas 12 semanas":
+                    fecha_fin_filtro = date.today()
+                    fecha_inicio_filtro = fecha_fin_filtro - timedelta(weeks=12)
+                    st.info(f"📊 Mostrando desde {fecha_inicio_filtro.strftime('%d/%m/%Y')} hasta {fecha_fin_filtro.strftime('%d/%m/%Y')}")
+                
+                elif tipo_periodo == "⏮️ Últimas 26 semanas (6 meses)":
+                    fecha_fin_filtro = date.today()
+                    fecha_inicio_filtro = fecha_fin_filtro - timedelta(weeks=26)
+                    st.info(f"📊 Mostrando desde {fecha_inicio_filtro.strftime('%d/%m/%Y')} hasta {fecha_fin_filtro.strftime('%d/%m/%Y')}")
+                
+                elif tipo_periodo == "▶️ Solo Históricas (hasta hoy)":
+                    fecha_inicio_filtro = fecha_min
+                    fecha_fin_filtro = date.today()
+                    st.info(f"📊 Mostrando datos históricos hasta hoy ({fecha_fin_filtro.strftime('%d/%m/%Y')})")
+                
+                elif tipo_periodo == "▶️ Solo Proyectadas (desde hoy)":
+                    fecha_inicio_filtro = date.today()
+                    fecha_fin_filtro = fecha_max
+                    st.info(f"📊 Mostrando proyecciones desde hoy ({fecha_inicio_filtro.strftime('%d/%m/%Y')})")
+                
+                st.markdown("---")
+                
                 # Botón para generar reporte
                 if st.button("📄 Generar Reporte PDF", type="primary", use_container_width=True):
                     with st.spinner("Generando reporte PDF..."):
                         try:
+                            # Aplicar filtros si hay fechas seleccionadas
+                            if fecha_inicio_filtro or fecha_fin_filtro:
+                                # Clonar datos para no modificar session_state
+                                datos_filtrados = copy.deepcopy(datos)
+                                
+                                # Filtrar DataFrame consolidado
+                                if df_consolidado is not None and not df_consolidado.empty:
+                                    df_filtrado = df_consolidado.copy()
+                                    if fecha_inicio_filtro:
+                                        df_filtrado = df_filtrado[df_filtrado['fecha'] >= pd.to_datetime(fecha_inicio_filtro)]
+                                    if fecha_fin_filtro:
+                                        df_filtrado = df_filtrado[df_filtrado['fecha'] <= pd.to_datetime(fecha_fin_filtro)]
+                                    
+                                    datos_filtrados['df_consolidado'] = df_filtrado
+                                    
+                                    # Filtrar proyectos y recalcular estado_caja
+                                    proyectos_originales = datos.get('proyectos', [])
+                                    gastos_fijos_mensuales = datos.get('gastos_fijos_mensuales', 50000000)
+                                    
+                                    proyectos_filtrados = filtrar_proyectos_por_fechas(
+                                        proyectos_originales,
+                                        df_filtrado,
+                                        fecha_inicio_filtro,
+                                        fecha_fin_filtro
+                                    )
+                                    
+                                    estado_caja_filtrado = recalcular_estado_caja(
+                                        proyectos_filtrados,
+                                        gastos_fijos_mensuales
+                                    )
+                                    
+                                    datos_filtrados['proyectos'] = proyectos_filtrados
+                                    datos_filtrados['estado_caja'] = estado_caja_filtrado
+                                    datos_filtrados['filtro_fecha_inicio'] = fecha_inicio_filtro
+                                    datos_filtrados['filtro_fecha_fin'] = fecha_fin_filtro
+                                    
+                                    datos_a_usar = datos_filtrados
+                                else:
+                                    datos_a_usar = datos
+                            else:
+                                datos_a_usar = datos
+                            
                             # Generar PDF
-                            pdf_bytes = generar_reporte_gerencial_pdf(datos)
+                            pdf_bytes = generar_reporte_gerencial_pdf(datos_a_usar)
                             
                             # Ofrecer descarga
                             filename = f"Reporte_Gerencial_{timestamp.strftime('%Y%m%d_%H%M')}.pdf"
@@ -1721,7 +1837,8 @@ def filtrar_proyectos_por_fechas(proyectos: List[Dict], df_consolidado: pd.DataF
     proyectos_filtrados = []
     
     for proyecto in proyectos:
-        proyecto_filtrado = proyecto.copy()
+        # Hacer copia profunda para evitar modificar el original
+        proyecto_filtrado = copy.deepcopy(proyecto)
         ejecucion = proyecto.get('ejecucion_financiera', [])
         
         if not ejecucion:
@@ -1736,13 +1853,11 @@ def filtrar_proyectos_por_fechas(proyectos: List[Dict], df_consolidado: pd.DataF
         
         if not ejecucion_filtrada:
             # Si no hay datos en el período, poner valores en 0
-            proyecto_filtrado.update({
-                'ejecutado': 0,
-                'saldo_real_tesoreria': 0,
-                'burn_rate_real': 0,
-                'avance_hitos_pct': 0,
-                'ejecucion_financiera': []
-            })
+            proyecto_filtrado['ejecutado'] = 0
+            proyecto_filtrado['saldo_real_tesoreria'] = 0
+            proyecto_filtrado['burn_rate_real'] = 0
+            proyecto_filtrado['avance_hitos_pct'] = 0
+            proyecto_filtrado['ejecucion_financiera'] = []
         else:
             # Recalcular métricas con datos filtrados
             ultima_semana = ejecucion_filtrada[-1]
@@ -1757,19 +1872,16 @@ def filtrar_proyectos_por_fechas(proyectos: List[Dict], df_consolidado: pd.DataF
             saldo_filtrado = ingresos_acum_filtrado - ejecutado_filtrado
             
             # Burn rate: promedio de egresos por semana en el período
-            semanas_con_egresos = [s for s in ejecucion_filtrada if s.get('egresos_excel', 0) > 0]
-            if len(semanas_con_egresos) > 0:
+            if len(ejecucion_filtrada) > 0:
                 burn_rate_filtrado = ejecutado_filtrado / len(ejecucion_filtrada)
             else:
                 burn_rate_filtrado = 0
             
-            # Actualizar proyecto con métricas filtradas
-            proyecto_filtrado.update({
-                'ejecutado': ejecutado_filtrado,
-                'saldo_real_tesoreria': saldo_filtrado,
-                'burn_rate_real': burn_rate_filtrado,
-                'ejecucion_financiera': ejecucion_filtrada
-            })
+            # Actualizar proyecto con métricas filtradas (asignación directa)
+            proyecto_filtrado['ejecutado'] = ejecutado_filtrado
+            proyecto_filtrado['saldo_real_tesoreria'] = saldo_filtrado
+            proyecto_filtrado['burn_rate_real'] = burn_rate_filtrado
+            proyecto_filtrado['ejecucion_financiera'] = ejecucion_filtrada
         
         proyectos_filtrados.append(proyecto_filtrado)
     
