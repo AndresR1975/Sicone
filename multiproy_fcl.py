@@ -2,9 +2,18 @@
 SICONE - Módulo de Análisis Multiproyecto FCL
 Consolidación y análisis de flujo de caja para múltiples proyectos
 
-Versión: 3.0.2 PRODUCCIÓN
+Versión: 3.0.3 PRODUCCIÓN ESTABLE
 Fecha: 20 Enero 2025
 Autor: AI-MindNovation
+
+VERSIÓN 3.0.3 (20-Ene-2025) - FIX BOTÓN VER TODO:
+- 🔧 FIX: Error al hacer click en botón "Ver Todo" para limpiar filtros
+  - Problema: Streamlit no permite modificar session_state de widgets ya instanciados
+  - Error: "st.session_state.ingresos_egresos_desde cannot be modified"
+  - Solución: Usar keys dinámicos con contador (ingresos_egresos_desde_0, _1, _2...)
+  - Al incrementar contador, widgets se recrean desde cero con value=None
+  - Estado: ✅ Botón "Ver Todo" funciona correctamente
+- ✅ FUNCIONAL: Filtros de fecha totalmente operativos con reset
 
 VERSIÓN 3.0.2 (20-Ene-2025) - FIX MÉTRICAS CONSOLIDADAS:
 - 🔧 FIX CRÍTICO: Error "metricas_cobranza" en Dashboard de Performance
@@ -1290,7 +1299,7 @@ def render_exportar_json_simple(consolidador: ConsolidadorMultiproyecto, estado:
             
             json_data = {
                 "metadata": {
-                    "version": "3.0.2",  # ⭐ VERSIÓN CON FIXES CRÍTICOS
+                    "version": "3.0.3",  # ⭐ VERSIÓN ESTABLE CON TODOS LOS FIXES
                     "fecha_generacion": datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
                     "semana_actual": int(estado['semana']),
                     "total_proyectos": len(consolidador.proyectos),  # ✅ Total real
@@ -1336,7 +1345,7 @@ def render_exportar_json_simple(consolidador: ConsolidadorMultiproyecto, estado:
             # Guardar en session_state
             st.session_state.json_consolidado = json_data
             
-            st.success(f"✅ JSON v3.0.2 exportado exitosamente")
+            st.success(f"✅ JSON v3.0.3 exportado exitosamente")
             st.caption(f"📁 Guardado en: {ruta_json}")
             st.caption(f"📊 **Incluye:**")
             st.caption(f"   • Universo temporal completo (sin filtros de fecha)")
@@ -2374,6 +2383,10 @@ def render_analisis_ingresos_egresos(consolidador: ConsolidadorMultiproyecto):
     # ⭐ SELECTOR DE RANGO DE FECHAS
     st.markdown("#### 📅 Filtro Temporal (Opcional)")
     
+    # Inicializar contador de reset si no existe
+    if 'reset_filtros_counter' not in st.session_state:
+        st.session_state.reset_filtros_counter = 0
+    
     col_fecha1, col_fecha2, col_fecha3 = st.columns([2, 2, 1])
     
     # Obtener rango de fechas disponibles
@@ -2388,6 +2401,10 @@ def render_analisis_ingresos_egresos(consolidador: ConsolidadorMultiproyecto):
         fecha_min_date = fecha_min
         fecha_max_date = fecha_max
     
+    # Usar keys dinámicos basados en el contador
+    key_desde = f"ingresos_egresos_desde_{st.session_state.reset_filtros_counter}"
+    key_hasta = f"ingresos_egresos_hasta_{st.session_state.reset_filtros_counter}"
+    
     with col_fecha1:
         fecha_desde = st.date_input(
             "Desde",
@@ -2395,7 +2412,7 @@ def render_analisis_ingresos_egresos(consolidador: ConsolidadorMultiproyecto):
             min_value=fecha_min_date,
             max_value=fecha_max_date,
             help="Dejar vacío para ver desde el inicio",
-            key="ingresos_egresos_desde"
+            key=key_desde
         )
     
     with col_fecha2:
@@ -2405,13 +2422,13 @@ def render_analisis_ingresos_egresos(consolidador: ConsolidadorMultiproyecto):
             min_value=fecha_min_date,
             max_value=fecha_max_date,
             help="Dejar vacío para ver hasta el final",
-            key="ingresos_egresos_hasta"
+            key=key_hasta
         )
     
     with col_fecha3:
         if st.button("🔄 Ver Todo", help="Limpiar filtros y ver todos los datos", key="ingresos_egresos_reset"):
-            st.session_state.ingresos_egresos_desde = None
-            st.session_state.ingresos_egresos_hasta = None
+            # Incrementar el contador para forzar recreación de widgets
+            st.session_state.reset_filtros_counter += 1
             st.rerun()
     
     # Aplicar filtros si están seleccionados
