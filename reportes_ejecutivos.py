@@ -2,7 +2,7 @@
 SICONE - Módulo de Reportes Ejecutivos
 Generación de reportes PDF para multiproyecto e inversiones temporales
 
-Versión: 3.1.0 OPTIMIZADO
+Versión: 3.2.0 CON FILTRADO DE FECHAS
 Fecha: 20 Enero 2026
 Autor: AI-MindNovation
 
@@ -11,6 +11,22 @@ REPORTES DISPONIBLES:
 2. generar_reporte_inversiones_pdf(datos) - Reporte Inversiones Temporales
 
 CHANGELOG:
+v3.2.0 (20-Ene-2026) - FILTRADO DE FECHAS IMPLEMENTADO:
+- 🎯 NUEVO: Selector de período en interfaz Streamlit con 6 opciones:
+  * Ver Todo (Sin filtro) - DEFAULT
+  * Rango Personalizado (fecha inicio y fin manuales)
+  * Últimas 12 semanas
+  * Últimas 26 semanas (6 meses)
+  * Solo Históricas (hasta hoy)
+  * Solo Proyectadas (desde hoy)
+- 🎯 NUEVO: Función convertir_json_a_datos() acepta parámetros fecha_inicio y fecha_fin
+- 🎯 NUEVO: Función reconstruir_dataframe_desde_json() aplica filtros de fechas al DataFrame
+- 🎯 NUEVO: Etiquetas dinámicas en gráfico Waterfall según período filtrado
+- 🎯 NUEVO: Indicador visual en PDF cuando hay filtro aplicado (naranja, centrado)
+- 🎯 NUEVO: Validación de rangos de fechas (inicio < fin)
+- 🎯 NUEVO: Muestra rango disponible en datos antes de seleccionar
+- ✨ MEJORA: Gráfico semáforo aumentado a 1.8" (desde 1.2") para mejor visibilidad
+
 v3.1.0 (20-Ene-2026) - CORRECCIONES Y OPTIMIZACIÓN:
 - 🔧 CORRECCIÓN 1: gastos_fijos_mensuales ahora se lee desde metadata (no raíz JSON)
 - 🔧 CORRECCIÓN 2: Eliminado límite hardcoded de 5 proyectos en gráfico semáforo
@@ -20,7 +36,7 @@ v3.1.0 (20-Ene-2026) - CORRECCIONES Y OPTIMIZACIÓN:
   * Subtitle: 10pt → 9pt
   * Tabla métricas: fuentes 9-10pt → 8-9pt, padding 4-8pt → 3-6pt
   * Gráficos waterfall/pie: 2.8" → 2.6"
-  * Semáforo: altura 1.5" → 1.2"
+  * Semáforo: altura 1.5" → 1.2" → 1.8" (ajustado)
   * Spacers: 0.2", 0.15", 0.1" → 0.12", 0.1", 0.08", 0.06"
   * Título sección: 12pt → 10pt
 
@@ -33,6 +49,10 @@ v3.0.0 (29-Dic-2024) - UNIFICACIÓN COMPLETA:
 
 USO:
     from reportes_ejecutivos import generar_reporte_gerencial_pdf, generar_reporte_inversiones_pdf
+    
+    # Con filtro de fechas
+    datos = convertir_json_a_datos(json_data, fecha_inicio=date(2024,1,1), fecha_fin=date(2024,12,31))
+    pdf_bytes = generar_reporte_gerencial_pdf(datos)
 """
 
 import io
@@ -209,13 +229,19 @@ def generar_grafico_waterfall(datos: Dict) -> Optional[bytes]:
         saldo_inicio = df_hist.iloc[0]['saldo_consolidado']
         saldo_final = df_hist.iloc[-1]['saldo_consolidado']
         
+        # Obtener fechas del período
+        fecha_inicio_periodo = df_hist.iloc[0]['fecha']
+        fecha_fin_periodo = df_hist.iloc[-1]['fecha']
+        
         # Flujos acumulados en el período
         ingresos_acum = df_hist['ingresos_proy_total'].sum() if 'ingresos_proy_total' in df_hist.columns else 0
         egresos_acum = df_hist['egresos_proy_total'].sum() if 'egresos_proy_total' in df_hist.columns else 0
         gastos_fijos_acum = gastos_fijos_semanales * len(df_hist)
         
-        # Preparar datos para waterfall
-        categorias = ['Inicio\n(Sem -6)', 'Ingresos', 'Egresos\nProyectos', 'Gastos\nFijos', 'Actual\n(Hoy)']
+        # Preparar datos para waterfall con etiquetas dinámicas
+        etiqueta_inicio = f"Inicio\n({fecha_inicio_periodo.strftime('%d/%m')})"
+        etiqueta_fin = f"Final\n({fecha_fin_periodo.strftime('%d/%m')})"
+        categorias = [etiqueta_inicio, 'Ingresos', 'Egresos\nProyectos', 'Gastos\nFijos', etiqueta_fin]
         
         valores = [
             saldo_inicio,
@@ -383,7 +409,7 @@ def generar_grafico_semaforo(datos: Dict) -> Optional[bytes]:
         # Usar todos los proyectos dinámicamente (no limitar a 5)
         proyectos_mostrar = proyectos
         
-        fig, ax = plt.subplots(figsize=(5.5, 1.2))  # Reducido altura de 1.5 a 1.2
+        fig, ax = plt.subplots(figsize=(5.5, 1.8))  # Optimizado para 4-6 proyectos
         
         nombres = []
         coberturas = []
@@ -513,6 +539,30 @@ def generar_reporte_gerencial_pdf(datos: Dict) -> bytes:
     
     elements.append(Paragraph("REPORTE GERENCIAL MULTIPROYECTO", style_title))
     elements.append(Paragraph(f"Generado: {timestamp.strftime('%d/%m/%Y %H:%M')}", style_subtitle))
+    
+    # Indicador de filtro de fechas si está aplicado
+    fecha_inicio_filtro = datos.get('filtro_fecha_inicio')
+    fecha_fin_filtro = datos.get('filtro_fecha_fin')
+    
+    if fecha_inicio_filtro or fecha_fin_filtro:
+        texto_filtro = "📅 Período filtrado: "
+        if fecha_inicio_filtro and fecha_fin_filtro:
+            texto_filtro += f"{fecha_inicio_filtro.strftime('%d/%m/%Y')} - {fecha_fin_filtro.strftime('%d/%m/%Y')}"
+        elif fecha_inicio_filtro:
+            texto_filtro += f"Desde {fecha_inicio_filtro.strftime('%d/%m/%Y')}"
+        elif fecha_fin_filtro:
+            texto_filtro += f"Hasta {fecha_fin_filtro.strftime('%d/%m/%Y')}"
+        
+        style_filtro = ParagraphStyle(
+            'FiltroInfo',
+            parent=styles['Normal'],
+            fontSize=8,
+            textColor=colors.HexColor('#f97316'),  # Naranja para destacar
+            spaceAfter=2,
+            alignment=TA_CENTER
+        )
+        elements.append(Paragraph(texto_filtro, style_filtro))
+    
     elements.append(Spacer(1, 0.12*inch))  # Reducido de 0.2 a 0.12 inch
     
     # MÉTRICAS CLAVE
@@ -604,7 +654,7 @@ def generar_reporte_gerencial_pdf(datos: Dict) -> bytes:
     # GRÁFICO SEMÁFORO
     semaforo_buf = generar_grafico_semaforo(datos)
     if semaforo_buf:
-        semaforo_img = Image(semaforo_buf, width=5.5*inch, height=1.2*inch)  # Reducido altura de 1.5 a 1.2
+        semaforo_img = Image(semaforo_buf, width=5.5*inch, height=1.8*inch)  # Optimizado para 4-6 proyectos
         elements.append(semaforo_img)
         elements.append(Spacer(1, 0.06*inch))  # Reducido de 0.1 a 0.06 inch
     
@@ -1107,10 +1157,18 @@ def generar_reporte_inversiones_pdf(datos: Dict) -> bytes:
 # FUNCIÓN AUXILIAR PARA RECONSTRUIR DATAFRAME DESDE JSON
 # ============================================================================
 
-def reconstruir_dataframe_desde_json(json_data: Dict) -> Optional[pd.DataFrame]:
+def reconstruir_dataframe_desde_json(json_data: Dict, fecha_inicio=None, fecha_fin=None) -> Optional[pd.DataFrame]:
     """
     Reconstruye DataFrame consolidado desde JSON para generar gráficos
     (Usado internamente por reporte multiproyecto)
+    
+    Args:
+        json_data: Diccionario con datos del JSON
+        fecha_inicio: Fecha inicio para filtrar (opcional)
+        fecha_fin: Fecha fin para filtrar (opcional)
+    
+    Returns:
+        DataFrame con datos consolidados, filtrado por fechas si se especifica
     """
     try:
         df_data = json_data.get('df_consolidado')
@@ -1127,6 +1185,15 @@ def reconstruir_dataframe_desde_json(json_data: Dict) -> Optional[pd.DataFrame]:
             'es_historica': df_data.get('es_historica', []),
             'burn_rate': df_data.get('burn_rate', [])
         })
+        
+        # Aplicar filtros de fecha si se especificaron
+        if fecha_inicio is not None:
+            fecha_inicio_dt = pd.to_datetime(fecha_inicio)
+            df = df[df['fecha'] >= fecha_inicio_dt]
+        
+        if fecha_fin is not None:
+            fecha_fin_dt = pd.to_datetime(fecha_fin)
+            df = df[df['fecha'] <= fecha_fin_dt]
         
         return df
         
@@ -1443,12 +1510,102 @@ def main():
                     st.markdown("---")
                     
                     # ============================================================
+                    # SELECTOR DE PERÍODO (FILTRO DE FECHAS)
+                    # ============================================================
+                    
+                    if "Gerencial" in tipo_reporte and tiene_multiproyecto_json:
+                        st.subheader("📅 Período del Reporte")
+                        
+                        # Obtener rango de fechas disponibles del JSON
+                        df_data = json_data.get('df_consolidado', {})
+                        fechas_disponibles = df_data.get('fechas', [])
+                        
+                        if fechas_disponibles:
+                            fecha_min = pd.to_datetime(fechas_disponibles[0]).date()
+                            fecha_max = pd.to_datetime(fechas_disponibles[-1]).date()
+                            
+                            st.caption(f"📊 Datos disponibles: {fecha_min.strftime('%d/%m/%Y')} - {fecha_max.strftime('%d/%m/%Y')}")
+                        else:
+                            fecha_min = None
+                            fecha_max = None
+                        
+                        # Opciones de período
+                        tipo_periodo = st.radio(
+                            "Selecciona el rango temporal:",
+                            [
+                                "📊 Ver Todo (Sin filtro)",
+                                "📅 Rango Personalizado",
+                                "⏮️ Últimas 12 semanas",
+                                "⏮️ Últimas 26 semanas (6 meses)",
+                                "▶️ Solo Históricas (hasta hoy)",
+                                "▶️ Solo Proyectadas (desde hoy)"
+                            ],
+                            help="Filtra los datos del reporte por período de tiempo"
+                        )
+                        
+                        # Variables para almacenar fechas de filtro
+                        fecha_inicio_filtro = None
+                        fecha_fin_filtro = None
+                        
+                        # Procesar según el tipo de período seleccionado
+                        if tipo_periodo == "📅 Rango Personalizado":
+                            col1, col2 = st.columns(2)
+                            with col1:
+                                fecha_inicio_filtro = st.date_input(
+                                    "Fecha Inicio:",
+                                    value=fecha_min if fecha_min else date.today(),
+                                    min_value=fecha_min,
+                                    max_value=fecha_max,
+                                    help="Inicio del período a reportar"
+                                )
+                            with col2:
+                                fecha_fin_filtro = st.date_input(
+                                    "Fecha Fin:",
+                                    value=fecha_max if fecha_max else date.today(),
+                                    min_value=fecha_min,
+                                    max_value=fecha_max,
+                                    help="Fin del período a reportar"
+                                )
+                            
+                            # Validación
+                            if fecha_inicio_filtro and fecha_fin_filtro and fecha_inicio_filtro > fecha_fin_filtro:
+                                st.error("⚠️ La fecha de inicio debe ser anterior a la fecha fin")
+                        
+                        elif tipo_periodo == "⏮️ Últimas 12 semanas":
+                            fecha_fin_filtro = date.today()
+                            fecha_inicio_filtro = fecha_fin_filtro - timedelta(weeks=12)
+                            st.info(f"📊 Mostrando desde {fecha_inicio_filtro.strftime('%d/%m/%Y')} hasta {fecha_fin_filtro.strftime('%d/%m/%Y')}")
+                        
+                        elif tipo_periodo == "⏮️ Últimas 26 semanas (6 meses)":
+                            fecha_fin_filtro = date.today()
+                            fecha_inicio_filtro = fecha_fin_filtro - timedelta(weeks=26)
+                            st.info(f"📊 Mostrando desde {fecha_inicio_filtro.strftime('%d/%m/%Y')} hasta {fecha_fin_filtro.strftime('%d/%m/%Y')}")
+                        
+                        elif tipo_periodo == "▶️ Solo Históricas (hasta hoy)":
+                            fecha_inicio_filtro = fecha_min
+                            fecha_fin_filtro = date.today()
+                            st.info(f"📊 Mostrando datos históricos hasta hoy ({fecha_fin_filtro.strftime('%d/%m/%Y')})")
+                        
+                        elif tipo_periodo == "▶️ Solo Proyectadas (desde hoy)":
+                            fecha_inicio_filtro = date.today()
+                            fecha_fin_filtro = fecha_max
+                            st.info(f"📊 Mostrando proyecciones desde hoy ({fecha_inicio_filtro.strftime('%d/%m/%Y')})")
+                        
+                        # Opción "Ver Todo" no establece filtros (None, None)
+                        
+                        st.markdown("---")
+                    
+                    # ============================================================
                     # OPCIÓN A: REPORTE GERENCIAL DESDE JSON
                     # ============================================================
                     
                     if "Gerencial" in tipo_reporte and tiene_multiproyecto_json:
-                        # Convertir JSON a formato de datos
-                        datos_desde_json = convertir_json_a_datos(json_data)
+                        # Convertir JSON a formato de datos con filtros de fecha
+                        datos_desde_json = convertir_json_a_datos(
+                            json_data, 
+                            fecha_inicio=fecha_inicio_filtro,
+                            fecha_fin=fecha_fin_filtro
+                        )
                         
                         # Botón para generar
                         if st.button("📄 Generar Reporte desde JSON", type="primary", use_container_width=True):
@@ -1538,18 +1695,30 @@ def main():
             st.info("👆 Sube un archivo JSON para comenzar")
 
 
-def convertir_json_a_datos(json_data: Dict) -> Dict:
+def convertir_json_a_datos(json_data: Dict, fecha_inicio=None, fecha_fin=None) -> Dict:
     """
     Convierte JSON exportado al formato esperado por generar_reporte_gerencial_pdf
+    
+    Args:
+        json_data: Diccionario con datos del JSON consolidado
+        fecha_inicio: Fecha inicio para filtrar (opcional)
+        fecha_fin: Fecha fin para filtrar (opcional)
+    
+    Returns:
+        Diccionario con datos procesados y filtrados
     """
     metadata = json_data.get('metadata', {})
     estado_caja = json_data.get('estado_caja', {})
     proyectos = json_data.get('proyectos', [])
     
-    # Reconstruir DataFrame si está disponible
+    # Reconstruir DataFrame si está disponible, aplicando filtros de fecha
     df_consolidado = None
     if 'df_consolidado' in json_data:
-        df_consolidado = reconstruir_dataframe_desde_json(json_data)
+        df_consolidado = reconstruir_dataframe_desde_json(
+            json_data, 
+            fecha_inicio=fecha_inicio, 
+            fecha_fin=fecha_fin
+        )
     
     # Parsear timestamp (intentar exportacion o generacion)
     fecha_str = metadata.get('fecha_exportacion') or metadata.get('fecha_generacion', datetime.now().isoformat())
@@ -1565,7 +1734,10 @@ def convertir_json_a_datos(json_data: Dict) -> Dict:
         'gastos_fijos_mensuales': metadata.get('gastos_fijos_mensuales', 50000000),  # ✅ FIX: Leer desde metadata, no raíz
         'df_consolidado': df_consolidado,
         'estado_caja': estado_caja,
-        'proyectos': proyectos
+        'proyectos': proyectos,
+        # Agregar información de filtros aplicados
+        'filtro_fecha_inicio': fecha_inicio,
+        'filtro_fecha_fin': fecha_fin
     }
     
     return datos
