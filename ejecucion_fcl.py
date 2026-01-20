@@ -2,9 +2,15 @@
 SICONE - Módulo de Ejecución Real FCL
 Análisis de FCL Real Ejecutado vs FCL Planeado
 
-Versión: 2.4.1
-Fecha: 26 Diciembre 2024
+Versión: 2.4.2
+Fecha: 19 Enero 2025
 Autor: AI-MindNovation
+
+CORRECCIÓN v2.4.2 (19-Ene-2025):
+- ✅ FIX: Agregado campo 'ingresos_semana' en métricas de tesorería
+- ✅ MEJORA: Ahora se preservan ingresos detallados por semana en JSON
+- ✅ SOLUCIÓN: Permite conciliación precisa de ingresos semanales
+- 📊 ESTRUCTURA: ingresos_semana (nueva) + ingresos_acum (existente)
 
 BUGFIX v2.4.1 (26-Dic-2024 - 21:15):
 - 🐛 FIX: Error en exportación JSON (recomendacion_inversion eliminada)
@@ -3212,6 +3218,7 @@ def calcular_metricas_tesoreria(proyeccion: Dict, egresos_data: Dict, contratos_
         
         metricas_semanales.append({
             'semana': semana,
+            'ingresos_semana': ingresos_por_semana.get(semana, 0),  # Nuevo: ingreso de la semana
             'ingresos_acum': ingresos_acum,
             'egresos_acum': egresos_acum,
             'egresos_excel': egreso_excel,  # Nuevo: separar egresos Excel
