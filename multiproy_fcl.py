@@ -2,9 +2,22 @@
 SICONE - Módulo de Análisis Multiproyecto FCL
 Consolidación y análisis de flujo de caja para múltiples proyectos
 
-Versión: 3.0.0 FASE 2 COMPLETA
+Versión: 3.0.1 PRODUCCIÓN
 Fecha: 20 Enero 2025
 Autor: AI-MindNovation
+
+VERSIÓN 3.0.1 (20-Ene-2025) - FIX CRÍTICO Y SELECTORES DE FECHA:
+- 🔧 FIX CRÍTICO: Corregido error "name 'self' is not defined" en exportación JSON
+  - Cambiado self._extraer_detalle_ingresos() → consolidador._extraer_detalle_ingresos()
+  - Error ocurría en render_exportar_json_simple (función standalone, no método)
+- ⭐ NUEVO: Selector de rango de fechas en visualización Ingresos vs Egresos
+  - Filtros opcionales: Desde / Hasta
+  - Por defecto muestra TODOS los datos históricos
+  - Botón "Ver Todo" para limpiar filtros
+  - Métricas calculadas sobre período seleccionado
+  - Identificación de semanas negativas respeta filtro
+- ✅ FUNCIONAL: Exportación JSON ahora funciona correctamente
+- ✅ FLEXIBILIDAD: Análisis temporal según necesidad del usuario
 
 VERSIÓN 3.0.0 FASE 2 (20-Ene-2025) - VISUALIZACIÓN Y ANÁLISIS:
 - ⭐ NUEVO: Gráfico comparativo Ingresos vs Egresos consolidados
@@ -1244,7 +1257,7 @@ def render_exportar_json_simple(consolidador: ConsolidadorMultiproyecto, estado:
             proyectos_completos = []
             for p in consolidador.proyectos:
                 # ⭐ NUEVO: Extraer información detallada de ingresos reales
-                ingresos_detalle = self._extraer_detalle_ingresos(p)
+                ingresos_detalle = consolidador._extraer_detalle_ingresos(p)
                 
                 proyecto_data = {
                     "nombre": p['nombre'],
@@ -1269,7 +1282,7 @@ def render_exportar_json_simple(consolidador: ConsolidadorMultiproyecto, estado:
             
             json_data = {
                 "metadata": {
-                    "version": "3.0.0",  # ⭐ NUEVA VERSIÓN: Fase 1 - Ingresos reales con fechas
+                    "version": "3.0.1",  # ⭐ VERSIÓN CON FIX CRÍTICO
                     "fecha_generacion": datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
                     "semana_actual": int(estado['semana']),
                     "total_proyectos": len(consolidador.proyectos),  # ✅ Total real
@@ -1315,7 +1328,7 @@ def render_exportar_json_simple(consolidador: ConsolidadorMultiproyecto, estado:
             # Guardar en session_state
             st.session_state.json_consolidado = json_data
             
-            st.success(f"✅ JSON v3.0.0 FASE 2 exportado exitosamente")
+            st.success(f"✅ JSON v3.0.1 exportado exitosamente")
             st.caption(f"📁 Guardado en: {ruta_json}")
             st.caption(f"📊 **Incluye:**")
             st.caption(f"   • Universo temporal completo (sin filtros de fecha)")
@@ -2350,9 +2363,82 @@ def render_analisis_ingresos_egresos(consolidador: ConsolidadorMultiproyecto):
         st.info("No hay datos históricos disponibles aún")
         return
     
-    # Convertir fechas
+    # ⭐ SELECTOR DE RANGO DE FECHAS
+    st.markdown("#### 📅 Filtro Temporal (Opcional)")
+    
+    col_fecha1, col_fecha2, col_fecha3 = st.columns([2, 2, 1])
+    
+    # Obtener rango de fechas disponibles
+    fecha_min = df_historico['fecha'].min()
+    fecha_max = df_historico['fecha'].max()
+    
+    # Convertir a date si son Timestamp
+    if hasattr(fecha_min, 'date'):
+        fecha_min_date = fecha_min.date()
+        fecha_max_date = fecha_max.date()
+    else:
+        fecha_min_date = fecha_min
+        fecha_max_date = fecha_max
+    
+    with col_fecha1:
+        fecha_desde = st.date_input(
+            "Desde",
+            value=None,  # Por defecto NO selecciona nada
+            min_value=fecha_min_date,
+            max_value=fecha_max_date,
+            help="Dejar vacío para ver desde el inicio",
+            key="ingresos_egresos_desde"
+        )
+    
+    with col_fecha2:
+        fecha_hasta = st.date_input(
+            "Hasta",
+            value=None,  # Por defecto NO selecciona nada
+            min_value=fecha_min_date,
+            max_value=fecha_max_date,
+            help="Dejar vacío para ver hasta el final",
+            key="ingresos_egresos_hasta"
+        )
+    
+    with col_fecha3:
+        if st.button("🔄 Ver Todo", help="Limpiar filtros y ver todos los datos", key="ingresos_egresos_reset"):
+            st.session_state.ingresos_egresos_desde = None
+            st.session_state.ingresos_egresos_hasta = None
+            st.rerun()
+    
+    # Aplicar filtros si están seleccionados
+    df_filtrado = df_historico.copy()
+    
+    if fecha_desde is not None:
+        # Convertir fecha_desde a timestamp para comparar
+        fecha_desde_ts = pd.Timestamp(fecha_desde)
+        df_filtrado = df_filtrado[df_filtrado['fecha'] >= fecha_desde_ts]
+    
+    if fecha_hasta is not None:
+        # Convertir fecha_hasta a timestamp para comparar
+        fecha_hasta_ts = pd.Timestamp(fecha_hasta)
+        df_filtrado = df_filtrado[df_filtrado['fecha'] <= fecha_hasta_ts]
+    
+    # Mostrar información del filtro aplicado
+    if fecha_desde is not None or fecha_hasta is not None:
+        periodo_texto = f"Mostrando datos "
+        if fecha_desde is not None:
+            periodo_texto += f"desde {fecha_desde.strftime('%d/%m/%Y')} "
+        if fecha_hasta is not None:
+            periodo_texto += f"hasta {fecha_hasta.strftime('%d/%m/%Y')}"
+        st.info(f"📊 {periodo_texto} ({len(df_filtrado)} semanas)")
+    else:
+        st.success(f"✅ Mostrando todos los datos históricos ({len(df_filtrado)} semanas)")
+    
+    if len(df_filtrado) == 0:
+        st.warning("⚠️ No hay datos en el rango seleccionado")
+        return
+    
+    st.markdown("---")
+    
+    # Convertir fechas para el gráfico
     fechas_py = []
-    for f in df_historico['fecha']:
+    for f in df_filtrado['fecha']:
         if hasattr(f, 'to_pydatetime'):
             fechas_py.append(f.to_pydatetime())
         else:
@@ -2364,7 +2450,7 @@ def render_analisis_ingresos_egresos(consolidador: ConsolidadorMultiproyecto):
     # Traza de ingresos reales
     fig.add_trace(go.Bar(
         x=fechas_py,
-        y=df_historico['ingresos_real_total'],
+        y=df_filtrado['ingresos_real_total'],
         name='Ingresos Reales',
         marker_color='#2ca02c',  # Verde
         hovertemplate='<b>Ingresos</b><br>Fecha: %{x|%d/%m/%Y}<br>Monto: $%{y:,.0f}<extra></extra>'
@@ -2373,7 +2459,7 @@ def render_analisis_ingresos_egresos(consolidador: ConsolidadorMultiproyecto):
     # Traza de egresos reales
     fig.add_trace(go.Bar(
         x=fechas_py,
-        y=df_historico['egresos_real_total'],
+        y=df_filtrado['egresos_real_total'],
         name='Egresos Reales',
         marker_color='#d62728',  # Rojo
         hovertemplate='<b>Egresos</b><br>Fecha: %{x|%d/%m/%Y}<br>Monto: $%{y:,.0f}<extra></extra>'
@@ -2398,25 +2484,25 @@ def render_analisis_ingresos_egresos(consolidador: ConsolidadorMultiproyecto):
     
     st.plotly_chart(fig, use_container_width=True)
     
-    # Métricas consolidadas
+    # Métricas consolidadas (del período filtrado)
     col1, col2, col3, col4 = st.columns(4)
     
-    total_ingresos = df_historico['ingresos_real_total'].sum()
-    total_egresos = df_historico['egresos_real_total'].sum()
+    total_ingresos = df_filtrado['ingresos_real_total'].sum()
+    total_egresos = df_filtrado['egresos_real_total'].sum()
     flujo_neto = total_ingresos - total_egresos
     
     with col1:
         st.metric(
             "Total Ingresos",
             formatear_moneda(total_ingresos),
-            help="Suma de todos los ingresos reales históricos"
+            help="Suma de todos los ingresos reales en el período"
         )
     
     with col2:
         st.metric(
             "Total Egresos",
             formatear_moneda(total_egresos),
-            help="Suma de todos los egresos reales históricos"
+            help="Suma de todos los egresos reales en el período"
         )
     
     with col3:
@@ -2426,7 +2512,7 @@ def render_analisis_ingresos_egresos(consolidador: ConsolidadorMultiproyecto):
             formatear_moneda(flujo_neto),
             delta="Positivo" if flujo_neto >= 0 else "Negativo",
             delta_color=delta_color,
-            help="Diferencia entre ingresos y egresos"
+            help="Diferencia entre ingresos y egresos en el período"
         )
     
     with col4:
@@ -2434,16 +2520,16 @@ def render_analisis_ingresos_egresos(consolidador: ConsolidadorMultiproyecto):
         st.metric(
             "Ratio Ingresos/Egresos",
             f"{ratio:.2f}x",
-            help="Veces que los ingresos cubren los egresos"
+            help="Veces que los ingresos cubren los egresos en el período"
         )
     
-    # Análisis de semanas con flujo negativo
-    semanas_negativas = df_historico[
-        (df_historico['ingresos_real_total'] - df_historico['egresos_real_total']) < 0
+    # Análisis de semanas con flujo negativo (en el período filtrado)
+    semanas_negativas = df_filtrado[
+        (df_filtrado['ingresos_real_total'] - df_filtrado['egresos_real_total']) < 0
     ]
     
     if len(semanas_negativas) > 0:
-        st.warning(f"⚠️ **{len(semanas_negativas)} semana(s)** con flujo negativo (egresos > ingresos)")
+        st.warning(f"⚠️ **{len(semanas_negativas)} semana(s)** con flujo negativo en el período seleccionado")
         
         with st.expander("Ver detalle de semanas con flujo negativo"):
             for idx, row in semanas_negativas.iterrows():
