@@ -1262,7 +1262,11 @@ def render_paso_1_cargar_proyeccion():
             )
             
             # Si es JSON v3.0 con datos de cartera, cargarlos también
-            if proyeccion_data.get('version') == '3.0' and 'cartera' in proyeccion_data:
+            # Detección robusta: acepta '3.0', 3.0, o "3.0"
+            version = proyeccion_data.get('version')
+            es_v3 = (str(version) == '3.0') if version else False
+            
+            if es_v3 and 'cartera' in proyeccion_data:
                 st.info("🔄 Detectado JSON v3.0 con datos de cartera. Cargando datos previos...")
                 
                 cartera = proyeccion_data['cartera']
@@ -1369,7 +1373,11 @@ def render_paso_1_cargar_proyeccion():
             st.markdown("---")
             
             # Determinar a qué paso saltar
-            if proyeccion_data.get('version') == '3.0' and 'cartera' in proyeccion_data:
+            # Detección robusta: acepta '3.0', 3.0, o "3.0"
+            version = proyeccion_data.get('version')
+            es_v3 = (str(version) == '3.0') if version else False
+            
+            if es_v3 and 'cartera' in proyeccion_data:
                 # JSON v3.0 con datos de cartera
                 st.subheader("⏭️ Seleccione el paso al que desea continuar:")
                 
@@ -2208,7 +2216,7 @@ def render_paso_3_analisis():
     nombre_archivo = f"SICONE_{proyeccion['proyecto']['nombre']}_Cartera_{fecha_corte.strftime('%Y%m%d')}.json"
     
     st.download_button(
-        label="📥 Descargar JSON Completo (v3.0)",
+        label="📥 Descargar JSON Cartera",
         data=json_str,
         file_name=nombre_archivo,
         mime="application/json",
@@ -2806,7 +2814,7 @@ def main():
         st.markdown("### 📌 Información del Sistema")
         
         # Versión
-        st.info("**Versión:** 2.4.1")
+        st.info("**Versión:** 2.4.2")
         
         # Estado de configuraciones críticas
         with st.expander("🔧 Configuración Actual", expanded=False):
@@ -2826,15 +2834,15 @@ def main():
                 st.caption("ℹ️ Sin reclasificaciones manuales")
         
         # Notas de versión
-        with st.expander("📝 Notas v2.4.1", expanded=False):
+        with st.expander("📝 Notas v2.4.2", expanded=False):
             st.markdown("""
-            **Bugfix 26-Dic-2024 (21:15):**
+            **Corrección 19-Ene-2025:**
             
-            **Correcciones:**
-            - Fix exportación JSON ✓
-            - JSON incluye análisis hitos ✓
+            **Mejoras:**
+            - Campo 'ingresos_semana' en tesorería ✓
+            - Detalle semanal de ingresos en JSON ✓
             
-            **Base v2.4.0:**
+            **Base v2.4.1:**
             - Análisis por hitos ✓
             - Escenarios conservador + realista ✓
             """)
