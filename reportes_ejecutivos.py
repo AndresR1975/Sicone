@@ -2,18 +2,19 @@
 SICONE - Módulo de Reportes Ejecutivos
 Generación de reportes PDF para multiproyecto e inversiones temporales
 
-Versión: 3.3.3 FILTRADO SIMPLIFICADO
+Versión: 3.3.3 DEBUG
 Fecha: 20 Enero 2026
 Autor: AI-MindNovation
 
 CHANGELOG:
-v3.3.3 (20-Ene-2026) - SIMPLIFICACIÓN Y CORRECCIÓN:
-- 🔧 CORREGIDO: Gráfico Pie ahora usa distribución completa (proporciones constantes)
-- 🔧 CORREGIDO: filtrar_proyectos_por_fechas() crea diccionarios nuevos en lugar de deepcopy
-- 🔧 CORREGIDO: Asignación directa de valores garantiza actualización correcta
-- ✅ MEJORADO: Semáforo y tabla ahora SÍ reflejan valores filtrados
+v3.3.3 DEBUG - CON LOGS DE DEBUGGING:
+- 🐛 DEBUG agregado en filtrar_proyectos_por_fechas
+- 🐛 DEBUG agregado en convertir_json_a_datos
+- 🐛 DEBUG agregado en generar_grafico_semaforo
+- 🐛 DEBUG agregado en tabla de proyectos
 
 USO:
+    # Ejecutar y revisar logs en terminal/consola de Streamlit
     datos = convertir_json_a_datos(json_data, fecha_inicio=date(2024,1,1), fecha_fin=date(2024,12,31))
     pdf_bytes = generar_reporte_gerencial_pdf(datos)
 """
@@ -378,11 +379,22 @@ def generar_grafico_semaforo(datos: Dict) -> Optional[bytes]:
     try:
         proyectos = datos.get('proyectos', [])
         
+        print(f"\n🚦 DEBUG generar_grafico_semaforo:")
+        print(f"  - Num proyectos: {len(proyectos)}")
+        
         if not proyectos or len(proyectos) == 0:
+            print("  ⚠️ Sin proyectos - retornando None")
             return None
         
         # Usar todos los proyectos dinámicamente (no limitar a 5)
         proyectos_mostrar = proyectos
+        
+        for i, p in enumerate(proyectos_mostrar[:3]):  # Mostrar primeros 3 para debug
+            nombre = p.get('nombre', 'Sin nombre')[:20]
+            saldo = p.get('saldo_real_tesoreria', 0)
+            burn_rate = p.get('burn_rate_real', 0)
+            ejecutado = p.get('ejecutado', 0)
+            print(f"  [{i}] {nombre}: ejecutado=${ejecutado/1_000_000:.1f}M, saldo=${saldo/1_000_000:.1f}M, burn_rate=${burn_rate/1_000_000:.2f}M")
         
         fig, ax = plt.subplots(figsize=(5.5, 1.8))  # Optimizado para 4-6 proyectos
         
@@ -648,14 +660,20 @@ def generar_reporte_gerencial_pdf(datos: Dict) -> bytes:
     
     proyectos = datos.get('proyectos', [])
     
+    print(f"\n📋 DEBUG tabla de proyectos:")
+    print(f"  - Num proyectos: {len(proyectos)}")
+    
     # Procesar TODOS los proyectos dinámicamente (no limitar a 5)
-    for p in proyectos:
+    for i, p in enumerate(proyectos):
         if UTILS_DISPONIBLE:
             nombre = obtener_valor_seguro(p, 'nombre', 'Sin nombre', str)[:30]
             ejecutado = obtener_valor_seguro(p, 'ejecutado', 0, float)
             saldo = obtener_valor_seguro(p, 'saldo_real_tesoreria', 0, float)
             burn_rate = obtener_valor_seguro(p, 'burn_rate_real', 0, float)
             avance_hitos = obtener_valor_seguro(p, 'avance_hitos_pct', 0, float)
+            
+            if i < 3:  # Debug primeros 3 proyectos
+                print(f"  [{i}] {nombre}: ejecutado=${ejecutado/1_000_000:.1f}M, saldo=${saldo/1_000_000:.1f}M, burn_rate=${burn_rate/1_000_000:.2f}M")
             
             if burn_rate > 0:
                 cobertura = saldo / burn_rate
@@ -1804,23 +1822,37 @@ def filtrar_proyectos_por_fechas(proyectos: List[Dict], df_consolidado: pd.DataF
     """
     Filtra los proyectos por rango de fechas y recalcula métricas
     """
+    print(f"\n🔍 DEBUG filtrar_proyectos_por_fechas:")
+    print(f"  - fecha_inicio: {fecha_inicio}")
+    print(f"  - fecha_fin: {fecha_fin}")
+    print(f"  - Num proyectos entrada: {len(proyectos)}")
+    
     if not fecha_inicio and not fecha_fin:
+        print("  ⚠️ Sin filtros de fecha - retornando originales")
         return proyectos
     
     if df_consolidado is None or df_consolidado.empty:
+        print("  ⚠️ DataFrame vacío - retornando originales")
         return proyectos
     
     if 'semana_consolidada' not in df_consolidado.columns:
+        print("  ⚠️ Sin columna semana_consolidada - retornando originales")
         return proyectos
     
     semanas_filtradas = set(df_consolidado['semana_consolidada'].unique())
+    print(f"  - Semanas filtradas: {sorted(semanas_filtradas)[:10]}...")
     
     if not semanas_filtradas:
+        print("  ⚠️ Set de semanas vacío - retornando originales")
         return proyectos
     
     proyectos_filtrados = []
     
-    for proyecto in proyectos:
+    for i, proyecto in enumerate(proyectos):
+        nombre = proyecto.get('nombre', f'Proyecto {i}')
+        print(f"\n  📊 Proyecto: {nombre}")
+        print(f"    ORIGINAL - ejecutado: ${proyecto.get('ejecutado', 0)/1_000_000:.1f}M, burn_rate: ${proyecto.get('burn_rate_real', 0)/1_000_000:.2f}M")
+        
         # Crear diccionario completamente nuevo
         proyecto_filtrado = {
             'nombre': proyecto.get('nombre', ''),
@@ -1836,6 +1868,7 @@ def filtrar_proyectos_por_fechas(proyectos: List[Dict], df_consolidado: pd.DataF
             proyecto_filtrado['saldo_real_tesoreria'] = proyecto.get('saldo_real_tesoreria', 0)
             proyecto_filtrado['burn_rate_real'] = proyecto.get('burn_rate_real', 0)
             proyecto_filtrado['ejecucion_financiera'] = []
+            print(f"    ⚠️ Sin ejecucion_financiera - manteniendo originales")
             proyectos_filtrados.append(proyecto_filtrado)
             continue
         
@@ -1845,12 +1878,15 @@ def filtrar_proyectos_por_fechas(proyectos: List[Dict], df_consolidado: pd.DataF
             if s.get('semana') in semanas_filtradas
         ]
         
+        print(f"    - Semanas originales: {len(ejecucion)}, filtradas: {len(ejecucion_filtrada)}")
+        
         if not ejecucion_filtrada:
             # Sin datos en el período
             proyecto_filtrado['ejecutado'] = 0
             proyecto_filtrado['saldo_real_tesoreria'] = 0
             proyecto_filtrado['burn_rate_real'] = 0.001
             proyecto_filtrado['ejecucion_financiera'] = []
+            print(f"    FILTRADO - ejecutado: $0M, burn_rate: $0M (sin datos en período)")
         else:
             # Recalcular con datos filtrados
             ultima_semana = ejecucion_filtrada[-1]
@@ -1873,9 +1909,12 @@ def filtrar_proyectos_por_fechas(proyectos: List[Dict], df_consolidado: pd.DataF
             proyecto_filtrado['saldo_real_tesoreria'] = saldo
             proyecto_filtrado['burn_rate_real'] = burn_rate
             proyecto_filtrado['ejecucion_financiera'] = ejecucion_filtrada
+            
+            print(f"    FILTRADO - ejecutado: ${ejecutado/1_000_000:.1f}M, saldo: ${saldo/1_000_000:.1f}M, burn_rate: ${burn_rate/1_000_000:.2f}M")
         
         proyectos_filtrados.append(proyecto_filtrado)
     
+    print(f"\n  ✅ Retornando {len(proyectos_filtrados)} proyectos filtrados")
     return proyectos_filtrados
 
 
@@ -1943,10 +1982,20 @@ def convertir_json_a_datos(json_data: Dict, fecha_inicio=None, fecha_fin=None) -
     Returns:
         Diccionario con datos procesados y filtrados
     """
+    print(f"\n{'='*80}")
+    print(f"🔄 DEBUG convertir_json_a_datos:")
+    print(f"  - fecha_inicio: {fecha_inicio}")
+    print(f"  - fecha_fin: {fecha_fin}")
+    print(f"{'='*80}")
+    
     metadata = json_data.get('metadata', {})
     estado_caja_original = json_data.get('estado_caja', {})
     proyectos_originales = json_data.get('proyectos', [])
     gastos_fijos_mensuales = metadata.get('gastos_fijos_mensuales', 50000000)
+    
+    print(f"  - Num proyectos originales: {len(proyectos_originales)}")
+    for i, p in enumerate(proyectos_originales[:2]):
+        print(f"    ORIGINAL [{i}] {p.get('nombre')}: ejecutado=${p.get('ejecutado', 0)/1_000_000:.1f}M")
     
     # Reconstruir DataFrame si está disponible, aplicando filtros de fecha
     df_consolidado = None
@@ -1959,6 +2008,7 @@ def convertir_json_a_datos(json_data: Dict, fecha_inicio=None, fecha_fin=None) -
     
     # Aplicar filtrado de proyectos y recalcular estado_caja si hay filtros activos
     if fecha_inicio or fecha_fin:
+        print(f"  ✅ HAY FILTROS - Aplicando filtrado...")
         # Filtrar proyectos por fechas
         proyectos_filtrados = filtrar_proyectos_por_fechas(
             proyectos_originales, 
@@ -1967,10 +2017,15 @@ def convertir_json_a_datos(json_data: Dict, fecha_inicio=None, fecha_fin=None) -
             fecha_fin
         )
         
+        print(f"\n  - Num proyectos filtrados: {len(proyectos_filtrados)}")
+        for i, p in enumerate(proyectos_filtrados[:2]):
+            print(f"    FILTRADO [{i}] {p.get('nombre')}: ejecutado=${p.get('ejecutado', 0)/1_000_000:.1f}M, burn_rate=${p.get('burn_rate_real', 0)/1_000_000:.2f}M")
+        
         # Recalcular estado de caja con proyectos filtrados
         estado_caja = recalcular_estado_caja(proyectos_filtrados, gastos_fijos_mensuales)
         proyectos = proyectos_filtrados
     else:
+        print(f"  ⚠️ SIN FILTROS - Usando datos originales")
         # Sin filtros, usar datos originales
         estado_caja = estado_caja_original
         proyectos = proyectos_originales
