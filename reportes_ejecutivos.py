@@ -1452,7 +1452,7 @@ def main():
                                             'Saldo (M)': f"${p.get('saldo_real_tesoreria', 0)/1_000_000:.1f}",
                                             'Burn Rate (M)': f"${p.get('burn_rate_real', 0)/1_000_000:.2f}",
                                         })
-                                    import pandas as pd
+                                    # pandas ya importado al inicio
                                     df_debug = pd.DataFrame(debug_data)
                                     st.dataframe(df_debug, use_container_width=True)
                                     
@@ -1768,7 +1768,7 @@ def main():
                                             'Semanas': len(p.get('ejecucion_financiera', []))
                                         })
                                     
-                                    import pandas as pd
+                                    # pandas ya importado al inicio
                                     df_debug = pd.DataFrame(debug_data)
                                     st.dataframe(df_debug, use_container_width=True)
                                     
