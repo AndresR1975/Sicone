@@ -1204,6 +1204,7 @@ def reconstruir_dataframe_desde_json(json_data: Dict, fecha_inicio=None, fecha_f
 # ============================================================================
 
 if __name__ == "__main__":
+    pass
     # DEBUG: print("SICONE - Módulo de Reportes Ejecutivos Unificado v3.0.0")
     # DEBUG: print("=" * 60)
     # DEBUG: print("\nFUNCIONES DISPONIBLES:")
