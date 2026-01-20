@@ -2,11 +2,33 @@
 SICONE - Módulo de Análisis Multiproyecto FCL
 Consolidación y análisis de flujo de caja para múltiples proyectos
 
-Versión: 3.0.0 FASE 1
+Versión: 3.0.0 FASE 2 COMPLETA
 Fecha: 20 Enero 2025
 Autor: AI-MindNovation
 
-VERSIÓN 3.0.0 (20-Ene-2025) - FASE 1: INGRESOS REALES CON FECHAS:
+VERSIÓN 3.0.0 FASE 2 (20-Ene-2025) - VISUALIZACIÓN Y ANÁLISIS:
+- ⭐ NUEVO: Gráfico comparativo Ingresos vs Egresos consolidados
+  - Vista semanal de flujos de entrada y salida
+  - Métricas: Total ingresos, egresos, flujo neto, ratio
+  - Identificación de semanas con flujo negativo
+- ⭐ NUEVO: Dashboard de Performance de Cobranza
+  - Tabla detallada por proyecto con métricas de cumplimiento
+  - Análisis de hitos: completados, pendientes, parciales
+  - Métricas de tiempo: días de retraso promedio, % a tiempo
+  - Consolidado empresarial de performance de cobranza
+- ⭐ NUEVO: Métricas avanzadas de cobranza por proyecto
+  - Cálculo automático de días de retraso por hito
+  - Estado de cada hito: COMPLETO, PARCIAL, PENDIENTE
+  - % de hitos cobrados a tiempo
+  - Comparación fecha esperada vs fecha real de pago
+- ⭐ NUEVO: JSON enriquecido con columnas individuales
+  - Incluye ingresos_real, egresos_real de cada proyecto
+  - Permite análisis granular por proyecto en módulos consumidores
+  - Detalle completo de hitos con fechas y performance
+- ✅ ESTRUCTURA: Métricas_cobranza y hitos_detalle en cada proyecto
+- ✅ VISUALIZACIÓN: Dos nuevos dashboards para análisis de flujos
+
+VERSIÓN 3.0.0 FASE 1 (20-Ene-2025) - INGRESOS REALES CON FECHAS:
 - ⭐ NUEVO: Extracción de ingresos reales desde cartera.contratos_cartera[].hitos[].pagos[]
   - Nueva columna ingresos_real_{nombre} para cada proyecto
   - Mapeo de pagos individuales a semanas consolidadas usando fechas
@@ -986,7 +1008,8 @@ class ConsolidadorMultiproyecto:
                 'total_cobrado': 0,
                 'total_contratado': 0,
                 'pagos_detallados': [],
-                'pagos_por_semana': {}
+                'pagos_por_semana': {},
+                'metricas_cobranza': {}  # ⭐ FASE 2
             }
         
         # Obtener totales del resumen
@@ -998,6 +1021,9 @@ class ConsolidadorMultiproyecto:
         pagos_detallados = []
         pagos_por_semana = {}
         
+        # ⭐ FASE 2: Variables para métricas de cobranza
+        hitos_data = []
+        
         contratos_cartera = cartera.get('contratos_cartera', [])
         fecha_inicio_proy = proyecto['fecha_inicio']
         
@@ -1008,7 +1034,19 @@ class ConsolidadorMultiproyecto:
             for hito in hitos:
                 numero_hito = hito.get('numero', 0)
                 descripcion_hito = hito.get('descripcion', '')
+                monto_esperado = hito.get('monto_esperado', 0)
+                semana_esperada = hito.get('semana_esperada', 0)
+                
+                # ⭐ FASE 2: Calcular fecha esperada del hito
+                fecha_esperada_hito = None
+                if semana_esperada > 0:
+                    dias_desde_inicio = (semana_esperada - 1) * 7
+                    fecha_esperada_hito = fecha_inicio_proy + timedelta(days=dias_desde_inicio)
+                
+                # Calcular monto cobrado y fecha del primer pago del hito
                 pagos = hito.get('pagos', [])
+                monto_cobrado_hito = 0
+                fecha_primer_pago = None
                 
                 for pago in pagos:
                     fecha_pago_str = pago.get('fecha')
@@ -1020,6 +1058,12 @@ class ConsolidadorMultiproyecto:
                             # Convertir fecha y calcular semana
                             fecha_pago = datetime.strptime(fecha_pago_str, '%Y-%m-%d').date()
                             semana_pago = calcular_semana_desde_fecha(fecha_inicio_proy, fecha_pago)
+                            
+                            # Registrar primer pago del hito
+                            if fecha_primer_pago is None:
+                                fecha_primer_pago = fecha_pago
+                            
+                            monto_cobrado_hito += monto_pago
                             
                             # Agregar a lista detallada
                             pago_info = {
@@ -1047,6 +1091,22 @@ class ConsolidadorMultiproyecto:
                         except (ValueError, TypeError):
                             # Si hay error en formato, simplemente continuar
                             continue
+                
+                # ⭐ FASE 2: Guardar datos del hito para métricas
+                if monto_esperado > 0:
+                    hito_info = {
+                        'numero': numero_hito,
+                        'descripcion': descripcion_hito,
+                        'monto_esperado': monto_esperado,
+                        'monto_cobrado': monto_cobrado_hito,
+                        'semana_esperada': semana_esperada,
+                        'fecha_esperada': fecha_esperada_hito.isoformat() if fecha_esperada_hito else None,
+                        'fecha_primer_pago': fecha_primer_pago.isoformat() if fecha_primer_pago else None,
+                        'dias_retraso': (fecha_primer_pago - fecha_esperada_hito).days if (fecha_primer_pago and fecha_esperada_hito) else None,
+                        'pct_cobrado': (monto_cobrado_hito / monto_esperado * 100) if monto_esperado > 0 else 0,
+                        'estado': 'COMPLETO' if monto_cobrado_hito >= monto_esperado else ('PARCIAL' if monto_cobrado_hito > 0 else 'PENDIENTE')
+                    }
+                    hitos_data.append(hito_info)
         
         # Convertir pagos_por_semana a formato serializable
         pagos_por_semana_serializable = {}
@@ -1056,12 +1116,70 @@ class ConsolidadorMultiproyecto:
                 'recibos': info['recibos']
             }
         
+        # ⭐ FASE 2: Calcular métricas de cobranza
+        metricas_cobranza = self._calcular_metricas_cobranza(hitos_data, total_cobrado, total_contratado)
+        
         return {
             'total_cobrado': float(total_cobrado),
             'total_contratado': float(total_contratado),
             'total_pendiente': float(total_contratado - total_cobrado),
             'pagos_detallados': pagos_detallados,
-            'pagos_por_semana': pagos_por_semana_serializable
+            'pagos_por_semana': pagos_por_semana_serializable,
+            'hitos_detalle': hitos_data,  # ⭐ FASE 2: Detalle de hitos con performance
+            'metricas_cobranza': metricas_cobranza  # ⭐ FASE 2: Métricas calculadas
+        }
+    
+    def _calcular_metricas_cobranza(self, hitos_data: List[Dict], total_cobrado: float, total_contratado: float) -> Dict:
+        """
+        Calcula métricas de performance de cobranza
+        
+        Args:
+            hitos_data: Lista de hitos con información de fechas y montos
+            total_cobrado: Total cobrado del proyecto
+            total_contratado: Total contratado del proyecto
+            
+        Returns:
+            Dict con métricas de cobranza
+        """
+        if not hitos_data:
+            return {
+                'pct_cobrado_total': 0,
+                'hitos_completados': 0,
+                'hitos_pendientes': 0,
+                'hitos_parciales': 0,
+                'dias_retraso_promedio': 0,
+                'hitos_a_tiempo': 0,
+                'hitos_retrasados': 0,
+                'pct_hitos_a_tiempo': 0
+            }
+        
+        # Contar hitos por estado
+        hitos_completados = sum(1 for h in hitos_data if h['estado'] == 'COMPLETO')
+        hitos_parciales = sum(1 for h in hitos_data if h['estado'] == 'PARCIAL')
+        hitos_pendientes = sum(1 for h in hitos_data if h['estado'] == 'PENDIENTE')
+        
+        # Calcular retrasos
+        retrasos = [h['dias_retraso'] for h in hitos_data if h['dias_retraso'] is not None and h['estado'] != 'PENDIENTE']
+        dias_retraso_promedio = sum(retrasos) / len(retrasos) if retrasos else 0
+        
+        hitos_a_tiempo = sum(1 for r in retrasos if r <= 0)
+        hitos_retrasados = sum(1 for r in retrasos if r > 0)
+        pct_hitos_a_tiempo = (hitos_a_tiempo / len(retrasos) * 100) if retrasos else 0
+        
+        # Porcentaje cobrado
+        pct_cobrado_total = (total_cobrado / total_contratado * 100) if total_contratado > 0 else 0
+        
+        return {
+            'pct_cobrado_total': float(pct_cobrado_total),
+            'hitos_completados': hitos_completados,
+            'hitos_pendientes': hitos_pendientes,
+            'hitos_parciales': hitos_parciales,
+            'total_hitos': len(hitos_data),
+            'dias_retraso_promedio': float(dias_retraso_promedio),
+            'hitos_a_tiempo': hitos_a_tiempo,
+            'hitos_retrasados': hitos_retrasados,
+            'pct_hitos_a_tiempo': float(pct_hitos_a_tiempo),
+            'hitos_con_pago': hitos_completados + hitos_parciales
         }
 
 
@@ -1095,6 +1213,19 @@ def render_exportar_json_simple(consolidador: ConsolidadorMultiproyecto, estado:
                 # ⭐ NUEVO: Exportar TODO el DataFrame completo (sin filtrar por semanas)
                 df_export = df.copy()
                 
+                # ⭐ FASE 2: Incluir columnas individuales de cada proyecto
+                columnas_proyectos = {}
+                for proyecto in consolidador.proyectos:
+                    nombre = proyecto['nombre']
+                    columnas_proyectos[nombre] = {
+                        'ingresos_proy': df_export[f'ingresos_proy_{nombre}'].tolist() if f'ingresos_proy_{nombre}' in df_export.columns else [],
+                        'ingresos_real': df_export[f'ingresos_real_{nombre}'].tolist() if f'ingresos_real_{nombre}' in df_export.columns else [],
+                        'egresos_proy': df_export[f'egresos_proy_{nombre}'].tolist() if f'egresos_proy_{nombre}' in df_export.columns else [],
+                        'egresos_real': df_export[f'egresos_real_{nombre}'].tolist() if f'egresos_real_{nombre}' in df_export.columns else [],
+                        'saldo_proy': df_export[f'saldo_proy_{nombre}'].tolist() if f'saldo_proy_{nombre}' in df_export.columns else [],
+                        'saldo_real': df_export[f'saldo_real_{nombre}'].tolist() if f'saldo_real_{nombre}' in df_export.columns else []
+                    }
+                
                 # Convertir a formato JSON-serializable
                 df_data = {
                     "semanas": df_export['semana_consolidada'].tolist(),
@@ -1105,7 +1236,8 @@ def render_exportar_json_simple(consolidador: ConsolidadorMultiproyecto, estado:
                     "egresos_proy_total": df_export['egresos_proy_total'].tolist() if 'egresos_proy_total' in df_export.columns else [],
                     "egresos_real_total": df_export['egresos_real_total'].tolist() if 'egresos_real_total' in df_export.columns else [],
                     "es_historica": df_export['es_historica'].tolist() if 'es_historica' in df_export.columns else [],
-                    "burn_rate": df_export['burn_rate'].tolist() if 'burn_rate' in df_export.columns else []
+                    "burn_rate": df_export['burn_rate'].tolist() if 'burn_rate' in df_export.columns else [],
+                    "columnas_proyectos": columnas_proyectos  # ⭐ FASE 2: Datos individuales por proyecto
                 }
             
             # 2. PROYECTOS COMPLETOS (para Pie Chart y Tabla)
@@ -1183,13 +1315,15 @@ def render_exportar_json_simple(consolidador: ConsolidadorMultiproyecto, estado:
             # Guardar en session_state
             st.session_state.json_consolidado = json_data
             
-            st.success(f"✅ JSON v3.0.0 exportado exitosamente")
+            st.success(f"✅ JSON v3.0.0 FASE 2 exportado exitosamente")
             st.caption(f"📁 Guardado en: {ruta_json}")
             st.caption(f"📊 **Incluye:**")
             st.caption(f"   • Universo temporal completo (sin filtros de fecha)")
             st.caption(f"   • Ingresos reales indexados por fecha y semana")
             st.caption(f"   • Detalle de pagos individuales por proyecto")
-            st.caption(f"   • DataFrame consolidado con ingresos_real_total")
+            st.caption(f"   • Columnas individuales de cada proyecto")
+            st.caption(f"   • Métricas de performance de cobranza")
+            st.caption(f"   • Detalle de hitos con fechas esperadas vs reales")
             
             # Botón de descarga
             json_str = json.dumps(json_data, indent=2, ensure_ascii=False)
@@ -2192,6 +2326,263 @@ def render_inversiones_temporales(estado: Dict):
 # FUNCIÓN PRINCIPAL DEL MÓDULO
 # ============================================================================
 
+# ============================================================================
+# FASE 2: NUEVAS FUNCIONES DE VISUALIZACIÓN
+# ============================================================================
+
+def render_analisis_ingresos_egresos(consolidador: ConsolidadorMultiproyecto):
+    """
+    ⭐ FASE 2: Renderiza análisis comparativo de ingresos vs egresos
+    """
+    st.markdown("### 💰 Análisis de Ingresos vs Egresos")
+    st.caption("Comparación de flujos reales de entrada y salida consolidados")
+    
+    df = consolidador.df_consolidado
+    
+    if df is None or len(df) == 0:
+        st.warning("No hay datos para visualizar")
+        return
+    
+    # Filtrar solo semanas históricas con datos reales
+    df_historico = df[df['es_historica']].copy()
+    
+    if len(df_historico) == 0:
+        st.info("No hay datos históricos disponibles aún")
+        return
+    
+    # Convertir fechas
+    fechas_py = []
+    for f in df_historico['fecha']:
+        if hasattr(f, 'to_pydatetime'):
+            fechas_py.append(f.to_pydatetime())
+        else:
+            fechas_py.append(f)
+    
+    # Crear figura con dos trazas
+    fig = go.Figure()
+    
+    # Traza de ingresos reales
+    fig.add_trace(go.Bar(
+        x=fechas_py,
+        y=df_historico['ingresos_real_total'],
+        name='Ingresos Reales',
+        marker_color='#2ca02c',  # Verde
+        hovertemplate='<b>Ingresos</b><br>Fecha: %{x|%d/%m/%Y}<br>Monto: $%{y:,.0f}<extra></extra>'
+    ))
+    
+    # Traza de egresos reales
+    fig.add_trace(go.Bar(
+        x=fechas_py,
+        y=df_historico['egresos_real_total'],
+        name='Egresos Reales',
+        marker_color='#d62728',  # Rojo
+        hovertemplate='<b>Egresos</b><br>Fecha: %{x|%d/%m/%Y}<br>Monto: $%{y:,.0f}<extra></extra>'
+    ))
+    
+    # Layout
+    fig.update_layout(
+        title="Comparación Semanal: Ingresos vs Egresos",
+        xaxis_title="Fecha",
+        yaxis_title="Monto (COP)",
+        barmode='group',
+        height=400,
+        hovermode='x unified',
+        legend=dict(
+            orientation="h",
+            yanchor="bottom",
+            y=1.02,
+            xanchor="right",
+            x=1
+        )
+    )
+    
+    st.plotly_chart(fig, use_container_width=True)
+    
+    # Métricas consolidadas
+    col1, col2, col3, col4 = st.columns(4)
+    
+    total_ingresos = df_historico['ingresos_real_total'].sum()
+    total_egresos = df_historico['egresos_real_total'].sum()
+    flujo_neto = total_ingresos - total_egresos
+    
+    with col1:
+        st.metric(
+            "Total Ingresos",
+            formatear_moneda(total_ingresos),
+            help="Suma de todos los ingresos reales históricos"
+        )
+    
+    with col2:
+        st.metric(
+            "Total Egresos",
+            formatear_moneda(total_egresos),
+            help="Suma de todos los egresos reales históricos"
+        )
+    
+    with col3:
+        delta_color = "normal" if flujo_neto >= 0 else "inverse"
+        st.metric(
+            "Flujo Neto",
+            formatear_moneda(flujo_neto),
+            delta="Positivo" if flujo_neto >= 0 else "Negativo",
+            delta_color=delta_color,
+            help="Diferencia entre ingresos y egresos"
+        )
+    
+    with col4:
+        ratio = (total_ingresos / total_egresos) if total_egresos > 0 else 0
+        st.metric(
+            "Ratio Ingresos/Egresos",
+            f"{ratio:.2f}x",
+            help="Veces que los ingresos cubren los egresos"
+        )
+    
+    # Análisis de semanas con flujo negativo
+    semanas_negativas = df_historico[
+        (df_historico['ingresos_real_total'] - df_historico['egresos_real_total']) < 0
+    ]
+    
+    if len(semanas_negativas) > 0:
+        st.warning(f"⚠️ **{len(semanas_negativas)} semana(s)** con flujo negativo (egresos > ingresos)")
+        
+        with st.expander("Ver detalle de semanas con flujo negativo"):
+            for idx, row in semanas_negativas.iterrows():
+                deficit = row['egresos_real_total'] - row['ingresos_real_total']
+                fecha_str = row['fecha'].strftime('%d/%m/%Y') if hasattr(row['fecha'], 'strftime') else str(row['fecha'])
+                st.caption(
+                    f"📅 Semana {int(row['semana_consolidada'])} ({fecha_str}): "
+                    f"Déficit de ${deficit:,.0f}"
+                )
+
+
+def render_performance_cobranza(consolidador: ConsolidadorMultiproyecto):
+    """
+    ⭐ FASE 2: Renderiza tabla de performance de cobranza por proyecto
+    """
+    st.markdown("### 📊 Performance de Cobranza por Proyecto")
+    st.caption("Análisis detallado del cumplimiento de hitos y tiempos de cobro")
+    
+    # Extraer métricas de cobranza de cada proyecto
+    datos_tabla = []
+    
+    for proyecto in consolidador.proyectos:
+        if proyecto['estado'] != 'ACTIVO':
+            continue
+            
+        # Extraer detalle de ingresos (que incluye métricas)
+        detalle = consolidador._extraer_detalle_ingresos(proyecto)
+        metricas = detalle.get('metricas_cobranza', {})
+        
+        if not metricas:
+            continue
+        
+        datos_tabla.append({
+            'Proyecto': proyecto['nombre'],
+            '% Cobrado': f"{metricas.get('pct_cobrado_total', 0):.1f}%",
+            'Hitos Completados': f"{metricas.get('hitos_completados', 0)}/{metricas.get('total_hitos', 0)}",
+            'Hitos Pendientes': metricas.get('hitos_pendientes', 0),
+            'Hitos Parciales': metricas.get('hitos_parciales', 0),
+            'Días Retraso Prom.': f"{metricas.get('dias_retraso_promedio', 0):.0f}",
+            '% A Tiempo': f"{metricas.get('pct_hitos_a_tiempo', 0):.0f}%",
+            'Total Cobrado': formatear_moneda(detalle.get('total_cobrado', 0)),
+            'Pendiente': formatear_moneda(detalle.get('total_pendiente', 0))
+        })
+    
+    if not datos_tabla:
+        st.info("No hay datos de cobranza disponibles para proyectos activos")
+        return
+    
+    # Crear DataFrame para visualización
+    df_tabla = pd.DataFrame(datos_tabla)
+    
+    # Mostrar tabla
+    st.dataframe(
+        df_tabla,
+        use_container_width=True,
+        hide_index=True
+    )
+    
+    # Métricas consolidadas de cobranza
+    st.markdown("#### 📈 Métricas Consolidadas")
+    
+    col1, col2, col3, col4 = st.columns(4)
+    
+    # Calcular totales
+    total_hitos = sum(p['metricas_cobranza'].get('total_hitos', 0) 
+                     for p in consolidador.proyectos 
+                     if consolidador._extraer_detalle_ingresos(p).get('metricas_cobranza'))
+    
+    hitos_completados_total = sum(p['metricas_cobranza'].get('hitos_completados', 0) 
+                                  for p in consolidador.proyectos 
+                                  if consolidador._extraer_detalle_ingresos(p).get('metricas_cobranza'))
+    
+    hitos_retrasados_total = sum(p['metricas_cobranza'].get('hitos_retrasados', 0) 
+                                 for p in consolidador.proyectos 
+                                 if consolidador._extraer_detalle_ingresos(p).get('metricas_cobranza'))
+    
+    # Calcular días promedio ponderado
+    suma_retrasos = 0
+    suma_hitos_con_pago = 0
+    
+    for proyecto in consolidador.proyectos:
+        detalle = consolidador._extraer_detalle_ingresos(proyecto)
+        metricas = detalle.get('metricas_cobranza', {})
+        if metricas:
+            hitos_con_pago = metricas.get('hitos_con_pago', 0)
+            if hitos_con_pago > 0:
+                suma_retrasos += metricas.get('dias_retraso_promedio', 0) * hitos_con_pago
+                suma_hitos_con_pago += hitos_con_pago
+    
+    dias_retraso_ponderado = suma_retrasos / suma_hitos_con_pago if suma_hitos_con_pago > 0 else 0
+    
+    with col1:
+        pct_completado = (hitos_completados_total / total_hitos * 100) if total_hitos > 0 else 0
+        st.metric(
+            "Hitos Completados",
+            f"{hitos_completados_total}/{total_hitos}",
+            delta=f"{pct_completado:.0f}%",
+            help="Hitos completamente cobrados vs total de hitos"
+        )
+    
+    with col2:
+        st.metric(
+            "Retraso Promedio",
+            f"{dias_retraso_ponderado:.0f} días",
+            delta="A tiempo" if dias_retraso_ponderado <= 0 else f"+{dias_retraso_ponderado:.0f}",
+            delta_color="normal" if dias_retraso_ponderado <= 0 else "inverse",
+            help="Días promedio de retraso en cobros (ponderado por número de hitos)"
+        )
+    
+    with col3:
+        pct_sin_retraso = ((total_hitos - hitos_retrasados_total) / total_hitos * 100) if total_hitos > 0 else 0
+        st.metric(
+            "Hitos Sin Retraso",
+            f"{pct_sin_retraso:.0f}%",
+            help="Porcentaje de hitos cobrados a tiempo o antes"
+        )
+    
+    with col4:
+        if hitos_retrasados_total > 0:
+            st.metric(
+                "Hitos Retrasados",
+                hitos_retrasados_total,
+                delta="Atención requerida",
+                delta_color="inverse",
+                help="Número de hitos con retraso en cobro"
+            )
+        else:
+            st.metric(
+                "Hitos Retrasados",
+                "0",
+                delta="Excelente",
+                help="No hay hitos con retraso"
+            )
+
+
+# ============================================================================
+# FUNCIÓN MAIN
+# ============================================================================
+
 def main():
     """Función principal del módulo multiproyecto"""
     
@@ -2408,6 +2799,16 @@ def main():
         st.markdown("---")
         
         render_timeline_consolidado(consolidador)
+        
+        st.markdown("---")
+        
+        # ⭐ FASE 2: Análisis de Ingresos vs Egresos
+        render_analisis_ingresos_egresos(consolidador)
+        
+        st.markdown("---")
+        
+        # ⭐ FASE 2: Performance de Cobranza
+        render_performance_cobranza(consolidador)
         
         st.markdown("---")
         
