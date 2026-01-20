@@ -2375,195 +2375,194 @@ def render_paso_4_ingresar_egresos():
         st.subheader("🔄 Procesamiento de Datos")
         
         if st.button("🚀 Procesar Archivo", type="primary", use_container_width=True):
-        
-        # Guardar archivo en session_state para poder reprocesar después
-        if 'archivo_egresos_bytes' not in st.session_state:
-            archivo_subido.seek(0)  # Resetear posición
-            st.session_state.archivo_egresos_bytes = archivo_subido.read()
-            st.session_state.archivo_egresos_nombre = archivo_subido.name
-            archivo_subido.seek(0)  # Resetear de nuevo para procesarlo
-        
-        with st.spinner("Procesando hojas del archivo..."):
-            datos_egresos = parse_excel_egresos(
-                archivo=archivo_subido,
-                fecha_inicio_proyecto=fecha_inicio,
-                nombre_centro_costo=None
-            )
-        
-        if not datos_egresos:
-            st.error("❌ No se pudo procesar el archivo.")
-            return
-        
-        # Guardar en session_state
-        st.session_state.egresos_reales_input = datos_egresos
-        
-        # Mostrar resumen consolidado
-        st.success("✅ Datos procesados exitosamente")
-        
-        st.markdown("### 📊 Resumen del Procesamiento")
-        
-        col1, col2, col3 = st.columns(3)
-        
-        with col1:
-            st.metric("Hojas procesadas", len(datos_egresos['hojas_procesadas']))
-        
-        with col2:
-            st.metric("Total registros", f"{datos_egresos['registros_procesados']:,}")
-        
-        with col3:
-            st.metric("Período", datos_egresos['periodo_covered'])
-        
-        # Detalle por hoja
-        if 'hojas_procesadas_detalle' in datos_egresos:
-            st.markdown("#### 📑 Detalle por hoja:")
-            for hoja_info in datos_egresos['hojas_procesadas_detalle']:
-                st.write(f"• **{hoja_info['nombre']}**: {hoja_info['registros']:,} registros | {hoja_info['periodo']}")
-        
-        # Alertas de cuentas sin clasificar
-        if datos_egresos['cuentas_sin_clasificar']:
-            st.warning(f"⚠️ {len(datos_egresos['cuentas_sin_clasificar'])} cuenta(s) sin clasificar:")
-            for cuenta in datos_egresos['cuentas_sin_clasificar'][:5]:
-                st.write(f"   • {cuenta}")
-            if len(datos_egresos['cuentas_sin_clasificar']) > 5:
-                st.write(f"   • ... y {len(datos_egresos['cuentas_sin_clasificar'])-5} más")
+            # Guardar archivo en session_state para poder reprocesar después
+            if 'archivo_egresos_bytes' not in st.session_state:
+                archivo_subido.seek(0)  # Resetear posición
+                st.session_state.archivo_egresos_bytes = archivo_subido.read()
+                st.session_state.archivo_egresos_nombre = archivo_subido.name
+                archivo_subido.seek(0)  # Resetear de nuevo para procesarlo
             
-            # ========================================================================
-            # INTERFAZ DE RECLASIFICACIÓN MANUAL
-            # ========================================================================
-            st.markdown("---")
-            st.subheader("🔧 Reclasificación Manual de Cuentas")
+            with st.spinner("Procesando hojas del archivo..."):
+                datos_egresos = parse_excel_egresos(
+                    archivo=archivo_subido,
+                    fecha_inicio_proyecto=fecha_inicio,
+                    nombre_centro_costo=None
+                )
             
-            st.info('''
-            **📝 Instrucciones:**
+            if not datos_egresos:
+                st.error("❌ No se pudo procesar el archivo.")
+                return
             
-            Las cuentas sin clasificar necesitan asignarse manualmente a una categoría.
-            Selecciona la categoría correcta para cada cuenta y haz clic en "Aplicar".
+            # Guardar en session_state
+            st.session_state.egresos_reales_input = datos_egresos
             
-            **Categorías disponibles:**
-            - 💎 **Materiales**: Materia prima, materiales de construcción, suministros
-            - 👷 **Mano de Obra**: Sueldos, prestaciones sociales, aportes laborales
-            - 📦 **Variables**: Servicios, transporte, combustibles, honorarios, alquileres
-            - 🏢 **Admin**: Gastos administrativos, seguros, garantías, papelería
-            ''')
+            # Mostrar resumen consolidado
+            st.success("✅ Datos procesados exitosamente")
             
-            with st.form("form_reclasificacion_cuentas"):
-                st.markdown("### 📋 Asignar Categorías")
+            st.markdown("### 📊 Resumen del Procesamiento")
+            
+            col1, col2, col3 = st.columns(3)
+            
+            with col1:
+                st.metric("Hojas procesadas", len(datos_egresos['hojas_procesadas']))
+            
+            with col2:
+                st.metric("Total registros", f"{datos_egresos['registros_procesados']:,}")
+            
+            with col3:
+                st.metric("Período", datos_egresos['periodo_covered'])
+            
+            # Detalle por hoja
+            if 'hojas_procesadas_detalle' in datos_egresos:
+                st.markdown("#### 📑 Detalle por hoja:")
+                for hoja_info in datos_egresos['hojas_procesadas_detalle']:
+                    st.write(f"• **{hoja_info['nombre']}**: {hoja_info['registros']:,} registros | {hoja_info['periodo']}")
+            
+            # Alertas de cuentas sin clasificar
+            if datos_egresos['cuentas_sin_clasificar']:
+                st.warning(f"⚠️ {len(datos_egresos['cuentas_sin_clasificar'])} cuenta(s) sin clasificar:")
+                for cuenta in datos_egresos['cuentas_sin_clasificar'][:5]:
+                    st.write(f"   • {cuenta}")
+                if len(datos_egresos['cuentas_sin_clasificar']) > 5:
+                    st.write(f"   • ... y {len(datos_egresos['cuentas_sin_clasificar'])-5} más")
                 
-                reclasificaciones_temp = {}
+                # ========================================================================
+                # INTERFAZ DE RECLASIFICACIÓN MANUAL
+                # ========================================================================
+                st.markdown("---")
+                st.subheader("🔧 Reclasificación Manual de Cuentas")
                 
-                for i, cuenta in enumerate(datos_egresos['cuentas_sin_clasificar']):
-                    col1, col2 = st.columns([3, 1])
+                st.info('''
+                **📝 Instrucciones:**
+                
+                Las cuentas sin clasificar necesitan asignarse manualmente a una categoría.
+                Selecciona la categoría correcta para cada cuenta y haz clic en "Aplicar".
+                
+                **Categorías disponibles:**
+                - 💎 **Materiales**: Materia prima, materiales de construcción, suministros
+                - 👷 **Mano de Obra**: Sueldos, prestaciones sociales, aportes laborales
+                - 📦 **Variables**: Servicios, transporte, combustibles, honorarios, alquileres
+                - 🏢 **Admin**: Gastos administrativos, seguros, garantías, papelería
+                ''')
+                
+                with st.form("form_reclasificacion_cuentas"):
+                    st.markdown("### 📋 Asignar Categorías")
                     
-                    with col1:
-                        st.markdown(f"**{cuenta}**")
+                    reclasificaciones_temp = {}
                     
-                    with col2:
-                        categoria_seleccionada = st.selectbox(
-                            f"Categoría para {cuenta}",
-                            options=['❓ Sin Clasificar', '💎 Materiales', '👷 Mano de Obra', '📦 Variables', '🏢 Admin'],
-                            key=f"reclasif_cat_{i}",
-                            label_visibility="collapsed"
-                        )
+                    for i, cuenta in enumerate(datos_egresos['cuentas_sin_clasificar']):
+                        col1, col2 = st.columns([3, 1])
                         
-                        # Mapear selección a categoría interna
-                        # CRÍTICO: Los nombres deben coincidir EXACTAMENTE con el parser (línea ~988)
-                        mapa_categorias = {
-                            '💎 Materiales': 'Materiales',           # ✓ Parser: 'Materiales'
-                            '👷 Mano de Obra': 'Mano de Obra',      # ✓ Parser: 'Mano de Obra' (con espacio)
-                            '📦 Variables': 'Variables',             # ✓ Parser: 'Variables'
-                            '🏢 Admin': 'Administracion'             # ✓ Parser: 'Administracion' (con tilde)
-                        }
+                        with col1:
+                            st.markdown(f"**{cuenta}**")
                         
-                        if categoria_seleccionada != '❓ Sin Clasificar':
-                            reclasificaciones_temp[cuenta] = mapa_categorias[categoria_seleccionada]
-                
-                col_btn1, col_btn2, col_btn3 = st.columns([1, 1, 2])
-                
-                with col_btn1:
-                    aplicar_reclass = st.form_submit_button(
-                        "✅ Aplicar",
-                        type="primary",
-                        use_container_width=True
-                    )
-                
-                with col_btn2:
-                    limpiar_reclass = st.form_submit_button(
-                        "🔄 Limpiar",
-                        type="secondary",
-                        use_container_width=True
-                    )
-                
-                with col_btn3:
-                    st.form_submit_button(
-                        "❌ Cancelar",
-                        use_container_width=True
-                    )
-            
-            # Procesar reclasificaciones
-            if aplicar_reclass and reclasificaciones_temp:
-                # Guardar reclasificaciones en session_state
-                if 'reclasificaciones_manuales' not in st.session_state:
-                    st.session_state.reclasificaciones_manuales = {}
-                
-                st.session_state.reclasificaciones_manuales.update(reclasificaciones_temp)
-                
-                st.success(f"✅ Se reclasificaron {len(reclasificaciones_temp)} cuenta(s)")
-                
-                with st.expander("📋 Ver Reclasificaciones Aplicadas"):
-                    for cuenta, cat in reclasificaciones_temp.items():
-                        emoji_map = {
-                            'Materiales': '💎', 
-                            'Mano de Obra': '👷',  # Corregido: con espacio
-                            'Variables': '📦', 
-                            'Administracion': '🏢'  # Corregido: con tilde
-                        }
-                        emoji = emoji_map.get(cat, '❓')
-                        st.write(f"{emoji} **{cuenta}** → {cat}")
-                
-                # CRÍTICO: Reprocesar archivo con nuevas clasificaciones
-                if 'archivo_egresos_bytes' in st.session_state:
-                    with st.spinner("🔄 Reprocesando archivo con nuevas clasificaciones..."):
-                        try:
-                            import io
-                            archivo_temp = io.BytesIO(st.session_state.archivo_egresos_bytes)
-                            archivo_temp.name = st.session_state.archivo_egresos_nombre
-                            
-                            # Reprocesar con nuevas clasificaciones
-                            datos_egresos = parse_excel_egresos(
-                                archivo=archivo_temp,
-                                fecha_inicio_proyecto=fecha_inicio,
-                                nombre_centro_costo=None
+                        with col2:
+                            categoria_seleccionada = st.selectbox(
+                                f"Categoría para {cuenta}",
+                                options=['❓ Sin Clasificar', '💎 Materiales', '👷 Mano de Obra', '📦 Variables', '🏢 Admin'],
+                                key=f"reclasif_cat_{i}",
+                                label_visibility="collapsed"
                             )
                             
-                            if datos_egresos:
-                                # Actualizar datos en session_state
-                                st.session_state.egresos_reales_input = datos_egresos
-                                
-                                # VALIDAR: Verificar que las reclasificaciones se aplicaron
-                                total_sin_clasificar = datos_egresos.get('totales_acumulados', {}).get('sin_clasificar', 0)
-                                
-                                if total_sin_clasificar == 0:
-                                    st.success("✅ Datos reprocesados exitosamente - Todas las cuentas clasificadas")
-                                else:
-                                    st.warning(f"⚠️ Datos reprocesados - Aún quedan ${total_sin_clasificar:,.0f} sin clasificar")
-                            else:
-                                st.error("❌ Error al reprocesar archivo")
-                                st.warning("⚠️ Las reclasificaciones se guardaron pero no se aplicaron. Por favor, recargue el archivo.")
-                                
-                        except Exception as e:
-                            st.error(f"❌ Error al reprocesar: {str(e)}")
-                            st.warning("⚠️ Las reclasificaciones se guardaron pero no se aplicaron. Por favor, recargue el archivo.")
+                            # Mapear selección a categoría interna
+                            # CRÍTICO: Los nombres deben coincidir EXACTAMENTE con el parser (línea ~988)
+                            mapa_categorias = {
+                                '💎 Materiales': 'Materiales',           # ✓ Parser: 'Materiales'
+                                '👷 Mano de Obra': 'Mano de Obra',      # ✓ Parser: 'Mano de Obra' (con espacio)
+                                '📦 Variables': 'Variables',             # ✓ Parser: 'Variables'
+                                '🏢 Admin': 'Administracion'             # ✓ Parser: 'Administracion' (con tilde)
+                            }
+                            
+                            if categoria_seleccionada != '❓ Sin Clasificar':
+                                reclasificaciones_temp[cuenta] = mapa_categorias[categoria_seleccionada]
                     
-                    # NO hacer rerun() aquí - dejar que la vista previa se actualice automáticamente
-                else:
-                    st.error("❌ No se encontró el archivo original en memoria")
-                    st.warning("⚠️ Por favor, recargue el archivo y vuelva a clasificar")
-            
-            elif limpiar_reclass:
-                if 'reclasificaciones_manuales' in st.session_state:
-                    del st.session_state.reclasificaciones_manuales
-                st.warning("🔄 Reclasificaciones eliminadas. Reprocesando...")
-                st.rerun()
+                    col_btn1, col_btn2, col_btn3 = st.columns([1, 1, 2])
+                    
+                    with col_btn1:
+                        aplicar_reclass = st.form_submit_button(
+                            "✅ Aplicar",
+                            type="primary",
+                            use_container_width=True
+                        )
+                    
+                    with col_btn2:
+                        limpiar_reclass = st.form_submit_button(
+                            "🔄 Limpiar",
+                            type="secondary",
+                            use_container_width=True
+                        )
+                    
+                    with col_btn3:
+                        st.form_submit_button(
+                            "❌ Cancelar",
+                            use_container_width=True
+                        )
+                
+                # Procesar reclasificaciones
+                if aplicar_reclass and reclasificaciones_temp:
+                    # Guardar reclasificaciones en session_state
+                    if 'reclasificaciones_manuales' not in st.session_state:
+                        st.session_state.reclasificaciones_manuales = {}
+                    
+                    st.session_state.reclasificaciones_manuales.update(reclasificaciones_temp)
+                    
+                    st.success(f"✅ Se reclasificaron {len(reclasificaciones_temp)} cuenta(s)")
+                    
+                    with st.expander("📋 Ver Reclasificaciones Aplicadas"):
+                        for cuenta, cat in reclasificaciones_temp.items():
+                            emoji_map = {
+                                'Materiales': '💎', 
+                                'Mano de Obra': '👷',  # Corregido: con espacio
+                                'Variables': '📦', 
+                                'Administracion': '🏢'  # Corregido: con tilde
+                            }
+                            emoji = emoji_map.get(cat, '❓')
+                            st.write(f"{emoji} **{cuenta}** → {cat}")
+                    
+                    # CRÍTICO: Reprocesar archivo con nuevas clasificaciones
+                    if 'archivo_egresos_bytes' in st.session_state:
+                        with st.spinner("🔄 Reprocesando archivo con nuevas clasificaciones..."):
+                            try:
+                                import io
+                                archivo_temp = io.BytesIO(st.session_state.archivo_egresos_bytes)
+                                archivo_temp.name = st.session_state.archivo_egresos_nombre
+                                
+                                # Reprocesar con nuevas clasificaciones
+                                datos_egresos = parse_excel_egresos(
+                                    archivo=archivo_temp,
+                                    fecha_inicio_proyecto=fecha_inicio,
+                                    nombre_centro_costo=None
+                                )
+                                
+                                if datos_egresos:
+                                    # Actualizar datos en session_state
+                                    st.session_state.egresos_reales_input = datos_egresos
+                                    
+                                    # VALIDAR: Verificar que las reclasificaciones se aplicaron
+                                    total_sin_clasificar = datos_egresos.get('totales_acumulados', {}).get('sin_clasificar', 0)
+                                    
+                                    if total_sin_clasificar == 0:
+                                        st.success("✅ Datos reprocesados exitosamente - Todas las cuentas clasificadas")
+                                    else:
+                                        st.warning(f"⚠️ Datos reprocesados - Aún quedan ${total_sin_clasificar:,.0f} sin clasificar")
+                                else:
+                                    st.error("❌ Error al reprocesar archivo")
+                                    st.warning("⚠️ Las reclasificaciones se guardaron pero no se aplicaron. Por favor, recargue el archivo.")
+                                    
+                            except Exception as e:
+                                st.error(f"❌ Error al reprocesar: {str(e)}")
+                                st.warning("⚠️ Las reclasificaciones se guardaron pero no se aplicaron. Por favor, recargue el archivo.")
+                        
+                        # NO hacer rerun() aquí - dejar que la vista previa se actualice automáticamente
+                    else:
+                        st.error("❌ No se encontró el archivo original en memoria")
+                        st.warning("⚠️ Por favor, recargue el archivo y vuelva a clasificar")
+                
+                elif limpiar_reclass:
+                    if 'reclasificaciones_manuales' in st.session_state:
+                        del st.session_state.reclasificaciones_manuales
+                    st.warning("🔄 Reclasificaciones eliminadas. Reprocesando...")
+                    st.rerun()
     
     # Mostrar vista previa si ya hay datos procesados
     if 'egresos_reales_input' in st.session_state:
