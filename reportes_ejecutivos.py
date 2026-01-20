@@ -660,8 +660,8 @@ def generar_reporte_gerencial_pdf(datos: Dict) -> bytes:
     
     proyectos = datos.get('proyectos', [])
     
-    print(f"\n📋 DEBUG tabla de proyectos:")
-    print(f"  - Num proyectos: {len(proyectos)}")
+    # DEBUG: print(f"\n📋 DEBUG tabla de proyectos:")
+    # DEBUG: print(f"  - Num proyectos: {len(proyectos)}")
     
     # Procesar TODOS los proyectos dinámicamente (no limitar a 5)
     for i, p in enumerate(proyectos):
@@ -1204,12 +1204,12 @@ def reconstruir_dataframe_desde_json(json_data: Dict, fecha_inicio=None, fecha_f
 # ============================================================================
 
 if __name__ == "__main__":
-    print("SICONE - Módulo de Reportes Ejecutivos Unificado v3.0.0")
-    print("=" * 60)
-    print("\nFUNCIONES DISPONIBLES:")
-    print("1. generar_reporte_gerencial_pdf(datos)")
-    print("2. generar_reporte_inversiones_pdf(datos)")
-    print("\nMódulo listo para importar")
+    # DEBUG: print("SICONE - Módulo de Reportes Ejecutivos Unificado v3.0.0")
+    # DEBUG: print("=" * 60)
+    # DEBUG: print("\nFUNCIONES DISPONIBLES:")
+    # DEBUG: print("1. generar_reporte_gerencial_pdf(datos)")
+    # DEBUG: print("2. generar_reporte_inversiones_pdf(datos)")
+    # DEBUG: print("\nMódulo listo para importar")
 
 
 # ============================================================================
@@ -1438,6 +1438,22 @@ def main():
                                     datos_filtrados['estado_caja'] = estado_caja_filtrado
                                     datos_filtrados['filtro_fecha_inicio'] = fecha_inicio_filtro
                                     datos_filtrados['filtro_fecha_fin'] = fecha_fin_filtro
+                                    
+                                    # DEBUG VISIBLE
+                                    st.markdown("### 🐛 DEBUG - Datos Filtrados")
+                                    st.write(f"**Proyectos filtrados:** {len(proyectos_filtrados)}")
+                                    debug_data = []
+                                    for i, p in enumerate(proyectos_filtrados[:6]):
+                                        debug_data.append({
+                                            '#': i + 1,
+                                            'Proyecto': p.get('nombre', 'N/A')[:25],
+                                            'Ejecutado (M)': f"${p.get('ejecutado', 0)/1_000_000:.1f}",
+                                            'Saldo (M)': f"${p.get('saldo_real_tesoreria', 0)/1_000_000:.1f}",
+                                            'Burn Rate (M)': f"${p.get('burn_rate_real', 0)/1_000_000:.2f}",
+                                        })
+                                    import pandas as pd
+                                    df_debug = pd.DataFrame(debug_data)
+                                    st.dataframe(df_debug, use_container_width=True)
                                     
                                     datos_a_usar = datos_filtrados
                                 else:
@@ -1726,6 +1742,45 @@ def main():
                             fecha_fin=fecha_fin_filtro
                         )
                         
+                        # ============================================================
+                        # DEBUG VISIBLE EN UI
+                        # ============================================================
+                        if fecha_inicio_filtro or fecha_fin_filtro:
+                            with st.expander("🐛 DEBUG - Info de Filtrado", expanded=True):
+                                st.markdown("### Filtros Aplicados")
+                                st.write(f"**Fecha Inicio:** {fecha_inicio_filtro}")
+                                st.write(f"**Fecha Fin:** {fecha_fin_filtro}")
+                                
+                                st.markdown("### Proyectos Procesados")
+                                proyectos_debug = datos_desde_json.get('proyectos', [])
+                                st.write(f"**Total proyectos:** {len(proyectos_debug)}")
+                                
+                                if proyectos_debug:
+                                    debug_data = []
+                                    for i, p in enumerate(proyectos_debug[:6]):  # Mostrar todos
+                                        debug_data.append({
+                                            '#': i + 1,
+                                            'Proyecto': p.get('nombre', 'N/A')[:25],
+                                            'Ejecutado (M)': f"${p.get('ejecutado', 0)/1_000_000:.1f}",
+                                            'Saldo (M)': f"${p.get('saldo_real_tesoreria', 0)/1_000_000:.1f}",
+                                            'Burn Rate (M)': f"${p.get('burn_rate_real', 0)/1_000_000:.2f}",
+                                            'Semanas': len(p.get('ejecucion_financiera', []))
+                                        })
+                                    
+                                    import pandas as pd
+                                    df_debug = pd.DataFrame(debug_data)
+                                    st.dataframe(df_debug, use_container_width=True)
+                                    
+                                    st.markdown("### Estado Consolidado")
+                                    estado = datos_desde_json.get('estado_caja', {})
+                                    col1, col2, col3 = st.columns(3)
+                                    with col1:
+                                        st.metric("Saldo Total", f"${estado.get('saldo_total', 0)/1_000_000:.1f}M")
+                                    with col2:
+                                        st.metric("Burn Rate", f"${estado.get('burn_rate', 0)/1_000_000:.2f}M/sem")
+                                    with col3:
+                                        st.metric("Proyectos Activos", estado.get('proyectos_activos', 0))
+                        
                         # Botón para generar
                         if st.button("📄 Generar Reporte desde JSON", type="primary", use_container_width=True):
                             with st.spinner("Generando reporte PDF desde JSON..."):
@@ -1822,10 +1877,10 @@ def filtrar_proyectos_por_fechas(proyectos: List[Dict], df_consolidado: pd.DataF
     """
     Filtra los proyectos por rango de fechas y recalcula métricas
     """
-    print(f"\n🔍 DEBUG filtrar_proyectos_por_fechas:")
-    print(f"  - fecha_inicio: {fecha_inicio}")
-    print(f"  - fecha_fin: {fecha_fin}")
-    print(f"  - Num proyectos entrada: {len(proyectos)}")
+    # DEBUG: print(f"\n🔍 DEBUG filtrar_proyectos_por_fechas:")
+    # DEBUG: print(f"  - fecha_inicio: {fecha_inicio}")
+    # DEBUG: print(f"  - fecha_fin: {fecha_fin}")
+    # DEBUG: print(f"  - Num proyectos entrada: {len(proyectos)}")
     
     if not fecha_inicio and not fecha_fin:
         print("  ⚠️ Sin filtros de fecha - retornando originales")
@@ -1840,7 +1895,7 @@ def filtrar_proyectos_por_fechas(proyectos: List[Dict], df_consolidado: pd.DataF
         return proyectos
     
     semanas_filtradas = set(df_consolidado['semana_consolidada'].unique())
-    print(f"  - Semanas filtradas: {sorted(semanas_filtradas)[:10]}...")
+    # DEBUG: print(f"  - Semanas filtradas: {sorted(semanas_filtradas)[:10]}...")
     
     if not semanas_filtradas:
         print("  ⚠️ Set de semanas vacío - retornando originales")
@@ -1914,7 +1969,7 @@ def filtrar_proyectos_por_fechas(proyectos: List[Dict], df_consolidado: pd.DataF
         
         proyectos_filtrados.append(proyecto_filtrado)
     
-    print(f"\n  ✅ Retornando {len(proyectos_filtrados)} proyectos filtrados")
+    # DEBUG: print(f"\n  ✅ Retornando {len(proyectos_filtrados)} proyectos filtrados")
     return proyectos_filtrados
 
 
@@ -1982,18 +2037,18 @@ def convertir_json_a_datos(json_data: Dict, fecha_inicio=None, fecha_fin=None) -
     Returns:
         Diccionario con datos procesados y filtrados
     """
-    print(f"\n{'='*80}")
-    print(f"🔄 DEBUG convertir_json_a_datos:")
-    print(f"  - fecha_inicio: {fecha_inicio}")
-    print(f"  - fecha_fin: {fecha_fin}")
-    print(f"{'='*80}")
+    # DEBUG: print(f"\n{'='*80}")
+    # DEBUG: print(f"🔄 DEBUG convertir_json_a_datos:")
+    # DEBUG: print(f"  - fecha_inicio: {fecha_inicio}")
+    # DEBUG: print(f"  - fecha_fin: {fecha_fin}")
+    # DEBUG: print(f"{'='*80}")
     
     metadata = json_data.get('metadata', {})
     estado_caja_original = json_data.get('estado_caja', {})
     proyectos_originales = json_data.get('proyectos', [])
     gastos_fijos_mensuales = metadata.get('gastos_fijos_mensuales', 50000000)
     
-    print(f"  - Num proyectos originales: {len(proyectos_originales)}")
+    # DEBUG: print(f"  - Num proyectos originales: {len(proyectos_originales)}")
     for i, p in enumerate(proyectos_originales[:2]):
         print(f"    ORIGINAL [{i}] {p.get('nombre')}: ejecutado=${p.get('ejecutado', 0)/1_000_000:.1f}M")
     
