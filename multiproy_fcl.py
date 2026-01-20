@@ -2,9 +2,29 @@
 SICONE - Módulo de Análisis Multiproyecto FCL
 Consolidación y análisis de flujo de caja para múltiples proyectos
 
-Versión: 2.1.6 FINAL
-Fecha: 29 Diciembre 2024
+Versión: 3.0.0 FASE 1
+Fecha: 20 Enero 2025
 Autor: AI-MindNovation
+
+VERSIÓN 3.0.0 (20-Ene-2025) - FASE 1: INGRESOS REALES CON FECHAS:
+- ⭐ NUEVO: Extracción de ingresos reales desde cartera.contratos_cartera[].hitos[].pagos[]
+  - Nueva columna ingresos_real_{nombre} para cada proyecto
+  - Mapeo de pagos individuales a semanas consolidadas usando fechas
+  - Suma automática de ingresos_real_total en métricas consolidadas
+- ⭐ NUEVO: JSON consolidado exporta TODO el universo temporal (sin filtrar por fechas)
+  - Cada módulo consumidor decide qué rango de fechas mostrar
+  - Incluye ingresos_real_total en df_consolidado
+  - Incluye detalle completo de pagos por proyecto en ingresos_reales
+- ⭐ NUEVO: Validación de inconsistencias
+  - Compara total_cobrado del resumen vs suma de pagos individuales
+  - Alerta automática si diferencia > 1% del total
+  - Muestra número de pagos procesados vs monto esperado
+- ⭐ NUEVO: Método _extraer_detalle_ingresos()
+  - Retorna estructura completa con pagos_detallados y pagos_por_semana
+  - Incluye fecha, semana, monto, recibo, contrato y hito de cada pago
+  - Permite trazabilidad completa de todos los ingresos
+- ✅ ESTRUCTURA: Ingresos ahora indexados por fecha igual que egresos
+- ✅ CONCILIACIÓN: Permite filtros temporales consistentes en módulos futuros
 
 VERSIÓN 2.1.6 (29-Dic-2024) - FIX VALORES DE PROYECTOS:
 - 🔧 FIX CRÍTICO: Ahora extrae valores CORRECTOS de cada proyecto
@@ -428,6 +448,7 @@ class ConsolidadorMultiproyecto:
         col_saldo_proy = f'saldo_proy_{nombre}'
         col_saldo_real = f'saldo_real_{nombre}'
         col_ingresos_proy = f'ingresos_proy_{nombre}'
+        col_ingresos_real = f'ingresos_real_{nombre}'  # ⭐ NUEVO: Ingresos reales
         col_egresos_proy = f'egresos_proy_{nombre}'
         col_egresos_real = f'egresos_real_{nombre}'
         col_estado = f'estado_{nombre}'
@@ -437,6 +458,7 @@ class ConsolidadorMultiproyecto:
         df[col_saldo_proy] = 0
         df[col_saldo_real] = 0
         df[col_ingresos_proy] = 0
+        df[col_ingresos_real] = 0  # ⭐ NUEVO: Inicializar ingresos reales en 0
         df[col_egresos_proy] = 0
         df[col_egresos_real] = 0
         df[col_estado] = proyecto['estado']
@@ -482,6 +504,74 @@ class ConsolidadorMultiproyecto:
                             idx_row = semana_cons - 1
                             df.at[idx_row, col_egresos_real] = eg_sem.get('total', 0)
             
+            # ⭐ NUEVO: Ingresos reales desde cartera
+            # Procesar pagos individuales con fechas de la estructura cartera
+            cartera = data.get('cartera', {})
+            if cartera and cartera.get('contratos_cartera'):
+                total_pagos_procesados = 0
+                total_pagos_monto = 0
+                
+                # Iterar por todos los contratos en cartera
+                for contrato in cartera['contratos_cartera']:
+                    hitos = contrato.get('hitos', [])
+                    
+                    # Iterar por todos los hitos del contrato
+                    for hito in hitos:
+                        pagos = hito.get('pagos', [])
+                        
+                        # Procesar cada pago individual
+                        for pago in pagos:
+                            fecha_pago_str = pago.get('fecha')
+                            monto_pago = pago.get('monto', 0)
+                            
+                            if fecha_pago_str and monto_pago > 0:
+                                try:
+                                    # Convertir fecha string a objeto date
+                                    fecha_pago = datetime.strptime(fecha_pago_str, '%Y-%m-%d').date()
+                                    
+                                    # Calcular la semana del proyecto correspondiente a este pago
+                                    semana_pago = calcular_semana_desde_fecha(
+                                        fecha_inicio_proy,
+                                        fecha_pago
+                                    )
+                                    
+                                    # Calcular semana consolidada
+                                    semana_cons = semana_inicio_rel + semana_pago - 1
+                                    
+                                    # Agregar el monto a la semana correspondiente
+                                    if 1 <= semana_cons <= len(df):
+                                        idx_row = semana_cons - 1
+                                        # Sumar al ingreso existente (puede haber múltiples pagos en la misma semana)
+                                        ingreso_actual = df.at[idx_row, col_ingresos_real]
+                                        df.at[idx_row, col_ingresos_real] = ingreso_actual + monto_pago
+                                        
+                                        total_pagos_procesados += 1
+                                        total_pagos_monto += monto_pago
+                                        
+                                except ValueError as e:
+                                    # Si hay error en el formato de fecha, simplemente continuar
+                                    continue
+                
+                # ⭐ VALIDACIÓN DE INCONSISTENCIAS
+                # Comparar total de pagos procesados vs total_cobrado del resumen
+                resumen_cartera = cartera.get('resumen', {})
+                total_cobrado_resumen = resumen_cartera.get('total_cobrado', 0)
+                
+                if total_cobrado_resumen > 0:
+                    diferencia = abs(total_pagos_monto - total_cobrado_resumen)
+                    tolerancia = total_cobrado_resumen * 0.01  # 1% de tolerancia
+                    
+                    if diferencia > tolerancia:
+                        # Alerta de inconsistencia
+                        st.warning(
+                            f"⚠️ **Inconsistencia en {nombre}:**\n"
+                            f"   • Total cobrado (resumen): ${total_cobrado_resumen:,.0f}\n"
+                            f"   • Total pagos procesados: ${total_pagos_monto:,.0f}\n"
+                            f"   • Diferencia: ${diferencia:,.0f}\n"
+                            f"   • Pagos individuales contabilizados: {total_pagos_procesados}"
+                        )
+
+            
             # Saldo real (de tesorería)
             tesoreria = data.get('tesoreria', {})
             if tesoreria and tesoreria.get('metricas_semanales'):
@@ -503,12 +593,15 @@ class ConsolidadorMultiproyecto:
         cols_saldo_proy = [c for c in df.columns if c.startswith('saldo_proy_')]
         cols_saldo_real = [c for c in df.columns if c.startswith('saldo_real_')]
         cols_ingresos_proy = [c for c in df.columns if c.startswith('ingresos_proy_')]
+        cols_ingresos_real = [c for c in df.columns if c.startswith('ingresos_real_')]  # ⭐ NUEVO
         cols_egresos_proy = [c for c in df.columns if c.startswith('egresos_proy_')]
         cols_egresos_real = [c for c in df.columns if c.startswith('egresos_real_')]
         
         # DEBUG: Mostrar columnas encontradas (comentado para producción)
         # st.caption(f"🔍 **Debug Columnas:**")
         # st.caption(f"   • Saldo proy: {len(cols_saldo_proy)} columnas")
+        # st.caption(f"   • Ingresos proy: {len(cols_ingresos_proy)} columnas")
+        # st.caption(f"   • Ingresos real: {len(cols_ingresos_real)} columnas")  # ⭐ NUEVO DEBUG
         # st.caption(f"   • Egresos proy: {len(cols_egresos_proy)} columnas")
         # st.caption(f"   • Egresos real: {len(cols_egresos_real)} columnas")
         
@@ -516,6 +609,7 @@ class ConsolidadorMultiproyecto:
         df['saldo_proy_total'] = df[cols_saldo_proy].sum(axis=1)
         df['saldo_real_total'] = df[cols_saldo_real].sum(axis=1)
         df['ingresos_proy_total'] = df[cols_ingresos_proy].sum(axis=1)
+        df['ingresos_real_total'] = df[cols_ingresos_real].sum(axis=1)  # ⭐ NUEVO: Suma de ingresos reales
         df['egresos_proy_total'] = df[cols_egresos_proy].sum(axis=1)
         df['egresos_real_total'] = df[cols_egresos_real].sum(axis=1)
         
@@ -870,6 +964,105 @@ class ConsolidadorMultiproyecto:
             'proyectos_cotizacion': estados.get('EN_COTIZACIÓN', 0),
             'total_proyectos': len(self.proyectos)
         }
+    
+    def _extraer_detalle_ingresos(self, proyecto: Dict) -> Dict:
+        """
+        Extrae el detalle completo de ingresos reales de un proyecto
+        
+        Returns:
+            Dict con estructura:
+            {
+                'total_cobrado': float,
+                'total_contratado': float,
+                'pagos_detallados': [lista de pagos con fecha, semana, monto, etc],
+                'pagos_por_semana': {semana: {monto, recibos}}
+            }
+        """
+        data = proyecto.get('data', {})
+        cartera = data.get('cartera', {})
+        
+        if not cartera:
+            return {
+                'total_cobrado': 0,
+                'total_contratado': 0,
+                'pagos_detallados': [],
+                'pagos_por_semana': {}
+            }
+        
+        # Obtener totales del resumen
+        resumen = cartera.get('resumen', {})
+        total_cobrado = resumen.get('total_cobrado', 0)
+        total_contratado = resumen.get('total_contratado', 0)
+        
+        # Extraer todos los pagos individuales
+        pagos_detallados = []
+        pagos_por_semana = {}
+        
+        contratos_cartera = cartera.get('contratos_cartera', [])
+        fecha_inicio_proy = proyecto['fecha_inicio']
+        
+        for contrato in contratos_cartera:
+            numero_contrato = contrato.get('numero', '')
+            hitos = contrato.get('hitos', [])
+            
+            for hito in hitos:
+                numero_hito = hito.get('numero', 0)
+                descripcion_hito = hito.get('descripcion', '')
+                pagos = hito.get('pagos', [])
+                
+                for pago in pagos:
+                    fecha_pago_str = pago.get('fecha')
+                    monto_pago = pago.get('monto', 0)
+                    recibo = pago.get('recibo', '')
+                    
+                    if fecha_pago_str and monto_pago > 0:
+                        try:
+                            # Convertir fecha y calcular semana
+                            fecha_pago = datetime.strptime(fecha_pago_str, '%Y-%m-%d').date()
+                            semana_pago = calcular_semana_desde_fecha(fecha_inicio_proy, fecha_pago)
+                            
+                            # Agregar a lista detallada
+                            pago_info = {
+                                'fecha': fecha_pago_str,
+                                'semana': semana_pago,
+                                'monto': float(monto_pago),
+                                'recibo': recibo,
+                                'contrato': numero_contrato,
+                                'hito': numero_hito,
+                                'descripcion_hito': descripcion_hito
+                            }
+                            pagos_detallados.append(pago_info)
+                            
+                            # Agregar a resumen por semana
+                            if semana_pago not in pagos_por_semana:
+                                pagos_por_semana[semana_pago] = {
+                                    'monto': 0,
+                                    'recibos': []
+                                }
+                            
+                            pagos_por_semana[semana_pago]['monto'] += monto_pago
+                            if recibo not in pagos_por_semana[semana_pago]['recibos']:
+                                pagos_por_semana[semana_pago]['recibos'].append(recibo)
+                                
+                        except (ValueError, TypeError):
+                            # Si hay error en formato, simplemente continuar
+                            continue
+        
+        # Convertir pagos_por_semana a formato serializable
+        pagos_por_semana_serializable = {}
+        for semana, info in pagos_por_semana.items():
+            pagos_por_semana_serializable[str(semana)] = {
+                'monto': float(info['monto']),
+                'recibos': info['recibos']
+            }
+        
+        return {
+            'total_cobrado': float(total_cobrado),
+            'total_contratado': float(total_contratado),
+            'total_pendiente': float(total_contratado - total_cobrado),
+            'pagos_detallados': pagos_detallados,
+            'pagos_por_semana': pagos_por_semana_serializable
+        }
 
 
 # ============================================================================
@@ -892,17 +1085,15 @@ def render_exportar_json_simple(consolidador: ConsolidadorMultiproyecto, estado:
             # PREPARAR DATOS COMPLETOS PARA REPORTES
             # =================================================================
             
-            # 1. DATOS DEL DATAFRAME (para Waterfall)
+            # 1. DATOS DEL DATAFRAME (para gráficos y análisis en otros módulos)
+            # ⭐ CAMBIO CRÍTICO: NO filtrar por fechas - exportar TODO el universo temporal
+            # Cada módulo que consume el JSON decidirá qué rango mostrar
             df_data = None
             if consolidador.df_consolidado is not None and not consolidador.df_consolidado.empty:
                 df = consolidador.df_consolidado
-                semana_actual = estado['semana']
                 
-                # Filtrar últimas 6 semanas históricas + futuras
-                df_export = df[
-                    (df['semana_consolidada'] >= semana_actual - 5) &
-                    (df['semana_consolidada'] <= semana_actual + 8)
-                ].copy()
+                # ⭐ NUEVO: Exportar TODO el DataFrame completo (sin filtrar por semanas)
+                df_export = df.copy()
                 
                 # Convertir a formato JSON-serializable
                 df_data = {
@@ -910,7 +1101,9 @@ def render_exportar_json_simple(consolidador: ConsolidadorMultiproyecto, estado:
                     "fechas": df_export['fecha'].astype(str).tolist() if 'fecha' in df_export.columns else [],
                     "saldo_consolidado": df_export['saldo_consolidado'].tolist() if 'saldo_consolidado' in df_export.columns else [],
                     "ingresos_proy_total": df_export['ingresos_proy_total'].tolist() if 'ingresos_proy_total' in df_export.columns else [],
+                    "ingresos_real_total": df_export['ingresos_real_total'].tolist() if 'ingresos_real_total' in df_export.columns else [],  # ⭐ NUEVO
                     "egresos_proy_total": df_export['egresos_proy_total'].tolist() if 'egresos_proy_total' in df_export.columns else [],
+                    "egresos_real_total": df_export['egresos_real_total'].tolist() if 'egresos_real_total' in df_export.columns else [],
                     "es_historica": df_export['es_historica'].tolist() if 'es_historica' in df_export.columns else [],
                     "burn_rate": df_export['burn_rate'].tolist() if 'burn_rate' in df_export.columns else []
                 }
@@ -918,6 +1111,9 @@ def render_exportar_json_simple(consolidador: ConsolidadorMultiproyecto, estado:
             # 2. PROYECTOS COMPLETOS (para Pie Chart y Tabla)
             proyectos_completos = []
             for p in consolidador.proyectos:
+                # ⭐ NUEVO: Extraer información detallada de ingresos reales
+                ingresos_detalle = self._extraer_detalle_ingresos(p)
+                
                 proyecto_data = {
                     "nombre": p['nombre'],
                     "estado": p['estado'],
@@ -927,6 +1123,8 @@ def render_exportar_json_simple(consolidador: ConsolidadorMultiproyecto, estado:
                     "avance_hitos_pct": float(p.get('avance_hitos_pct', 0)),  # ✅
                     "monto_contrato": float(p.get('presupuesto_egresos', 0)),  # ✅ Campo correcto
                     "ejecutado": float(p.get('ejecutado', 0)),  # ✅
+                    # ⭐ NUEVO: Ingresos reales detallados con fechas
+                    "ingresos_reales": ingresos_detalle,
                     # DATOS COMPLETOS para gráficos
                     "data": p.get('data', {})  # Incluye proyeccion_semanal completa
                 }
@@ -939,13 +1137,15 @@ def render_exportar_json_simple(consolidador: ConsolidadorMultiproyecto, estado:
             
             json_data = {
                 "metadata": {
-                    "version": "2.1.6",  # Incrementada versión
+                    "version": "3.0.0",  # ⭐ NUEVA VERSIÓN: Fase 1 - Ingresos reales con fechas
                     "fecha_generacion": datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
                     "semana_actual": int(estado['semana']),
                     "total_proyectos": len(consolidador.proyectos),  # ✅ Total real
                     "gastos_fijos_mensuales": float(consolidador.gastos_fijos_mensuales),
                     "semanas_margen": int(estado['semanas_margen']),
-                    "semanas_futuro": int(consolidador.semanas_futuro)
+                    "semanas_futuro": int(consolidador.semanas_futuro),
+                    "incluye_ingresos_reales": True,  # ⭐ NUEVO: Indicador de soporte de ingresos reales
+                    "universo_temporal_completo": True  # ⭐ NUEVO: JSON contiene TODO sin filtrar
                 },
                 "estado_caja": {
                     "saldo_total": float(estado['saldo_total']),
@@ -983,9 +1183,13 @@ def render_exportar_json_simple(consolidador: ConsolidadorMultiproyecto, estado:
             # Guardar en session_state
             st.session_state.json_consolidado = json_data
             
-            st.success(f"✅ JSON exportado exitosamente")
+            st.success(f"✅ JSON v3.0.0 exportado exitosamente")
             st.caption(f"📁 Guardado en: {ruta_json}")
-            st.caption(f"📊 Incluye: DataFrame completo + Proyectos con categorías de gasto")
+            st.caption(f"📊 **Incluye:**")
+            st.caption(f"   • Universo temporal completo (sin filtros de fecha)")
+            st.caption(f"   • Ingresos reales indexados por fecha y semana")
+            st.caption(f"   • Detalle de pagos individuales por proyecto")
+            st.caption(f"   • DataFrame consolidado con ingresos_real_total")
             
             # Botón de descarga
             json_str = json.dumps(json_data, indent=2, ensure_ascii=False)
