@@ -2,7 +2,7 @@
 SICONE - Módulo de Reportes Ejecutivos
 Generación de reportes PDF para multiproyecto e inversiones temporales
 
-Versión: 3.2.0 CON FILTRADO DE FECHAS
+Versión: 3.3.0 FILTRADO COMPLETO
 Fecha: 20 Enero 2026
 Autor: AI-MindNovation
 
@@ -11,46 +11,33 @@ REPORTES DISPONIBLES:
 2. generar_reporte_inversiones_pdf(datos) - Reporte Inversiones Temporales
 
 CHANGELOG:
+v3.3.0 (20-Ene-2026) - FILTRADO COMPLETO IMPLEMENTADO:
+- 🎯 NUEVO: filtrar_proyectos_por_fechas() - Filtra ejecución financiera de cada proyecto
+- 🎯 NUEVO: recalcular_estado_caja() - Recalcula métricas consolidadas con datos filtrados
+- ✅ CORREGIDO: Gráfico Pie ahora refleja gastos del período filtrado
+- ✅ CORREGIDO: Gráfico Semáforo usa burn_rate recalculado del período
+- ✅ CORREGIDO: Tabla de proyectos muestra ejecutado/saldo/burn_rate del período
+- ✅ CORREGIDO: Métricas del header (saldo, burn rate, margen) reflejan período filtrado
+- ✅ MEJORADO: Waterfall usa TODO el período filtrado (no solo últimas 6 semanas)
+- ✅ MEJORADO: Waterfall funciona con períodos cortos (mínimo 2 semanas)
+
 v3.2.0 (20-Ene-2026) - FILTRADO DE FECHAS IMPLEMENTADO:
-- 🎯 NUEVO: Selector de período en interfaz Streamlit con 6 opciones:
-  * Ver Todo (Sin filtro) - DEFAULT
-  * Rango Personalizado (fecha inicio y fin manuales)
-  * Últimas 12 semanas
-  * Últimas 26 semanas (6 meses)
-  * Solo Históricas (hasta hoy)
-  * Solo Proyectadas (desde hoy)
+- 🎯 NUEVO: Selector de período en interfaz Streamlit con 6 opciones
 - 🎯 NUEVO: Función convertir_json_a_datos() acepta parámetros fecha_inicio y fecha_fin
 - 🎯 NUEVO: Función reconstruir_dataframe_desde_json() aplica filtros de fechas al DataFrame
 - 🎯 NUEVO: Etiquetas dinámicas en gráfico Waterfall según período filtrado
-- 🎯 NUEVO: Indicador visual en PDF cuando hay filtro aplicado (naranja, centrado)
-- 🎯 NUEVO: Validación de rangos de fechas (inicio < fin)
-- 🎯 NUEVO: Muestra rango disponible en datos antes de seleccionar
-- ✨ MEJORA: Gráfico semáforo aumentado a 1.8" (desde 1.2") para mejor visibilidad
+- 🎯 NUEVO: Indicador visual en PDF cuando hay filtro aplicado
+- ✨ MEJORA: Gráfico semáforo aumentado a 1.8"
 
 v3.1.0 (20-Ene-2026) - CORRECCIONES Y OPTIMIZACIÓN:
-- 🔧 CORRECCIÓN 1: gastos_fijos_mensuales ahora se lee desde metadata (no raíz JSON)
-- 🔧 CORRECCIÓN 2: Eliminado límite hardcoded de 5 proyectos en gráfico semáforo
-- 🔧 CORRECCIÓN 3: Eliminado límite hardcoded de 5 proyectos en tabla de proyectos
-- 🎨 OPTIMIZACIÓN: Reducción de espacios verticales para caber 6-7 proyectos en 1 página:
-  * Título principal: 18pt → 16pt
-  * Subtitle: 10pt → 9pt
-  * Tabla métricas: fuentes 9-10pt → 8-9pt, padding 4-8pt → 3-6pt
-  * Gráficos waterfall/pie: 2.8" → 2.6"
-  * Semáforo: altura 1.5" → 1.2" → 1.8" (ajustado)
-  * Spacers: 0.2", 0.15", 0.1" → 0.12", 0.1", 0.08", 0.06"
-  * Título sección: 12pt → 10pt
-
-v3.0.0 (29-Dic-2024) - UNIFICACIÓN COMPLETA:
-- ✅ Integración de reportes multiproyecto e inversiones en un solo módulo
-- ✅ Funciones comunes optimizadas (formatear_moneda, estilos, etc.)
-- ✅ Mejor organización en secciones claramente delimitadas
-- ✅ Imports compartidos, código DRY
-- ✅ Soporte para ambos tipos de reporte desde una sola importación
+- 🔧 CORRECCIÓN: gastos_fijos_mensuales ahora se lee desde metadata
+- 🔧 CORRECCIÓN: Eliminado límite hardcoded de 5 proyectos
+- 🎨 OPTIMIZACIÓN: Espacios reducidos para 6-7 proyectos en 1 página
 
 USO:
     from reportes_ejecutivos import generar_reporte_gerencial_pdf, generar_reporte_inversiones_pdf
     
-    # Con filtro de fechas
+    # Con filtro de fechas - TODOS los elementos del reporte reflejan el período
     datos = convertir_json_a_datos(json_data, fecha_inicio=date(2024,1,1), fecha_fin=date(2024,12,31))
     pdf_bytes = generar_reporte_gerencial_pdf(datos)
 """
@@ -195,7 +182,7 @@ def formatear_moneda(valor: float) -> str:
 
 def generar_grafico_waterfall(datos: Dict) -> Optional[bytes]:
     """
-    Genera gráfico Waterfall mostrando evolución del saldo en últimas 6 semanas
+    Genera gráfico Waterfall mostrando evolución del saldo en el período disponible
     (Usado en reporte multiproyecto)
     """
     try:
@@ -208,35 +195,45 @@ def generar_grafico_waterfall(datos: Dict) -> Optional[bytes]:
         if 'saldo_consolidado' not in df.columns:
             return None
         
-        # Semana actual
-        semana_actual = datos.get('semana_actual', 0)
+        # Obtener gastos fijos
         gastos_fijos_semanales = datos.get('gastos_fijos_mensuales', 0) / 4.33
         
-        if semana_actual == 0:
-            return None
+        # Determinar período a mostrar
+        # Si hay filtro activo, usar TODO el período filtrado
+        # Si no hay filtro, usar últimas 6 semanas históricas
+        fecha_inicio_filtro = datos.get('filtro_fecha_inicio')
+        fecha_fin_filtro = datos.get('filtro_fecha_fin')
         
-        # Filtrar últimas 6 semanas históricas
-        df_hist = df[
-            (df['semana_consolidada'] >= semana_actual - 5) &
-            (df['semana_consolidada'] <= semana_actual) &
-            (df['es_historica'] == True)
-        ].copy()
+        if fecha_inicio_filtro or fecha_fin_filtro:
+            # Con filtro: usar TODO el período disponible
+            df_periodo = df.copy()
+        else:
+            # Sin filtro: usar últimas 6 semanas históricas (comportamiento original)
+            semana_actual = datos.get('semana_actual', 0)
+            if semana_actual == 0:
+                return None
+            
+            df_periodo = df[
+                (df['semana_consolidada'] >= semana_actual - 5) &
+                (df['semana_consolidada'] <= semana_actual) &
+                (df['es_historica'] == True)
+            ].copy()
         
-        if df_hist.empty or len(df_hist) < 2:
+        if df_periodo.empty or len(df_periodo) < 2:
             return None
         
         # Calcular valores
-        saldo_inicio = df_hist.iloc[0]['saldo_consolidado']
-        saldo_final = df_hist.iloc[-1]['saldo_consolidado']
+        saldo_inicio = df_periodo.iloc[0]['saldo_consolidado']
+        saldo_final = df_periodo.iloc[-1]['saldo_consolidado']
         
         # Obtener fechas del período
-        fecha_inicio_periodo = df_hist.iloc[0]['fecha']
-        fecha_fin_periodo = df_hist.iloc[-1]['fecha']
+        fecha_inicio_periodo = df_periodo.iloc[0]['fecha']
+        fecha_fin_periodo = df_periodo.iloc[-1]['fecha']
         
         # Flujos acumulados en el período
-        ingresos_acum = df_hist['ingresos_proy_total'].sum() if 'ingresos_proy_total' in df_hist.columns else 0
-        egresos_acum = df_hist['egresos_proy_total'].sum() if 'egresos_proy_total' in df_hist.columns else 0
-        gastos_fijos_acum = gastos_fijos_semanales * len(df_hist)
+        ingresos_acum = df_periodo['ingresos_proy_total'].sum() if 'ingresos_proy_total' in df_periodo.columns else 0
+        egresos_acum = df_periodo['egresos_proy_total'].sum() if 'egresos_proy_total' in df_periodo.columns else 0
+        gastos_fijos_acum = gastos_fijos_semanales * len(df_periodo)
         
         # Preparar datos para waterfall con etiquetas dinámicas
         etiqueta_inicio = f"Inicio\n({fecha_inicio_periodo.strftime('%d/%m')})"
@@ -1695,6 +1692,142 @@ def main():
             st.info("👆 Sube un archivo JSON para comenzar")
 
 
+# ============================================================================
+# FUNCIONES DE FILTRADO POR FECHAS
+# ============================================================================
+
+def filtrar_proyectos_por_fechas(proyectos: List[Dict], df_consolidado: pd.DataFrame, fecha_inicio=None, fecha_fin=None) -> List[Dict]:
+    """
+    Filtra los proyectos por rango de fechas y recalcula métricas
+    
+    Args:
+        proyectos: Lista de proyectos del JSON
+        df_consolidado: DataFrame consolidado filtrado por fechas
+        fecha_inicio: Fecha inicio del filtro
+        fecha_fin: Fecha fin del filtro
+    
+    Returns:
+        Lista de proyectos con métricas recalculadas para el período filtrado
+    """
+    if not fecha_inicio and not fecha_fin:
+        return proyectos  # Sin filtro, retornar original
+    
+    if df_consolidado is None or df_consolidado.empty:
+        return proyectos  # Sin datos para mapear, retornar original
+    
+    # Obtener semanas del período filtrado
+    semanas_filtradas = set(df_consolidado['semana_consolidada'].unique())
+    
+    proyectos_filtrados = []
+    
+    for proyecto in proyectos:
+        proyecto_filtrado = proyecto.copy()
+        ejecucion = proyecto.get('ejecucion_financiera', [])
+        
+        if not ejecucion:
+            proyectos_filtrados.append(proyecto_filtrado)
+            continue
+        
+        # Filtrar ejecución financiera por semanas del período
+        ejecucion_filtrada = [
+            semana_data for semana_data in ejecucion 
+            if semana_data.get('semana') in semanas_filtradas
+        ]
+        
+        if not ejecucion_filtrada:
+            # Si no hay datos en el período, poner valores en 0
+            proyecto_filtrado.update({
+                'ejecutado': 0,
+                'saldo_real_tesoreria': 0,
+                'burn_rate_real': 0,
+                'avance_hitos_pct': 0,
+                'ejecucion_financiera': []
+            })
+        else:
+            # Recalcular métricas con datos filtrados
+            ultima_semana = ejecucion_filtrada[-1]
+            
+            # Ejecutado: egresos acumulados de la última semana del período
+            ejecutado_filtrado = ultima_semana.get('egresos_acum', 0)
+            
+            # Ingresos acumulados
+            ingresos_acum_filtrado = ultima_semana.get('ingresos_acum', 0)
+            
+            # Saldo real de tesorería
+            saldo_filtrado = ingresos_acum_filtrado - ejecutado_filtrado
+            
+            # Burn rate: promedio de egresos por semana en el período
+            semanas_con_egresos = [s for s in ejecucion_filtrada if s.get('egresos_excel', 0) > 0]
+            if len(semanas_con_egresos) > 0:
+                burn_rate_filtrado = ejecutado_filtrado / len(ejecucion_filtrada)
+            else:
+                burn_rate_filtrado = 0
+            
+            # Actualizar proyecto con métricas filtradas
+            proyecto_filtrado.update({
+                'ejecutado': ejecutado_filtrado,
+                'saldo_real_tesoreria': saldo_filtrado,
+                'burn_rate_real': burn_rate_filtrado,
+                'ejecucion_financiera': ejecucion_filtrada
+            })
+        
+        proyectos_filtrados.append(proyecto_filtrado)
+    
+    return proyectos_filtrados
+
+
+def recalcular_estado_caja(proyectos_filtrados: List[Dict], gastos_fijos_mensuales: float) -> Dict:
+    """
+    Recalcula el estado de caja consolidado basado en proyectos filtrados
+    
+    Args:
+        proyectos_filtrados: Lista de proyectos con métricas recalculadas
+        gastos_fijos_mensuales: Gastos fijos mensuales de la empresa
+    
+    Returns:
+        Diccionario con estado_caja recalculado
+    """
+    # Sumar saldos y burn rates de todos los proyectos
+    saldo_total = sum(p.get('saldo_real_tesoreria', 0) for p in proyectos_filtrados)
+    burn_rate_proyectos = sum(p.get('burn_rate_real', 0) for p in proyectos_filtrados)
+    
+    # Gastos fijos semanales
+    gastos_fijos_semanales = gastos_fijos_mensuales / 4.33
+    
+    # Burn rate total
+    burn_rate_total = burn_rate_proyectos + gastos_fijos_semanales
+    
+    # Margen de protección (8 semanas por defecto)
+    margen_proteccion = burn_rate_total * 8
+    
+    # Excedente invertible
+    excedente_invertible = max(0, saldo_total - margen_proteccion)
+    
+    # Estado general
+    if saldo_total > margen_proteccion:
+        estado_general = "EXCEDENTE"
+    elif saldo_total > margen_proteccion * 0.5:
+        estado_general = "SALUDABLE"
+    else:
+        estado_general = "ALERTA"
+    
+    # Proyectos activos (con saldo > 0)
+    proyectos_activos = sum(1 for p in proyectos_filtrados if p.get('saldo_real_tesoreria', 0) > 0)
+    
+    return {
+        'saldo_total': saldo_total,
+        'burn_rate': burn_rate_total,
+        'burn_rate_proyectos': burn_rate_proyectos,
+        'gastos_fijos_semanales': gastos_fijos_semanales,
+        'margen_proteccion': margen_proteccion,
+        'excedente_invertible': excedente_invertible,
+        'estado_general': estado_general,
+        'proyectos_activos': proyectos_activos,
+        'proyectos_terminados': 0,
+        'total_proyectos': len(proyectos_filtrados)
+    }
+
+
 def convertir_json_a_datos(json_data: Dict, fecha_inicio=None, fecha_fin=None) -> Dict:
     """
     Convierte JSON exportado al formato esperado por generar_reporte_gerencial_pdf
@@ -1708,8 +1841,9 @@ def convertir_json_a_datos(json_data: Dict, fecha_inicio=None, fecha_fin=None) -
         Diccionario con datos procesados y filtrados
     """
     metadata = json_data.get('metadata', {})
-    estado_caja = json_data.get('estado_caja', {})
-    proyectos = json_data.get('proyectos', [])
+    estado_caja_original = json_data.get('estado_caja', {})
+    proyectos_originales = json_data.get('proyectos', [])
+    gastos_fijos_mensuales = metadata.get('gastos_fijos_mensuales', 50000000)
     
     # Reconstruir DataFrame si está disponible, aplicando filtros de fecha
     df_consolidado = None
@@ -1719,6 +1853,24 @@ def convertir_json_a_datos(json_data: Dict, fecha_inicio=None, fecha_fin=None) -
             fecha_inicio=fecha_inicio, 
             fecha_fin=fecha_fin
         )
+    
+    # Aplicar filtrado de proyectos y recalcular estado_caja si hay filtros activos
+    if fecha_inicio or fecha_fin:
+        # Filtrar proyectos por fechas
+        proyectos_filtrados = filtrar_proyectos_por_fechas(
+            proyectos_originales, 
+            df_consolidado, 
+            fecha_inicio, 
+            fecha_fin
+        )
+        
+        # Recalcular estado de caja con proyectos filtrados
+        estado_caja = recalcular_estado_caja(proyectos_filtrados, gastos_fijos_mensuales)
+        proyectos = proyectos_filtrados
+    else:
+        # Sin filtros, usar datos originales
+        estado_caja = estado_caja_original
+        proyectos = proyectos_originales
     
     # Parsear timestamp (intentar exportacion o generacion)
     fecha_str = metadata.get('fecha_exportacion') or metadata.get('fecha_generacion', datetime.now().isoformat())
@@ -1731,7 +1883,7 @@ def convertir_json_a_datos(json_data: Dict, fecha_inicio=None, fecha_fin=None) -
     datos = {
         'timestamp': timestamp,
         'semana_actual': metadata.get('semana_actual', 0),  # ✅ FIX: Leer desde metadata
-        'gastos_fijos_mensuales': metadata.get('gastos_fijos_mensuales', 50000000),  # ✅ FIX: Leer desde metadata, no raíz
+        'gastos_fijos_mensuales': gastos_fijos_mensuales,  # ✅ FIX: Leer desde metadata, no raíz
         'df_consolidado': df_consolidado,
         'estado_caja': estado_caja,
         'proyectos': proyectos,
