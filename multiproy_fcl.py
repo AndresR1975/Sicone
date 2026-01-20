@@ -2,9 +2,17 @@
 SICONE - Módulo de Análisis Multiproyecto FCL
 Consolidación y análisis de flujo de caja para múltiples proyectos
 
-Versión: 3.0.1 PRODUCCIÓN
+Versión: 3.0.2 PRODUCCIÓN
 Fecha: 20 Enero 2025
 Autor: AI-MindNovation
+
+VERSIÓN 3.0.2 (20-Ene-2025) - FIX MÉTRICAS CONSOLIDADAS:
+- 🔧 FIX CRÍTICO: Error "metricas_cobranza" en Dashboard de Performance
+  - Problema: Intentaba acceder a p['metricas_cobranza'] directamente
+  - Solución: Extraer detalle primero, luego acceder a métricas
+  - Afectaba: Cálculo de totales consolidados en render_performance_cobranza
+  - Estado: ✅ Corregido - métricas consolidadas funcionan correctamente
+- ✅ FUNCIONAL: Dashboard de Performance ahora muestra métricas sin errores
 
 VERSIÓN 3.0.1 (20-Ene-2025) - FIX CRÍTICO Y SELECTORES DE FECHA:
 - 🔧 FIX CRÍTICO: Corregido error "name 'self' is not defined" en exportación JSON
@@ -1282,7 +1290,7 @@ def render_exportar_json_simple(consolidador: ConsolidadorMultiproyecto, estado:
             
             json_data = {
                 "metadata": {
-                    "version": "3.0.1",  # ⭐ VERSIÓN CON FIX CRÍTICO
+                    "version": "3.0.2",  # ⭐ VERSIÓN CON FIXES CRÍTICOS
                     "fecha_generacion": datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
                     "semana_actual": int(estado['semana']),
                     "total_proyectos": len(consolidador.proyectos),  # ✅ Total real
@@ -1328,7 +1336,7 @@ def render_exportar_json_simple(consolidador: ConsolidadorMultiproyecto, estado:
             # Guardar en session_state
             st.session_state.json_consolidado = json_data
             
-            st.success(f"✅ JSON v3.0.1 exportado exitosamente")
+            st.success(f"✅ JSON v3.0.2 exportado exitosamente")
             st.caption(f"📁 Guardado en: {ruta_json}")
             st.caption(f"📊 **Incluye:**")
             st.caption(f"   • Universo temporal completo (sin filtros de fecha)")
@@ -2593,18 +2601,20 @@ def render_performance_cobranza(consolidador: ConsolidadorMultiproyecto):
     
     col1, col2, col3, col4 = st.columns(4)
     
-    # Calcular totales
-    total_hitos = sum(p['metricas_cobranza'].get('total_hitos', 0) 
-                     for p in consolidador.proyectos 
-                     if consolidador._extraer_detalle_ingresos(p).get('metricas_cobranza'))
+    # Calcular totales - EXTRAER métricas primero para cada proyecto
+    total_hitos = 0
+    hitos_completados_total = 0
+    hitos_retrasados_total = 0
     
-    hitos_completados_total = sum(p['metricas_cobranza'].get('hitos_completados', 0) 
-                                  for p in consolidador.proyectos 
-                                  if consolidador._extraer_detalle_ingresos(p).get('metricas_cobranza'))
-    
-    hitos_retrasados_total = sum(p['metricas_cobranza'].get('hitos_retrasados', 0) 
-                                 for p in consolidador.proyectos 
-                                 if consolidador._extraer_detalle_ingresos(p).get('metricas_cobranza'))
+    for p in consolidador.proyectos:
+        if p['estado'] != 'ACTIVO':
+            continue
+        detalle = consolidador._extraer_detalle_ingresos(p)
+        metricas = detalle.get('metricas_cobranza', {})
+        if metricas:
+            total_hitos += metricas.get('total_hitos', 0)
+            hitos_completados_total += metricas.get('hitos_completados', 0)
+            hitos_retrasados_total += metricas.get('hitos_retrasados', 0)
     
     # Calcular días promedio ponderado
     suma_retrasos = 0
