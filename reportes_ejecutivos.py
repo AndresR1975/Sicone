@@ -2,8 +2,8 @@
 SICONE - Módulo de Reportes Ejecutivos
 Generación de reportes PDF para multiproyecto e inversiones temporales
 
-Versión: 3.0.0 FINAL
-Fecha: 29 Diciembre 2024
+Versión: 3.1.0 OPTIMIZADO
+Fecha: 20 Enero 2026
 Autor: AI-MindNovation
 
 REPORTES DISPONIBLES:
@@ -11,6 +11,19 @@ REPORTES DISPONIBLES:
 2. generar_reporte_inversiones_pdf(datos) - Reporte Inversiones Temporales
 
 CHANGELOG:
+v3.1.0 (20-Ene-2026) - CORRECCIONES Y OPTIMIZACIÓN:
+- 🔧 CORRECCIÓN 1: gastos_fijos_mensuales ahora se lee desde metadata (no raíz JSON)
+- 🔧 CORRECCIÓN 2: Eliminado límite hardcoded de 5 proyectos en gráfico semáforo
+- 🔧 CORRECCIÓN 3: Eliminado límite hardcoded de 5 proyectos en tabla de proyectos
+- 🎨 OPTIMIZACIÓN: Reducción de espacios verticales para caber 6-7 proyectos en 1 página:
+  * Título principal: 18pt → 16pt
+  * Subtitle: 10pt → 9pt
+  * Tabla métricas: fuentes 9-10pt → 8-9pt, padding 4-8pt → 3-6pt
+  * Gráficos waterfall/pie: 2.8" → 2.6"
+  * Semáforo: altura 1.5" → 1.2"
+  * Spacers: 0.2", 0.15", 0.1" → 0.12", 0.1", 0.08", 0.06"
+  * Título sección: 12pt → 10pt
+
 v3.0.0 (29-Dic-2024) - UNIFICACIÓN COMPLETA:
 - ✅ Integración de reportes multiproyecto e inversiones en un solo módulo
 - ✅ Funciones comunes optimizadas (formatear_moneda, estilos, etc.)
@@ -367,10 +380,10 @@ def generar_grafico_semaforo(datos: Dict) -> Optional[bytes]:
         if not proyectos or len(proyectos) == 0:
             return None
         
-        # Limitar a 5 proyectos
-        proyectos_mostrar = proyectos[:5]
+        # Usar todos los proyectos dinámicamente (no limitar a 5)
+        proyectos_mostrar = proyectos
         
-        fig, ax = plt.subplots(figsize=(5.5, 1.5))
+        fig, ax = plt.subplots(figsize=(5.5, 1.2))  # Reducido altura de 1.5 a 1.2
         
         nombres = []
         coberturas = []
@@ -411,7 +424,7 @@ def generar_grafico_semaforo(datos: Dict) -> Optional[bytes]:
         ax.set_yticks(y_pos)
         ax.set_yticklabels(nombres, fontsize=6)
         ax.set_xlabel('Cobertura (semanas)', fontsize=7)
-        ax.set_title('Estado Financiero por Proyecto', fontsize=8, fontweight='bold', pad=4)
+        ax.set_title('Estado Financiero por Proyecto', fontsize=8, fontweight='bold', pad=2)  # Reducido pad de 4 a 2
         ax.set_xlim(0, 100)
         
         # Leyenda
@@ -427,7 +440,7 @@ def generar_grafico_semaforo(datos: Dict) -> Optional[bytes]:
         ax.spines['right'].set_visible(False)
         ax.grid(True, axis='x', alpha=0.2, linestyle='--')
         
-        plt.tight_layout(pad=0.2)
+        plt.tight_layout(pad=0.1)  # Reducido de 0.2 a 0.1
         
         buf = io.BytesIO()
         plt.savefig(buf, format='png', dpi=120, bbox_inches='tight', facecolor='white')
@@ -477,18 +490,18 @@ def generar_reporte_gerencial_pdf(datos: Dict) -> bytes:
     style_title = ParagraphStyle(
         'CustomTitle',
         parent=styles['Heading1'],
-        fontSize=18,
+        fontSize=16,  # Reducido de 18 a 16
         textColor=colors.HexColor('#1e3a8a'),
-        spaceAfter=12,
+        spaceAfter=8,  # Reducido de 12 a 8
         alignment=TA_CENTER
     )
     
     style_subtitle = ParagraphStyle(
         'CustomSubtitle',
         parent=styles['Normal'],
-        fontSize=10,
+        fontSize=9,  # Reducido de 10 a 9
         textColor=colors.gray,
-        spaceAfter=6,
+        spaceAfter=4,  # Reducido de 6 a 4
         alignment=TA_CENTER
     )
     
@@ -500,7 +513,7 @@ def generar_reporte_gerencial_pdf(datos: Dict) -> bytes:
     
     elements.append(Paragraph("REPORTE GERENCIAL MULTIPROYECTO", style_title))
     elements.append(Paragraph(f"Generado: {timestamp.strftime('%d/%m/%Y %H:%M')}", style_subtitle))
-    elements.append(Spacer(1, 0.2*inch))
+    elements.append(Spacer(1, 0.12*inch))  # Reducido de 0.2 a 0.12 inch
     
     # MÉTRICAS CLAVE
     saldo_total = estado.get('saldo_total', 0)
@@ -539,24 +552,24 @@ def generar_reporte_gerencial_pdf(datos: Dict) -> bytes:
         ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
         ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
         ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-        ('FONTSIZE', (0, 0), (-1, 0), 9),
-        ('BOTTOMPADDING', (0, 0), (-1, 0), 8),
+        ('FONTSIZE', (0, 0), (-1, 0), 8),  # Reducido de 9 a 8
+        ('BOTTOMPADDING', (0, 0), (-1, 0), 6),  # Reducido de 8 a 6
         ('BACKGROUND', (0, 2), (-1, 2), colors.HexColor('#60a5fa')),
         ('TEXTCOLOR', (0, 2), (-1, 2), colors.whitesmoke),
         ('FONTNAME', (0, 2), (-1, 2), 'Helvetica-Bold'),
-        ('FONTSIZE', (0, 2), (-1, 2), 9),
+        ('FONTSIZE', (0, 2), (-1, 2), 8),  # Reducido de 9 a 8
         ('BACKGROUND', (0, 1), (-1, 1), colors.HexColor('#e0f2fe')),
         ('BACKGROUND', (0, 3), (-1, 3), colors.HexColor('#e0f2fe')),
         ('FONTNAME', (0, 1), (-1, 3), 'Helvetica'),
-        ('FONTSIZE', (0, 1), (-1, 3), 10),
+        ('FONTSIZE', (0, 1), (-1, 3), 9),  # Reducido de 10 a 9
         ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
         ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-        ('TOPPADDING', (0, 1), (-1, -1), 4),
-        ('BOTTOMPADDING', (0, 1), (-1, -1), 4),
+        ('TOPPADDING', (0, 1), (-1, -1), 3),  # Reducido de 4 a 3
+        ('BOTTOMPADDING', (0, 1), (-1, -1), 3),  # Reducido de 4 a 3
     ]))
     
     elements.append(tabla_metricas)
-    elements.append(Spacer(1, 0.15*inch))
+    elements.append(Spacer(1, 0.1*inch))  # Reducido de 0.15 a 0.1 inch
     
     # GRÁFICOS
     waterfall_buf = generar_grafico_waterfall(datos)
@@ -566,13 +579,13 @@ def generar_reporte_gerencial_pdf(datos: Dict) -> bytes:
     fila_graficos = []
     
     if waterfall_buf:
-        waterfall_img = Image(waterfall_buf, width=2.8*inch, height=2.8*inch)
+        waterfall_img = Image(waterfall_buf, width=2.6*inch, height=2.6*inch)  # Reducido de 2.8 a 2.6
         fila_graficos.append(waterfall_img)
     else:
         fila_graficos.append(Paragraph("Waterfall no disponible", styles['Normal']))
     
     if pie_buf:
-        pie_img = Image(pie_buf, width=2.8*inch, height=2.8*inch)
+        pie_img = Image(pie_buf, width=2.6*inch, height=2.6*inch)  # Reducido de 2.8 a 2.6
         fila_graficos.append(pie_img)
     else:
         fila_graficos.append(Paragraph("Pie no disponible", styles['Normal']))
@@ -586,22 +599,22 @@ def generar_reporte_gerencial_pdf(datos: Dict) -> bytes:
     ]))
     
     elements.append(tabla_graficos)
-    elements.append(Spacer(1, 0.15*inch))
+    elements.append(Spacer(1, 0.08*inch))  # Reducido de 0.15 a 0.08 inch
     
     # GRÁFICO SEMÁFORO
     semaforo_buf = generar_grafico_semaforo(datos)
     if semaforo_buf:
-        semaforo_img = Image(semaforo_buf, width=5.5*inch, height=1.5*inch)
+        semaforo_img = Image(semaforo_buf, width=5.5*inch, height=1.2*inch)  # Reducido altura de 1.5 a 1.2
         elements.append(semaforo_img)
-        elements.append(Spacer(1, 0.1*inch))
+        elements.append(Spacer(1, 0.06*inch))  # Reducido de 0.1 a 0.06 inch
     
     # TABLA PROYECTOS
     elements.append(Paragraph("DETALLE POR PROYECTO", ParagraphStyle(
         'SectionHeader',
         parent=styles['Heading2'],
-        fontSize=12,
+        fontSize=10,  # Reducido de 12 a 10
         textColor=colors.HexColor('#1e3a8a'),
-        spaceAfter=6
+        spaceAfter=4  # Reducido de 6 a 4
     )))
     
     proyectos_data = [
@@ -610,7 +623,8 @@ def generar_reporte_gerencial_pdf(datos: Dict) -> bytes:
     
     proyectos = datos.get('proyectos', [])
     
-    for p in proyectos[:5]:
+    # Procesar TODOS los proyectos dinámicamente (no limitar a 5)
+    for p in proyectos:
         if UTILS_DISPONIBLE:
             nombre = obtener_valor_seguro(p, 'nombre', 'Sin nombre', str)[:30]
             ejecutado = obtener_valor_seguro(p, 'ejecutado', 0, float)
@@ -662,7 +676,7 @@ def generar_reporte_gerencial_pdf(datos: Dict) -> bytes:
     ]))
     
     elements.append(tabla_proyectos)
-    elements.append(Spacer(1, 0.1*inch))
+    elements.append(Spacer(1, 0.06*inch))  # Reducido de 0.1 a 0.06 inch
     
     # FOOTER
     footer_text = f"SICONE | {timestamp.strftime('%d/%m/%Y %H:%M')}"
@@ -1548,7 +1562,7 @@ def convertir_json_a_datos(json_data: Dict) -> Dict:
     datos = {
         'timestamp': timestamp,
         'semana_actual': metadata.get('semana_actual', 0),  # ✅ FIX: Leer desde metadata
-        'gastos_fijos_mensuales': json_data.get('gastos_fijos_mensuales', 50000000),
+        'gastos_fijos_mensuales': metadata.get('gastos_fijos_mensuales', 50000000),  # ✅ FIX: Leer desde metadata, no raíz
         'df_consolidado': df_consolidado,
         'estado_caja': estado_caja,
         'proyectos': proyectos
