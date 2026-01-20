@@ -2,19 +2,35 @@
 SICONE - Módulo de Reportes Ejecutivos
 Generación de reportes PDF para multiproyecto e inversiones temporales
 
-Versión: 3.3.3 DEBUG
+Versión: 3.3.4 FILTRADO PARCIAL
 Fecha: 20 Enero 2026
 Autor: AI-MindNovation
 
 CHANGELOG:
-v3.3.3 DEBUG - CON LOGS DE DEBUGGING:
-- 🐛 DEBUG agregado en filtrar_proyectos_por_fechas
-- 🐛 DEBUG agregado en convertir_json_a_datos
-- 🐛 DEBUG agregado en generar_grafico_semaforo
-- 🐛 DEBUG agregado en tabla de proyectos
+v3.3.4 (20-Ene-2026) - SOLUCIÓN: FILTRADO PARCIAL EXPLICADO:
+- 🔍 DIAGNÓSTICO: Debug reveló que ejecucion_financiera usa semanas del proyecto (1,2,3...)
+  mientras df_consolidado usa semanas globales - NO HAY MAPEO entre ambos
+- ✅ SOLUCIÓN: filtrar_proyectos_por_fechas() ahora retorna proyectos SIN FILTRAR
+- ✅ RESULTADO: Waterfall y métricas header SÍ se filtran (usan df_consolidado)
+- ⚠️ LIMITACIÓN: Semáforo, Tabla y Pie NO se filtran (muestran totales completos)
+- 📢 NUEVO: Mensajes informativos en UI explicando qué se filtra y por qué
+- 🐛 DEBUG: Tabla visible en UI mostrando valores procesados
+
+COMPORTAMIENTO ACTUAL CON FILTROS:
+✅ SÍ se filtran:
+  - Gráfico Waterfall (flujos del período)
+  - Métricas del header (saldo total, burn rate consolidado)
+  
+❌ NO se filtran:
+  - Gráfico Semáforo (burn rate y cobertura por proyecto)
+  - Tabla de proyectos (ejecutado, saldo, burn rate)
+  - Gráfico Pie (distribución de categorías)
+
+RAZÓN TÉCNICA:
+No existe forma de mapear las semanas individuales de cada proyecto con las
+semanas consolidadas globales sin información adicional en el JSON.
 
 USO:
-    # Ejecutar y revisar logs en terminal/consola de Streamlit
     datos = convertir_json_a_datos(json_data, fecha_inicio=date(2024,1,1), fecha_fin=date(2024,12,31))
     pdf_bytes = generar_reporte_gerencial_pdf(datos)
 """
@@ -1348,6 +1364,17 @@ def main():
                     key="periodo_multiproyecto"
                 )
                 
+                # Mensaje informativo sobre qué se filtra
+                st.info("""
+                ℹ️ **Nota sobre filtrado:**  
+                • **Waterfall**: SÍ se filtra por el período seleccionado  
+                • **Métricas del header**: SÍ se filtran (saldo total, burn rate)  
+                • **Semáforo, Tabla, Pie**: NO se filtran (muestran totales completos del proyecto)  
+                  
+                *Razón técnica: No es posible mapear las semanas individuales de cada proyecto  
+                con las semanas consolidadas globales sin información adicional.*
+                """)
+                
                 # Variables para almacenar fechas de filtro
                 fecha_inicio_filtro = None
                 fecha_fin_filtro = None
@@ -1876,102 +1903,20 @@ def main():
 
 def filtrar_proyectos_por_fechas(proyectos: List[Dict], df_consolidado: pd.DataFrame, fecha_inicio=None, fecha_fin=None) -> List[Dict]:
     """
-    Filtra los proyectos por rango de fechas y recalcula métricas
+    LIMITACIÓN TÉCNICA: Esta función NO puede filtrar proyectos individuales.
+    
+    PROBLEMA:
+    - ejecucion_financiera tiene números de semana del proyecto (1,2,3...)
+    - df_consolidado tiene semana_consolidada global (números diferentes)
+    - No existe mapeo entre ambos → imposible filtrar correctamente
+    
+    RESULTADO:
+    - Waterfall SÍ se filtra (usa df_consolidado)
+    - Métricas header SÍ se filtran (recalculadas desde df_consolidado)
+    - Semáforo, Tabla, Pie NO se filtran (muestran totales del proyecto)
     """
-    # DEBUG: print(f"\n🔍 DEBUG filtrar_proyectos_por_fechas:")
-    # DEBUG: print(f"  - fecha_inicio: {fecha_inicio}")
-    # DEBUG: print(f"  - fecha_fin: {fecha_fin}")
-    # DEBUG: print(f"  - Num proyectos entrada: {len(proyectos)}")
-    
-    if not fecha_inicio and not fecha_fin:
-        print("  ⚠️ Sin filtros de fecha - retornando originales")
-        return proyectos
-    
-    if df_consolidado is None or df_consolidado.empty:
-        print("  ⚠️ DataFrame vacío - retornando originales")
-        return proyectos
-    
-    if 'semana_consolidada' not in df_consolidado.columns:
-        print("  ⚠️ Sin columna semana_consolidada - retornando originales")
-        return proyectos
-    
-    semanas_filtradas = set(df_consolidado['semana_consolidada'].unique())
-    # DEBUG: print(f"  - Semanas filtradas: {sorted(semanas_filtradas)[:10]}...")
-    
-    if not semanas_filtradas:
-        print("  ⚠️ Set de semanas vacío - retornando originales")
-        return proyectos
-    
-    proyectos_filtrados = []
-    
-    for i, proyecto in enumerate(proyectos):
-        nombre = proyecto.get('nombre', f'Proyecto {i}')
-        print(f"\n  📊 Proyecto: {nombre}")
-        print(f"    ORIGINAL - ejecutado: ${proyecto.get('ejecutado', 0)/1_000_000:.1f}M, burn_rate: ${proyecto.get('burn_rate_real', 0)/1_000_000:.2f}M")
-        
-        # Crear diccionario completamente nuevo
-        proyecto_filtrado = {
-            'nombre': proyecto.get('nombre', ''),
-            'data': proyecto.get('data', {}),
-            'avance_hitos_pct': proyecto.get('avance_hitos_pct', 0),
-        }
-        
-        ejecucion = proyecto.get('ejecucion_financiera', [])
-        
-        if not ejecucion:
-            # Sin ejecución, mantener valores originales
-            proyecto_filtrado['ejecutado'] = proyecto.get('ejecutado', 0)
-            proyecto_filtrado['saldo_real_tesoreria'] = proyecto.get('saldo_real_tesoreria', 0)
-            proyecto_filtrado['burn_rate_real'] = proyecto.get('burn_rate_real', 0)
-            proyecto_filtrado['ejecucion_financiera'] = []
-            print(f"    ⚠️ Sin ejecucion_financiera - manteniendo originales")
-            proyectos_filtrados.append(proyecto_filtrado)
-            continue
-        
-        # Filtrar ejecución financiera
-        ejecucion_filtrada = [
-            s for s in ejecucion 
-            if s.get('semana') in semanas_filtradas
-        ]
-        
-        print(f"    - Semanas originales: {len(ejecucion)}, filtradas: {len(ejecucion_filtrada)}")
-        
-        if not ejecucion_filtrada:
-            # Sin datos en el período
-            proyecto_filtrado['ejecutado'] = 0
-            proyecto_filtrado['saldo_real_tesoreria'] = 0
-            proyecto_filtrado['burn_rate_real'] = 0.001
-            proyecto_filtrado['ejecucion_financiera'] = []
-            print(f"    FILTRADO - ejecutado: $0M, burn_rate: $0M (sin datos en período)")
-        else:
-            # Recalcular con datos filtrados
-            ultima_semana = ejecucion_filtrada[-1]
-            
-            ejecutado = float(ultima_semana.get('egresos_acum', 0))
-            ingresos = float(ultima_semana.get('ingresos_acum', 0))
-            saldo = float(ingresos - ejecutado)
-            
-            # Burn rate
-            num_semanas = len(ejecucion_filtrada)
-            if num_semanas > 1:
-                burn_rate = float(ejecutado / num_semanas)
-            elif num_semanas == 1:
-                burn_rate = float(ultima_semana.get('egresos_excel', 0))
-            else:
-                burn_rate = 0.001
-            
-            # Asignar valores calculados
-            proyecto_filtrado['ejecutado'] = ejecutado
-            proyecto_filtrado['saldo_real_tesoreria'] = saldo
-            proyecto_filtrado['burn_rate_real'] = burn_rate
-            proyecto_filtrado['ejecucion_financiera'] = ejecucion_filtrada
-            
-            print(f"    FILTRADO - ejecutado: ${ejecutado/1_000_000:.1f}M, saldo: ${saldo/1_000_000:.1f}M, burn_rate: ${burn_rate/1_000_000:.2f}M")
-        
-        proyectos_filtrados.append(proyecto_filtrado)
-    
-    # DEBUG: print(f"\n  ✅ Retornando {len(proyectos_filtrados)} proyectos filtrados")
-    return proyectos_filtrados
+    return proyectos
+
 
 
 def recalcular_estado_caja(proyectos_filtrados: List[Dict], gastos_fijos_mensuales: float) -> Dict:
