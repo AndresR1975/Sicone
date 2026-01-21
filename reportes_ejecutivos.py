@@ -2,29 +2,39 @@
 SICONE - Módulo de Reportes Ejecutivos
 Generación de reportes PDF para multiproyecto e inversiones temporales
 
-Versión: 3.4.1 FILTRADO COMPLETO CORREGIDO
+Versión: 3.4.2 MÉTRICAS CORREGIDAS
 Fecha: 21 Enero 2026
 Autor: AI-MindNovation
 
 CHANGELOG:
+v3.4.2 (21-Ene-2026) - CORRECCIÓN CRÍTICA SEMÁFORO Y PIE:
+- 🔧 CORREGIDO: Saldo ahora usa última semana del PROYECTO COMPLETO (no del período filtrado)
+  * Antes: saldo = ingresos_periodo - egresos_periodo → Saldo incorrecto al filtrar
+  * Ahora: saldo = ingresos_actual - egresos_actual → Saldo REAL del proyecto HOY
+  * Resultado: Semáforo muestra cobertura correcta = saldo_actual / burn_rate_periodo
+- 🔧 CORREGIDO: Ejecutado ahora refleja el período filtrado correctamente
+  * ejecutado_periodo: Suma de egresos del período seleccionado
+- 🔧 CORREGIDO: Gráfico Pie funciona SIN filtro (cuando ejecucion_financiera está vacío)
+  * Antes: No generaba gráfico sin filtro
+  * Ahora: Sin filtro → usa todas las semanas de proyeccion_semanal
+
+MÉTRICAS FINALES CORRECTAS:
+- Burn Rate: Promedio de egresos semanales del período filtrado ✅
+- Saldo: Saldo ACTUAL del proyecto completo (cuánto dinero tengo HOY) ✅
+- Ejecutado: Total ejecutado en el período filtrado ✅
+- Cobertura: saldo_actual / burn_rate_periodo = semanas que cubre el dinero actual ✅
+
 v3.4.1 (21-Ene-2026) - CORRECCIONES CRÍTICAS:
-- 🔧 CORREGIDO: Burn rate ahora se calcula como PROMEDIO de egresos semanales (no acumulado/semanas)
-  * Antes: burn_rate = ejecutado_total / num_semanas → Valores incorrectos con períodos cortos
-  * Ahora: burn_rate = promedio(egresos_semanales) → Valores correctos
-  * Resultado: Semáforo muestra estado correcto, no todos en crítico
-- 🔧 CORREGIDO: Gráfico Pie ahora filtra proyeccion_semanal usando semanas de ejecucion_financiera
-  * Antes: Usaba toda la proyeccion_semanal (sin filtrar)
-  * Ahora: Solo incluye semanas del período filtrado
-  * Resultado: Distribución de categorías cambia según período seleccionado
+- 🔧 Burn rate como PROMEDIO de egresos semanales
+- 🔧 Gráfico Pie filtra proyeccion_semanal
 
 v3.4.0 (21-Ene-2026) - FILTRADO COMPLETO FUNCIONAL:
-- ✅ filtrar_proyectos_por_fechas() reescrita para usar fechas del JSON
-- ✅ Todos los elementos se filtran (Waterfall, Header, Semáforo, Tabla, Pie)
+- ✅ filtrar_proyectos_por_fechas() usa fechas del JSON
 
 COMPORTAMIENTO CON FILTROS:
 - "Ver Todo": Reporte completo con todos los datos
-- "Últimas 12/26 semanas": Métricas recalculadas solo para ese período
-- "Rango Personalizado": Métricas del período específico seleccionado
+- "Últimas 12/26 semanas": Métricas recalculadas del período con saldo actual
+- "Rango Personalizado": Métricas del período específico con saldo actual
 - "Solo Históricas/Proyectadas": Divide en datos reales vs proyecciones
 
 REQUERIMIENTOS:
@@ -331,11 +341,14 @@ def generar_grafico_pie_gastos(datos: Dict) -> Optional[bytes]:
         for proyecto in proyectos:
             # Obtener semanas filtradas de ejecucion_financiera
             ejecucion_financiera = proyecto.get('ejecucion_financiera', [])
-            if ejecucion_financiera:
+            
+            # Si hay ejecucion_financiera con datos, filtrar por esas semanas
+            # Si no hay (caso sin filtro), usar TODAS las semanas
+            if ejecucion_financiera and len(ejecucion_financiera) > 0:
                 # Conjunto de semanas que están en el período filtrado
                 semanas_filtradas = set(s.get('semana') for s in ejecucion_financiera if 'semana' in s)
             else:
-                semanas_filtradas = None  # Si no hay ejecucion, usar todas
+                semanas_filtradas = None  # Sin filtro: usar todas las semanas
             
             data = proyecto.get('data', {})
             if not data:
@@ -347,7 +360,7 @@ def generar_grafico_pie_gastos(datos: Dict) -> Optional[bytes]:
             
             # Filtrar proyeccion_semanal por semanas filtradas
             for semana in proyeccion:
-                # Si hay filtro, solo incluir semanas que están en ejecucion_financiera
+                # Si hay filtro (semanas_filtradas no es None), verificar si la semana está incluida
                 if semanas_filtradas is not None:
                     semana_num = semana.get('semana')
                     if semana_num not in semanas_filtradas:
@@ -1909,13 +1922,19 @@ def filtrar_proyectos_por_fechas(proyectos: List[Dict], df_consolidado: pd.DataF
             proyecto_filtrado['burn_rate_real'] = 0.001
             proyecto_filtrado['ejecucion_financiera'] = []
         else:
-            # Recalcular métricas con datos filtrados
-            ultima_semana = ejecucion_filtrada[-1]
+            # CORREGIDO: Saldo ACTUAL del proyecto (última semana completa)
+            # No del período filtrado, sino del proyecto completo
+            if ejecucion:  # ejecucion original completa
+                ultima_semana_proyecto = ejecucion[-1]
+                ingresos_actual = float(ultima_semana_proyecto.get('ingresos_acum', 0))
+                egresos_actual = float(ultima_semana_proyecto.get('egresos_acum', 0))
+                saldo = float(ingresos_actual - egresos_actual)
+            else:
+                saldo = 0
             
-            # Métricas de la última semana del período
-            ejecutado = float(ultima_semana.get('egresos_acum', 0))
-            ingresos = float(ultima_semana.get('ingresos_acum', 0))
-            saldo = float(ingresos - ejecutado)
+            # Ejecutado del PERÍODO FILTRADO (para reporte)
+            ultima_semana_periodo = ejecucion_filtrada[-1]
+            ejecutado_periodo = float(ultima_semana_periodo.get('egresos_acum', 0))
             
             # CORREGIDO: Calcular burn_rate como PROMEDIO de egresos semanales
             num_semanas = len(ejecucion_filtrada)
@@ -1935,14 +1954,14 @@ def filtrar_proyectos_por_fechas(proyectos: List[Dict], df_consolidado: pd.DataF
                 burn_rate = float(sum(egresos_semanales) / len(egresos_semanales)) if egresos_semanales else 0.001
             elif num_semanas == 1:
                 # Solo una semana: usar egresos_excel
-                burn_rate = float(ultima_semana.get('egresos_excel', 0))
+                burn_rate = float(ultima_semana_periodo.get('egresos_excel', 0))
                 if burn_rate == 0:
-                    burn_rate = float(ultima_semana.get('egresos_acum', 0.001))
+                    burn_rate = float(ultima_semana_periodo.get('egresos_acum', 0.001))
             else:
                 burn_rate = 0.001
             
             # Asignar valores recalculados
-            proyecto_filtrado['ejecutado'] = ejecutado
+            proyecto_filtrado['ejecutado'] = ejecutado_periodo
             proyecto_filtrado['saldo_real_tesoreria'] = saldo
             proyecto_filtrado['burn_rate_real'] = burn_rate
             proyecto_filtrado['ejecucion_financiera'] = ejecucion_filtrada
