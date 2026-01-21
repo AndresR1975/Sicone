@@ -372,8 +372,10 @@ def main():
             gastos_fijos_periodo = gastos_fijos_mensuales * meses_periodo
             
             # 4. AJUSTE INICIAL AUTOMÁTICO
-            # Iguala el Saldo Inicial Real con el Saldo Inicial SICONE
+            # Normaliza el punto de partida restando la diferencia del Saldo SICONE
+            # para igualarlo con el Saldo Real Inicial
             ajuste_inicial_auto = saldo_inicial_sicone_json - saldo_inicial_real
+            saldo_inicial_normalizado = saldo_inicial_sicone_json - ajuste_inicial_auto  # = saldo_inicial_real
             
             # 5. Ajustes del período (del usuario)
             ajustes_ing = sum(a['monto'] for a in st.session_state.ajustes if a['tipo'] == 'Ingreso')
@@ -381,9 +383,9 @@ def main():
             ajustes_periodo_neto = ajustes_ing - ajustes_egr
             
             # 6. SALDO FINAL SICONE AJUSTADO (CON FLUJOS REALES)
-            # = Saldo Inicial SICONE + Ingresos - Egresos - Gastos Fijos + Ajustes
+            # Partiendo del saldo normalizado (igual al real)
             saldo_final_sicone_ajustado = (
-                saldo_inicial_sicone_json
+                saldo_inicial_normalizado  # Punto de partida normalizado
                 + ingresos_periodo
                 - egresos_proyectos
                 - gastos_fijos_periodo
@@ -399,10 +401,13 @@ def main():
             st.session_state.resultados = {
                 'saldo_inicial_sicone': saldo_inicial_sicone_json,
                 'saldo_inicial_real': saldo_inicial_real,
+                'saldo_inicial_normalizado': saldo_inicial_normalizado,
                 'ajuste_inicial': ajuste_inicial_auto,
                 'ingresos_periodo': ingresos_periodo,
                 'egresos_proyectos': egresos_proyectos,
                 'gastos_fijos_periodo': gastos_fijos_periodo,
+                'gastos_fijos_mensuales': gastos_fijos_mensuales,
+                'meses_periodo': meses_periodo,
                 'ajustes_neto': ajustes_periodo_neto,
                 'saldo_sicone_ajustado': saldo_final_sicone_ajustado,
                 'saldo_final_real': saldo_final_real,
@@ -436,23 +441,24 @@ def main():
         
         **Paso 1: Ajuste Inicial (Automático)**
         ```
-        Saldo Inicial Real:        {formatear_moneda(res['saldo_inicial_real'])}
-        + Ajuste Inicial:          {formatear_moneda(res['ajuste_inicial'])}
+        Saldo Inicial SICONE (JSON):   {formatear_moneda(res['saldo_inicial_sicone'])}
+        - Ajuste Inicial:              {formatear_moneda(res['ajuste_inicial'])}
         ────────────────────────────────────────────────
-        = Saldo Inicial SICONE:    {formatear_moneda(res['saldo_inicial_sicone'])}
+        = Saldo Inicial Normalizado:   {formatear_moneda(res['saldo_inicial_normalizado'])}
         ```
-        El ajuste inicial se suma al Saldo Inicial Real para igualarlo con el Saldo Inicial SICONE
+        El ajuste inicial resta del Saldo SICONE para igualarlo con el Saldo Real Inicial (${formatear_moneda(res['saldo_inicial_real'])}).
+        Esto normaliza el punto de partida para validar flujos del período.
         
         **Paso 2: Saldo Final SICONE**
         ```
-        Saldo Inicial SICONE:      {formatear_moneda(res['saldo_inicial_sicone'])}
-        + Ingresos del Período:    {formatear_moneda(res.get('ingresos_periodo', 0))}
-        - Egresos Proyectos:       {formatear_moneda(res.get('egresos_proyectos', 0))}
-        - Gastos Fijos:            {formatear_moneda(res.get('gastos_fijos_periodo', 0))}
-        + Ingresos No Modelados:   {formatear_moneda(res['ajustes_ing'])}
-        - Egresos No Modelados:    {formatear_moneda(res['ajustes_egr'])}
+        Saldo Inicial Normalizado:     {formatear_moneda(res['saldo_inicial_normalizado'])}
+        + Ingresos del Período:        {formatear_moneda(res.get('ingresos_periodo', 0))}
+        - Egresos Proyectos:           {formatear_moneda(res.get('egresos_proyectos', 0))}
+        - Gastos Fijos:                {formatear_moneda(res.get('gastos_fijos_periodo', 0))}
+        + Ingresos No Modelados:       {formatear_moneda(res['ajustes_ing'])}
+        - Egresos No Modelados:        {formatear_moneda(res['ajustes_egr'])}
         ────────────────────────────────────────────────
-        = Saldo Final SICONE:      {formatear_moneda(res['saldo_sicone_ajustado'])}
+        = Saldo Final SICONE:          {formatear_moneda(res['saldo_sicone_ajustado'])}
         ```
         
         **Paso 3: Diferencia a Conciliar**
@@ -510,8 +516,11 @@ def main():
             ingresos_periodo = res.get('ingresos_periodo', 0)
             egresos_proyectos = res.get('egresos_proyectos', 0)
             gastos_fijos_periodo = res.get('gastos_fijos_periodo', 0)
+            gastos_fijos_mensuales = res.get('gastos_fijos_mensuales', 0)
+            meses_periodo = res.get('meses_periodo', 0)
             ingresos_no_modelados = res['ajustes_ing']
             egresos_no_modelados = res['ajustes_egr']
+            saldo_normalizado = res.get('saldo_inicial_normalizado', res['saldo_inicial_sicone'] - res['ajuste_inicial'])
             
             # Formatear fechas para mostrar
             fecha_inicio_display = st.session_state.fecha_inicio.strftime('%d/%m/%Y')
@@ -520,46 +529,46 @@ def main():
             # Construir tabla paso a paso
             tabla_flujo = [
                 {
-                    'Concepto': '💰 Saldo Real Inicial (Cuentas)',
-                    'Fórmula': f"{formatear_moneda(st.session_state.saldos_iniciales.get('Fiducuenta', 0))} + {formatear_moneda(st.session_state.saldos_iniciales.get('Cuenta Bancaria', 0))}",
-                    'Monto': formatear_moneda(res['saldo_inicial_real']),
-                    'Acumulado': formatear_moneda(res['saldo_inicial_real'])
-                },
-                {
-                    'Concepto': '⚙️ + Ajuste Inicial (Automático)',
-                    'Fórmula': 'Normalización del punto de partida',
-                    'Monto': formatear_moneda(res['ajuste_inicial']),
-                    'Acumulado': formatear_moneda(res['saldo_inicial_real'] + res['ajuste_inicial'])
-                },
-                {
-                    'Concepto': '🏗️ = SALDO INICIAL SICONE',
-                    'Fórmula': 'Punto de partida normalizado',
+                    'Concepto': '🏗️ Saldo Inicial SICONE (JSON)',
+                    'Fórmula': 'Estado de caja del JSON consolidado',
                     'Monto': formatear_moneda(res['saldo_inicial_sicone']),
                     'Acumulado': formatear_moneda(res['saldo_inicial_sicone'])
+                },
+                {
+                    'Concepto': '⚙️ - Ajuste Inicial (Automático)',
+                    'Fórmula': 'Normalización del punto de partida',
+                    'Monto': formatear_moneda(res['ajuste_inicial']),
+                    'Acumulado': formatear_moneda(saldo_normalizado)
+                },
+                {
+                    'Concepto': '💰 = SALDO INICIAL NORMALIZADO',
+                    'Fórmula': 'Punto de partida (igual al saldo real)',
+                    'Monto': formatear_moneda(saldo_normalizado),
+                    'Acumulado': formatear_moneda(saldo_normalizado)
                 },
                 {
                     'Concepto': '📈 + Ingresos del Período',
                     'Fórmula': f"Proyectos ({fecha_inicio_display} a {fecha_fin_display})",
                     'Monto': formatear_moneda(ingresos_periodo),
-                    'Acumulado': formatear_moneda(res['saldo_inicial_sicone'] + ingresos_periodo)
+                    'Acumulado': formatear_moneda(saldo_normalizado + ingresos_periodo)
                 },
                 {
                     'Concepto': '📉 - Egresos Proyectos',
                     'Fórmula': 'Costos directos de proyectos',
                     'Monto': formatear_moneda(egresos_proyectos),
-                    'Acumulado': formatear_moneda(res['saldo_inicial_sicone'] + ingresos_periodo - egresos_proyectos)
+                    'Acumulado': formatear_moneda(saldo_normalizado + ingresos_periodo - egresos_proyectos)
                 },
                 {
                     'Concepto': '💸 - Costos y Gastos Fijos',
                     'Fórmula': f"{formatear_moneda(gastos_fijos_mensuales)}/mes × {meses_periodo} meses",
                     'Monto': formatear_moneda(gastos_fijos_periodo),
-                    'Acumulado': formatear_moneda(res['saldo_inicial_sicone'] + ingresos_periodo - egresos_proyectos - gastos_fijos_periodo)
+                    'Acumulado': formatear_moneda(saldo_normalizado + ingresos_periodo - egresos_proyectos - gastos_fijos_periodo)
                 },
                 {
                     'Concepto': '💰 + Ingresos No Modelados',
                     'Fórmula': f"{len([a for a in st.session_state.ajustes if a['tipo']=='Ingreso'])} ajustes",
                     'Monto': formatear_moneda(ingresos_no_modelados),
-                    'Acumulado': formatear_moneda(res['saldo_inicial_sicone'] + ingresos_periodo - egresos_proyectos - gastos_fijos_periodo + ingresos_no_modelados)
+                    'Acumulado': formatear_moneda(saldo_normalizado + ingresos_periodo - egresos_proyectos - gastos_fijos_periodo + ingresos_no_modelados)
                 },
                 {
                     'Concepto': '💸 - Egresos No Modelados',
