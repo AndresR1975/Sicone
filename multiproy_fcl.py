@@ -2,9 +2,20 @@
 SICONE - Módulo de Análisis Multiproyecto FCL
 Consolidación y análisis de flujo de caja para múltiples proyectos
 
-Versión: 3.1.0 PRODUCCIÓN
+Versión: 3.2.0 PRODUCCIÓN
 Fecha: 21 Enero 2025
 Autor: AI-MindNovation
+
+VERSIÓN 3.2.0 (21-Ene-2025) - CAMPO EJECUCION_FINANCIERA PARA REPORTES:
+- ⭐ CRÍTICO: Agregado campo `ejecucion_financiera[]` al nivel raíz de cada proyecto
+  - Problema: Módulo de reportes necesitaba este campo para filtrar por fechas
+  - Ubicación: Al mismo nivel que nombre, ejecutado, data
+  - Estructura: [{semana, fecha, egresos_acum, ingresos_acum, egresos_excel}]
+  - Fechas: Absolutas calculadas desde fecha_inicio del proyecto
+  - Acumulados: Calculados iterando sobre proyeccion_semanal
+- ✅ FUNCIONAL: Módulo de reportes puede filtrar tabla y gráficos por fecha
+- ✅ COMPATIBLE: Módulo de conciliación puede usar ejecucion_financiera
+- 📊 JSON v3.2.0: Incluye ejecucion_financiera con fechas absolutas
 
 VERSIÓN 3.1.0 (21-Ene-2025) - FECHAS ABSOLUTAS EN PROYECCION_SEMANAL:
 - ⭐ NUEVO: Recalcula fechas absolutas en data.proyeccion_semanal[] de cada proyecto
@@ -1313,6 +1324,30 @@ def render_exportar_json_simple(consolidador: ConsolidadorMultiproyecto, estado:
                             # Si hay error en conversión, mantener fechas originales
                             pass
                 
+                # ⭐ CRÍTICO: Construir ejecucion_financiera al nivel raíz del proyecto
+                # Este campo es REQUERIDO por el módulo de reportes para filtrar por fechas
+                ejecucion_financiera = []
+                if data_proyecto and data_proyecto.get('proyeccion_semanal'):
+                    proyeccion = data_proyecto['proyeccion_semanal']
+                    
+                    # Calcular acumulados
+                    egresos_acum = 0
+                    ingresos_acum = 0
+                    
+                    for semana_data in proyeccion:
+                        # Acumular valores
+                        egresos_acum += semana_data.get('Total_Egresos', 0)
+                        ingresos_acum += semana_data.get('Ingresos_Proyectados', 0)
+                        
+                        # Construir registro de ejecucion_financiera
+                        ejecucion_financiera.append({
+                            'semana': int(semana_data.get('Semana', 0)),
+                            'fecha': semana_data.get('Fecha', ''),  # Fecha absoluta ya calculada arriba
+                            'egresos_acum': float(egresos_acum),
+                            'ingresos_acum': float(ingresos_acum),
+                            'egresos_excel': float(semana_data.get('Total_Egresos', 0))
+                        })
+                
                 proyecto_data = {
                     "nombre": p['nombre'],
                     "estado": p['estado'],
@@ -1324,6 +1359,8 @@ def render_exportar_json_simple(consolidador: ConsolidadorMultiproyecto, estado:
                     "ejecutado": float(p.get('ejecutado', 0)),  # ✅
                     # ⭐ NUEVO: Ingresos reales detallados con fechas
                     "ingresos_reales": ingresos_detalle,
+                    # ⭐ CRÍTICO: Array ejecucion_financiera con fechas (REQUERIDO por reportes)
+                    "ejecucion_financiera": ejecucion_financiera,
                     # DATOS COMPLETOS para gráficos (con fechas recalculadas)
                     "data": data_proyecto  # ⭐ Ahora incluye fechas absolutas correctas
                 }
@@ -1336,7 +1373,7 @@ def render_exportar_json_simple(consolidador: ConsolidadorMultiproyecto, estado:
             
             json_data = {
                 "metadata": {
-                    "version": "3.1.0",  # ⭐ FECHAS ABSOLUTAS EN PROYECCION_SEMANAL
+                    "version": "3.2.0",  # ⭐ CON EJECUCION_FINANCIERA Y FECHAS ABSOLUTAS
                     "fecha_generacion": datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
                     "semana_actual": int(estado['semana']),
                     "total_proyectos": len(consolidador.proyectos),  # ✅ Total real
@@ -1382,7 +1419,7 @@ def render_exportar_json_simple(consolidador: ConsolidadorMultiproyecto, estado:
             # Guardar en session_state
             st.session_state.json_consolidado = json_data
             
-            st.success(f"✅ JSON v3.1.0 exportado exitosamente")
+            st.success(f"✅ JSON v3.2.0 exportado exitosamente")
             st.caption(f"📁 Guardado en: {ruta_json}")
             st.caption(f"📊 **Incluye:**")
             st.caption(f"   • Universo temporal completo (sin filtros de fecha)")
@@ -1391,7 +1428,8 @@ def render_exportar_json_simple(consolidador: ConsolidadorMultiproyecto, estado:
             st.caption(f"   • Columnas individuales de cada proyecto")
             st.caption(f"   • Métricas de performance de cobranza")
             st.caption(f"   • Detalle de hitos con fechas esperadas vs reales")
-            st.caption(f"   • ⭐ Fechas absolutas en proyeccion_semanal (filtrable por fecha)")
+            st.caption(f"   • ⭐ Campo ejecucion_financiera[] con fechas absolutas (filtrable)")
+            st.caption(f"   • ⭐ Fechas absolutas en proyeccion_semanal")
             
             # Botón de descarga
             json_str = json.dumps(json_data, indent=2, ensure_ascii=False)
