@@ -328,23 +328,70 @@ def main():
             saldo_inicial_real = sum(st.session_state.saldos_iniciales.values())
             saldo_final_real = sum(st.session_state.saldos_finales.values())
             
-            # 3. AJUSTE INICIAL AUTOMÁTICO
+            # 3. CALCULAR FLUJOS REALES DEL PERÍODO
+            datos_sicone = st.session_state.datos_sicone
+            proyectos = datos_sicone.get('proyectos', [])
+            
+            ingresos_periodo = 0
+            egresos_proyectos = 0
+            
+            # Fechas del período en formato ISO
+            fecha_inicio_str = st.session_state.fecha_inicio.isoformat()
+            fecha_fin_str = st.session_state.fecha_fin.isoformat()
+            
+            for proyecto in proyectos:
+                if not isinstance(proyecto, dict):
+                    continue
+                
+                # === INGRESOS REALES (filtrables por fecha) ===
+                ingresos_reales = proyecto.get('ingresos_reales', {})
+                pagos_detallados = ingresos_reales.get('pagos_detallados', [])
+                
+                for pago in pagos_detallados:
+                    if isinstance(pago, dict):
+                        fecha_pago = pago.get('fecha', '')
+                        if fecha_inicio_str <= fecha_pago <= fecha_fin_str:
+                            ingresos_periodo += pago.get('monto', 0)
+                
+                # === EGRESOS REALES (filtrables por fecha) ===
+                data = proyecto.get('data', {})
+                egresos_data = data.get('egresos', {})
+                egresos_semanales = egresos_data.get('egresos_semanales', [])
+                
+                for semana in egresos_semanales:
+                    if isinstance(semana, dict):
+                        fecha_semana = semana.get('fecha_inicio', '')
+                        if fecha_inicio_str <= fecha_semana <= fecha_fin_str:
+                            egresos_proyectos += semana.get('total', 0)
+            
+            # Gastos fijos del período
+            metadata = datos_sicone.get('metadata', {})
+            gastos_fijos_mensuales = metadata.get('gastos_fijos_mensuales', 0)
+            meses_periodo = (st.session_state.fecha_fin.year - st.session_state.fecha_inicio.year) * 12 + \
+                           (st.session_state.fecha_fin.month - st.session_state.fecha_inicio.month) + 1
+            gastos_fijos_periodo = gastos_fijos_mensuales * meses_periodo
+            
+            # 4. AJUSTE INICIAL AUTOMÁTICO
             # Iguala el Saldo Inicial Real con el Saldo Inicial SICONE
-            # Hace que ambos partan del mismo valor para validar flujos del período
             ajuste_inicial_auto = saldo_inicial_sicone_json - saldo_inicial_real
             
-            # 4. Ajustes del período (del usuario, sin incluir ajuste inicial)
+            # 5. Ajustes del período (del usuario)
             ajustes_ing = sum(a['monto'] for a in st.session_state.ajustes if a['tipo'] == 'Ingreso')
             ajustes_egr = sum(a['monto'] for a in st.session_state.ajustes if a['tipo'] == 'Egreso')
             ajustes_periodo_neto = ajustes_ing - ajustes_egr
             
-            # 5. Saldo Final SICONE Ajustado
-            # = Saldo Inicial SICONE + Ajustes del Período
-            # Nota: Ajuste inicial ya está "incluido" conceptualmente en saldo_inicial_sicone_json
-            saldo_final_sicone_ajustado = saldo_inicial_sicone_json + ajustes_periodo_neto
+            # 6. SALDO FINAL SICONE AJUSTADO (CON FLUJOS REALES)
+            # = Saldo Inicial SICONE + Ingresos - Egresos - Gastos Fijos + Ajustes
+            saldo_final_sicone_ajustado = (
+                saldo_inicial_sicone_json
+                + ingresos_periodo
+                - egresos_proyectos
+                - gastos_fijos_periodo
+                + ajustes_ing
+                - ajustes_egr
+            )
             
-            # 6. Diferencia final
-            # Lo que SICONE proyecta al final vs lo que realmente hay al final
+            # 7. Diferencia final
             diferencia = saldo_final_sicone_ajustado - saldo_final_real
             precision = 100 * (1 - abs(diferencia) / abs(saldo_final_real)) if saldo_final_real != 0 else 0
             
@@ -352,8 +399,11 @@ def main():
             st.session_state.resultados = {
                 'saldo_inicial_sicone': saldo_inicial_sicone_json,
                 'saldo_inicial_real': saldo_inicial_real,
-                'ajuste_inicial': ajuste_inicial_auto,  # Calculado automáticamente
-                'ajustes_neto': ajustes_periodo_neto,    # Del usuario
+                'ajuste_inicial': ajuste_inicial_auto,
+                'ingresos_periodo': ingresos_periodo,
+                'egresos_proyectos': egresos_proyectos,
+                'gastos_fijos_periodo': gastos_fijos_periodo,
+                'ajustes_neto': ajustes_periodo_neto,
                 'saldo_sicone_ajustado': saldo_final_sicone_ajustado,
                 'saldo_final_real': saldo_final_real,
                 'diferencia': diferencia,
@@ -396,7 +446,11 @@ def main():
         **Paso 2: Saldo Final SICONE**
         ```
         Saldo Inicial SICONE:      {formatear_moneda(res['saldo_inicial_sicone'])}
-        + Ajustes del Período:     {formatear_moneda(res['ajustes_neto'])}
+        + Ingresos del Período:    {formatear_moneda(res.get('ingresos_periodo', 0))}
+        - Egresos Proyectos:       {formatear_moneda(res.get('egresos_proyectos', 0))}
+        - Gastos Fijos:            {formatear_moneda(res.get('gastos_fijos_periodo', 0))}
+        + Ingresos No Modelados:   {formatear_moneda(res['ajustes_ing'])}
+        - Egresos No Modelados:    {formatear_moneda(res['ajustes_egr'])}
         ────────────────────────────────────────────────
         = Saldo Final SICONE:      {formatear_moneda(res['saldo_sicone_ajustado'])}
         ```
@@ -451,78 +505,11 @@ def main():
         with tab1:
             st.markdown("### 📋 Flujo Completo de Conciliación")
             
-            # Extraer datos REALES del JSON
-            datos_sicone = st.session_state.datos_sicone
-            proyectos = datos_sicone.get('proyectos', [])
             
-            # INGRESOS Y EGRESOS DEL PERÍODO
-            ingresos_periodo = 0
-            egresos_proyectos = 0
-            
-            # Fechas del período en formato ISO
-            fecha_inicio_str = st.session_state.fecha_inicio.isoformat()
-            fecha_fin_str = st.session_state.fecha_fin.isoformat()
-            
-            for proyecto in proyectos:
-                if not isinstance(proyecto, dict):
-                    continue
-                
-                data = proyecto.get('data', {})
-                
-                # === EGRESOS REALES (filtrables por fecha) ===
-                egresos_data = data.get('egresos', {})
-                egresos_semanales = egresos_data.get('egresos_semanales', [])
-                
-                for semana in egresos_semanales:
-                    if isinstance(semana, dict):
-                        fecha_semana = semana.get('fecha_inicio', '')
-                        # Filtrar por rango de fechas
-                        if fecha_inicio_str <= fecha_semana <= fecha_fin_str:
-                            egresos_proyectos += semana.get('total', 0)
-                
-                # === INGRESOS ===
-                # LIMITACIÓN ACTUAL: No hay ingresos reales por fecha en el JSON
-                # Solo existe total agregado en data.totales.total_ingresos
-                # Por ahora NO sumamos ingresos aquí porque no son del período específico
-                # TODO: Implementar captura de ingresos por fecha en módulo FCL
-            
-            # ADVERTENCIA si no hay datos
-            if egresos_proyectos == 0:
-                st.warning("""
-                ⚠️ **No se encontraron egresos en el período seleccionado**
-                
-                Esto puede deberse a:
-                - El período seleccionado no tiene registros de gastos
-                - El JSON consolidado no contiene datos de ejecución real
-                - Las fechas están fuera del rango de datos disponibles
-                
-                Verifique que el JSON consolidado incluya datos del módulo "Ejecución Real FCL".
-                """)
-            
-            # NOTA IMPORTANTE sobre ingresos
-            if ingresos_periodo == 0:
-                st.info("""
-                ℹ️ **Ingresos del período: No disponibles**
-                
-                **Limitación actual del sistema:**
-                El JSON consolidado NO contiene ingresos reales desglosados por fecha.
-                Solo contiene el total de ingresos del proyecto completo.
-                
-                **Para incluir ingresos por período:**
-                1. El módulo "Ejecución Real FCL" debe capturar ingresos con fechas
-                2. El JSON consolidado debe incluir ingresos_semanales (similar a egresos_semanales)
-                
-                Por ahora, la tabla mostrará solo los egresos filtrados por fecha.
-                """)
-            
-            # Gastos fijos
-            metadata = datos_sicone.get('metadata', {})
-            gastos_fijos_mensuales = metadata.get('gastos_fijos_mensuales', 0)
-            meses_periodo = (st.session_state.fecha_fin.year - st.session_state.fecha_inicio.year) * 12 + \
-                           (st.session_state.fecha_fin.month - st.session_state.fecha_inicio.month) + 1
-            gastos_fijos_periodo = gastos_fijos_mensuales * meses_periodo
-            
-            # Ajustes separados
+            # Usar valores ya calculados
+            ingresos_periodo = res.get('ingresos_periodo', 0)
+            egresos_proyectos = res.get('egresos_proyectos', 0)
+            gastos_fijos_periodo = res.get('gastos_fijos_periodo', 0)
             ingresos_no_modelados = res['ajustes_ing']
             egresos_no_modelados = res['ajustes_egr']
             
