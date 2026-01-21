@@ -1,47 +1,24 @@
 """
 SICONE - Módulo de Reportes Ejecutivos
-Generación de reportes PDF para multiproyecto e inversiones temporales
-
-Versión: 3.4.2 MÉTRICAS CORREGIDAS
+Versión: 3.4.3 SALDO CORREGIDO
 Fecha: 21 Enero 2026
-Autor: AI-MindNovation
 
 CHANGELOG:
-v3.4.2 (21-Ene-2026) - CORRECCIÓN CRÍTICA SEMÁFORO Y PIE:
-- 🔧 CORREGIDO: Saldo ahora usa última semana del PROYECTO COMPLETO (no del período filtrado)
-  * Antes: saldo = ingresos_periodo - egresos_periodo → Saldo incorrecto al filtrar
-  * Ahora: saldo = ingresos_actual - egresos_actual → Saldo REAL del proyecto HOY
-  * Resultado: Semáforo muestra cobertura correcta = saldo_actual / burn_rate_periodo
-- 🔧 CORREGIDO: Ejecutado ahora refleja el período filtrado correctamente
-  * ejecutado_periodo: Suma de egresos del período seleccionado
-- 🔧 CORREGIDO: Gráfico Pie funciona SIN filtro (cuando ejecucion_financiera está vacío)
-  * Antes: No generaba gráfico sin filtro
-  * Ahora: Sin filtro → usa todas las semanas de proyeccion_semanal
-
-MÉTRICAS FINALES CORRECTAS:
-- Burn Rate: Promedio de egresos semanales del período filtrado ✅
-- Saldo: Saldo ACTUAL del proyecto completo (cuánto dinero tengo HOY) ✅
-- Ejecutado: Total ejecutado en el período filtrado ✅
-- Cobertura: saldo_actual / burn_rate_periodo = semanas que cubre el dinero actual ✅
-
-v3.4.1 (21-Ene-2026) - CORRECCIONES CRÍTICAS:
-- 🔧 Burn rate como PROMEDIO de egresos semanales
-- 🔧 Gráfico Pie filtra proyeccion_semanal
-
-v3.4.0 (21-Ene-2026) - FILTRADO COMPLETO FUNCIONAL:
-- ✅ filtrar_proyectos_por_fechas() usa fechas del JSON
-
-COMPORTAMIENTO CON FILTROS:
-- "Ver Todo": Reporte completo con todos los datos
-- "Últimas 12/26 semanas": Métricas recalculadas del período con saldo actual
-- "Rango Personalizado": Métricas del período específico con saldo actual
-- "Solo Históricas/Proyectadas": Divide en datos reales vs proyecciones
-
-REQUERIMIENTOS:
-- JSON v5.0 con campo 'fecha' en ejecucion_financiera (formato 'YYYY-MM-DD')
+v3.4.3 (21-Ene-2026) - CORRECCIÓN DEFINITIVA SALDO:
+- 🔧 SALDO: Ahora copia del proyecto original (NO recalcula desde ejecucion)
+  * El saldo SIEMPRE es el actual del proyecto ($558.8M constante)
+  * NO cambia con el filtro de fechas
+- 🔧 PIE: Vacía ejecucion_financiera cuando NO hay filtro
+  * Sin filtro → usa todas las semanas de proyeccion_semanal
+  
+MÉTRICAS CORRECTAS:
+- Saldo: Del proyecto original (constante, no cambia con filtro) ✅
+- Burn Rate: Promedio del período filtrado ✅
+- Cobertura: saldo_actual / burn_rate_periodo ✅
+- Ejecutado: Total del período filtrado ✅
 
 USO:
-    datos = convertir_json_a_datos(json_data, fecha_inicio=date(2024,1,1), fecha_fin=date(2024,12,31))
+    datos = convertir_json_a_datos(json_data, fecha_inicio, fecha_fin)
     pdf_bytes = generar_reporte_gerencial_pdf(datos)
 """
 import copy
@@ -325,15 +302,9 @@ def generar_grafico_pie_gastos(datos: Dict) -> Optional[bytes]:
     CORREGIDO: Ahora filtra según las semanas en ejecucion_financiera
     """
     try:
-        import streamlit as st
-        
         proyectos = datos.get('proyectos', [])
         
-        st.markdown("### 🥧 DEBUG generar_grafico_pie_gastos")
-        st.write(f"**Proyectos recibidos:** {len(proyectos)}")
-        
         if not proyectos:
-            st.error("❌ Sin proyectos")
             return None
         
         # Consolidar categorías
@@ -344,35 +315,9 @@ def generar_grafico_pie_gastos(datos: Dict) -> Optional[bytes]:
             'Variables': 0
         }
         
-        for i, proyecto in enumerate(proyectos[:2]):  # Debug primeros 2 proyectos
-            nombre = proyecto.get('nombre', f'Proy {i}')
-            st.write(f"**Proyecto {i+1}: {nombre}**")
-            
-            # Verificar ejecucion_financiera
-            ejecucion_financiera = proyecto.get('ejecucion_financiera', [])
-            st.write(f"  - Tiene 'ejecucion_financiera': {'ejecucion_financiera' in proyecto}")
-            st.write(f"  - Tipo: {type(ejecucion_financiera)}")
-            st.write(f"  - Longitud: {len(ejecucion_financiera) if ejecucion_financiera else 0}")
-            
-            # Verificar data.proyeccion_semanal
-            data = proyecto.get('data', {})
-            proyeccion = data.get('proyeccion_semanal', [])
-            st.write(f"  - proyeccion_semanal: {len(proyeccion)} semanas")
-        
-        # Procesar todos los proyectos
         for proyecto in proyectos:
             # Obtener semanas filtradas de ejecucion_financiera
             ejecucion_financiera = proyecto.get('ejecucion_financiera', [])
-            
-            # Si hay ejecucion_financiera con datos, filtrar por esas semanas
-            # Si no hay (caso sin filtro), usar TODAS las semanas
-            if ejecucion_financiera and len(ejecucion_financiera) > 0:
-                # Conjunto de semanas que están en el período filtrado
-                semanas_filtradas = set(s.get('semana') for s in ejecucion_financiera if 'semana' in s)
-                st.write(f"✅ {proyecto.get('nombre')}: Filtrando por {len(semanas_filtradas)} semanas")
-            else:
-                semanas_filtradas = None  # Sin filtro: usar todas las semanas
-                st.write(f"⚠️ {proyecto.get('nombre')}: SIN FILTRO - usando todas las semanas")
             
             # Si hay ejecucion_financiera con datos, filtrar por esas semanas
             # Si no hay (caso sin filtro), usar TODAS las semanas
@@ -452,28 +397,7 @@ def generar_grafico_semaforo(datos: Dict) -> Optional[bytes]:
     (Usado en reporte multiproyecto)
     """
     try:
-        import streamlit as st
-        
         proyectos = datos.get('proyectos', [])
-        
-        st.markdown("### 🚦 DEBUG generar_grafico_semaforo")
-        st.write(f"**Proyectos recibidos:** {len(proyectos)}")
-        
-        for i, p in enumerate(proyectos[:3]):
-            nombre = p.get('nombre', f'Proy {i}')
-            saldo = p.get('saldo_real_tesoreria', 0)
-            burn_rate = p.get('burn_rate_real', 0)
-            ejecutado = p.get('ejecutado', 0)
-            ejecucion = p.get('ejecucion_financiera', [])
-            
-            cobertura = saldo / burn_rate if burn_rate > 0 else 100
-            
-            st.write(f"**{i+1}. {nombre}:**")
-            st.write(f"  - Saldo: ${saldo/1_000_000:.1f}M")
-            st.write(f"  - Burn Rate: ${burn_rate/1_000_000:.2f}M/sem")
-            st.write(f"  - Cobertura: {cobertura:.1f} semanas")
-            st.write(f"  - Ejecutado: ${ejecutado/1_000_000:.1f}M")
-            st.write(f"  - Semanas en ejecucion: {len(ejecucion)}")
         
         if not proyectos or len(proyectos) == 0:
             return None
@@ -1975,15 +1899,9 @@ def filtrar_proyectos_por_fechas(proyectos: List[Dict], df_consolidado: pd.DataF
             proyecto_filtrado['burn_rate_real'] = 0.001
             proyecto_filtrado['ejecucion_financiera'] = []
         else:
-            # CORREGIDO: Saldo ACTUAL del proyecto (última semana completa)
-            # No del período filtrado, sino del proyecto completo
-            if ejecucion:  # ejecucion original completa
-                ultima_semana_proyecto = ejecucion[-1]
-                ingresos_actual = float(ultima_semana_proyecto.get('ingresos_acum', 0))
-                egresos_actual = float(ultima_semana_proyecto.get('egresos_acum', 0))
-                saldo = float(ingresos_actual - egresos_actual)
-            else:
-                saldo = 0
+            # CORRECCIÓN CRÍTICA: Saldo del proyecto original (NO recalcular)
+            # El saldo actual ya está calculado correctamente en el proyecto original
+            saldo = float(proyecto.get('saldo_real_tesoreria', 0))
             
             # Ejecutado del PERÍODO FILTRADO (para reporte)
             ultima_semana_periodo = ejecucion_filtrada[-1]
@@ -2116,9 +2034,14 @@ def convertir_json_a_datos(json_data: Dict, fecha_inicio=None, fecha_fin=None) -
         estado_caja = recalcular_estado_caja(proyectos_filtrados, gastos_fijos_mensuales)
         proyectos = proyectos_filtrados
     else:
-        # Sin filtros, usar datos originales
+        # Sin filtros, usar datos originales pero VACIAR ejecucion_financiera
+        # para que el Pie use TODAS las semanas de proyeccion_semanal
         estado_caja = estado_caja_original
-        proyectos = proyectos_originales
+        proyectos = []
+        for p in proyectos_originales:
+            proyecto_sin_filtro = p.copy()
+            proyecto_sin_filtro['ejecucion_financiera'] = []  # Vaciar para Pie
+            proyectos.append(proyecto_sin_filtro)
     
     # Parsear timestamp (intentar exportacion o generacion)
     fecha_str = metadata.get('fecha_exportacion') or metadata.get('fecha_generacion', datetime.now().isoformat())
