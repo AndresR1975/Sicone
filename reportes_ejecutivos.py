@@ -1815,26 +1815,31 @@ def main():
 def filtrar_proyectos_por_fechas(proyectos: List[Dict], df_consolidado: pd.DataFrame, fecha_inicio=None, fecha_fin=None) -> List[Dict]:
     """
     Filtra proyectos por rango de fechas usando el campo 'fecha' en ejecucion_financiera.
-    
-    Args:
-        proyectos: Lista de proyectos con ejecucion_financiera que incluye fechas
-        df_consolidado: DataFrame consolidado (no usado, mantenido por compatibilidad)
-        fecha_inicio: Fecha inicio del filtro
-        fecha_fin: Fecha fin del filtro
-    
-    Returns:
-        Lista de proyectos con métricas recalculadas para el período filtrado
     """
+    import streamlit as st
+    
+    st.markdown("### 🔍 DEBUG filtrar_proyectos_por_fechas")
+    st.write(f"**Fecha inicio filtro:** {fecha_inicio}")
+    st.write(f"**Fecha fin filtro:** {fecha_fin}")
+    st.write(f"**Proyectos a procesar:** {len(proyectos)}")
+    
     if not fecha_inicio and not fecha_fin:
-        return proyectos  # Sin filtro
+        st.warning("⚠️ Sin filtros - retornando proyectos originales")
+        return proyectos
     
     # Convertir fechas a datetime para comparación
     fecha_inicio_dt = pd.to_datetime(fecha_inicio) if fecha_inicio else None
     fecha_fin_dt = pd.to_datetime(fecha_fin) if fecha_fin else None
     
+    st.write(f"**Fecha inicio datetime:** {fecha_inicio_dt}")
+    st.write(f"**Fecha fin datetime:** {fecha_fin_dt}")
+    
     proyectos_filtrados = []
     
-    for proyecto in proyectos:
+    for idx, proyecto in enumerate(proyectos):
+        nombre = proyecto.get('nombre', f'Proyecto {idx}')
+        st.markdown(f"#### Proyecto {idx+1}: {nombre}")
+        
         # Crear nuevo diccionario para el proyecto
         proyecto_filtrado = {
             'nombre': proyecto.get('nombre', ''),
@@ -1843,23 +1848,33 @@ def filtrar_proyectos_por_fechas(proyectos: List[Dict], df_consolidado: pd.DataF
         }
         
         ejecucion = proyecto.get('ejecucion_financiera', [])
+        st.write(f"**Semanas originales:** {len(ejecucion)}")
         
         if not ejecucion:
-            # Sin datos de ejecución, mantener valores originales
             proyecto_filtrado['ejecutado'] = proyecto.get('ejecutado', 0)
             proyecto_filtrado['saldo_real_tesoreria'] = proyecto.get('saldo_real_tesoreria', 0)
             proyecto_filtrado['burn_rate_real'] = proyecto.get('burn_rate_real', 0)
             proyecto_filtrado['ejecucion_financiera'] = []
             proyectos_filtrados.append(proyecto_filtrado)
+            st.warning("Sin ejecucion_financiera")
             continue
+        
+        # Mostrar primera semana para debug
+        primera_semana = ejecucion[0] if ejecucion else {}
+        st.write(f"**Primera semana estructura:** {primera_semana.keys()}")
+        st.write(f"**Tiene campo 'fecha'?:** {'fecha' in primera_semana}")
+        if 'fecha' in primera_semana:
+            st.write(f"**Valor fecha:** {primera_semana.get('fecha')} (tipo: {type(primera_semana.get('fecha'))})")
         
         # Filtrar ejecucion_financiera por fechas
         ejecucion_filtrada = []
+        semanas_excluidas = 0
+        
         for semana_data in ejecucion:
             fecha_semana = semana_data.get('fecha')
             
             if not fecha_semana:
-                # Si no hay fecha, incluir la semana (backward compatibility)
+                st.write(f"⚠️ Semana {semana_data.get('semana')} sin campo fecha - INCLUIDA")
                 ejecucion_filtrada.append(semana_data)
                 continue
             
@@ -1869,54 +1884,59 @@ def filtrar_proyectos_por_fechas(proyectos: List[Dict], df_consolidado: pd.DataF
                     fecha_dt = pd.to_datetime(fecha_semana)
                 else:
                     fecha_dt = pd.to_datetime(fecha_semana)
-            except:
-                # Si hay error parseando, incluir la semana
+            except Exception as e:
+                st.write(f"⚠️ Error parseando fecha '{fecha_semana}': {e}")
                 ejecucion_filtrada.append(semana_data)
                 continue
             
             # Aplicar filtros de fecha
             if fecha_inicio_dt and fecha_dt < fecha_inicio_dt:
+                semanas_excluidas += 1
                 continue  # Antes del inicio, excluir
             if fecha_fin_dt and fecha_dt > fecha_fin_dt:
+                semanas_excluidas += 1
                 continue  # Después del fin, excluir
             
             # Está dentro del rango
             ejecucion_filtrada.append(semana_data)
         
+        st.write(f"**Semanas filtradas:** {len(ejecucion_filtrada)}")
+        st.write(f"**Semanas excluidas:** {semanas_excluidas}")
+        
         if not ejecucion_filtrada:
-            # Sin datos en el período filtrado
             proyecto_filtrado['ejecutado'] = 0
             proyecto_filtrado['saldo_real_tesoreria'] = 0
             proyecto_filtrado['burn_rate_real'] = 0.001
             proyecto_filtrado['ejecucion_financiera'] = []
+            st.warning("❌ Sin datos en período filtrado")
         else:
             # Recalcular métricas con datos filtrados
             ultima_semana = ejecucion_filtrada[-1]
             
-            # Métricas de la última semana del período
             ejecutado = float(ultima_semana.get('egresos_acum', 0))
             ingresos = float(ultima_semana.get('ingresos_acum', 0))
             saldo = float(ingresos - ejecutado)
             
-            # Burn rate: promedio semanal en el período
             num_semanas = len(ejecucion_filtrada)
             if num_semanas > 1:
                 burn_rate = float(ejecutado / num_semanas)
             elif num_semanas == 1:
                 burn_rate = float(ultima_semana.get('egresos_excel', 0))
                 if burn_rate == 0:
-                    burn_rate = ejecutado  # Usar ejecutado si no hay egresos_excel
+                    burn_rate = ejecutado
             else:
                 burn_rate = 0.001
             
-            # Asignar valores recalculados
             proyecto_filtrado['ejecutado'] = ejecutado
             proyecto_filtrado['saldo_real_tesoreria'] = saldo
             proyecto_filtrado['burn_rate_real'] = burn_rate
             proyecto_filtrado['ejecucion_financiera'] = ejecucion_filtrada
+            
+            st.success(f"✅ Ejecutado: ${ejecutado/1_000_000:.1f}M | Burn Rate: ${burn_rate/1_000_000:.2f}M")
         
         proyectos_filtrados.append(proyecto_filtrado)
     
+    st.success(f"✅ Total proyectos filtrados: {len(proyectos_filtrados)}")
     return proyectos_filtrados
 
 
