@@ -2,9 +2,19 @@
 SICONE - Módulo de Análisis Multiproyecto FCL
 Consolidación y análisis de flujo de caja para múltiples proyectos
 
-Versión: 3.0.3 PRODUCCIÓN ESTABLE
-Fecha: 20 Enero 2025
+Versión: 3.1.0 PRODUCCIÓN
+Fecha: 21 Enero 2025
 Autor: AI-MindNovation
+
+VERSIÓN 3.1.0 (21-Ene-2025) - FECHAS ABSOLUTAS EN PROYECCION_SEMANAL:
+- ⭐ NUEVO: Recalcula fechas absolutas en data.proyeccion_semanal[] de cada proyecto
+  - Problema: Fechas en proyeccion_semanal podían estar desactualizadas
+  - Solución: Calcular fecha_absoluta = fecha_inicio + (semana - 1) × 7 días
+  - Permite: Filtrado por rango de fechas en módulo de reportes y conciliación
+  - Ubicación: render_exportar_json_simple() antes de exportar JSON
+- ✅ FUNCIONAL: Módulo de reportes ahora puede filtrar tablas y gráficos por fecha
+- ✅ COMPATIBLE: Módulo de conciliación puede usar filtros de fecha correctamente
+- 📊 JSON v3.1.0: Proyeccion_semanal con fechas absolutas reales
 
 VERSIÓN 3.0.3 (20-Ene-2025) - FIX BOTÓN VER TODO:
 - 🔧 FIX: Error al hacer click en botón "Ver Todo" para limpiar filtros
@@ -1276,6 +1286,33 @@ def render_exportar_json_simple(consolidador: ConsolidadorMultiproyecto, estado:
                 # ⭐ NUEVO: Extraer información detallada de ingresos reales
                 ingresos_detalle = consolidador._extraer_detalle_ingresos(p)
                 
+                # ⭐ FIX CRÍTICO: Recalcular fechas absolutas en proyeccion_semanal
+                # Esto permite que el módulo de reportes filtre por rango de fechas
+                data_proyecto = p.get('data', {}).copy() if p.get('data') else {}
+                
+                if data_proyecto:
+                    # Obtener fecha_inicio del proyecto
+                    fecha_inicio_str = data_proyecto.get('proyecto', {}).get('fecha_inicio')
+                    proyeccion_semanal = data_proyecto.get('proyeccion_semanal', [])
+                    
+                    if fecha_inicio_str and proyeccion_semanal:
+                        try:
+                            # Convertir fecha_inicio a objeto date
+                            fecha_inicio = datetime.strptime(fecha_inicio_str, '%Y-%m-%d').date()
+                            
+                            # Recalcular fecha absoluta para cada semana
+                            for semana_data in proyeccion_semanal:
+                                semana_relativa = semana_data.get('Semana', 1)
+                                # Calcular: fecha_inicio + (semana - 1) * 7 días
+                                dias_desde_inicio = (semana_relativa - 1) * 7
+                                fecha_absoluta = fecha_inicio + timedelta(days=dias_desde_inicio)
+                                # Actualizar campo Fecha con fecha absoluta correcta
+                                semana_data['Fecha'] = fecha_absoluta.strftime('%Y-%m-%d')
+                        
+                        except (ValueError, TypeError) as e:
+                            # Si hay error en conversión, mantener fechas originales
+                            pass
+                
                 proyecto_data = {
                     "nombre": p['nombre'],
                     "estado": p['estado'],
@@ -1287,8 +1324,8 @@ def render_exportar_json_simple(consolidador: ConsolidadorMultiproyecto, estado:
                     "ejecutado": float(p.get('ejecutado', 0)),  # ✅
                     # ⭐ NUEVO: Ingresos reales detallados con fechas
                     "ingresos_reales": ingresos_detalle,
-                    # DATOS COMPLETOS para gráficos
-                    "data": p.get('data', {})  # Incluye proyeccion_semanal completa
+                    # DATOS COMPLETOS para gráficos (con fechas recalculadas)
+                    "data": data_proyecto  # ⭐ Ahora incluye fechas absolutas correctas
                 }
                 proyectos_completos.append(proyecto_data)
             
@@ -1299,7 +1336,7 @@ def render_exportar_json_simple(consolidador: ConsolidadorMultiproyecto, estado:
             
             json_data = {
                 "metadata": {
-                    "version": "3.0.3",  # ⭐ VERSIÓN ESTABLE CON TODOS LOS FIXES
+                    "version": "3.1.0",  # ⭐ FECHAS ABSOLUTAS EN PROYECCION_SEMANAL
                     "fecha_generacion": datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
                     "semana_actual": int(estado['semana']),
                     "total_proyectos": len(consolidador.proyectos),  # ✅ Total real
@@ -1345,7 +1382,7 @@ def render_exportar_json_simple(consolidador: ConsolidadorMultiproyecto, estado:
             # Guardar en session_state
             st.session_state.json_consolidado = json_data
             
-            st.success(f"✅ JSON v3.0.3 exportado exitosamente")
+            st.success(f"✅ JSON v3.1.0 exportado exitosamente")
             st.caption(f"📁 Guardado en: {ruta_json}")
             st.caption(f"📊 **Incluye:**")
             st.caption(f"   • Universo temporal completo (sin filtros de fecha)")
@@ -1354,6 +1391,7 @@ def render_exportar_json_simple(consolidador: ConsolidadorMultiproyecto, estado:
             st.caption(f"   • Columnas individuales de cada proyecto")
             st.caption(f"   • Métricas de performance de cobranza")
             st.caption(f"   • Detalle de hitos con fechas esperadas vs reales")
+            st.caption(f"   • ⭐ Fechas absolutas en proyeccion_semanal (filtrable por fecha)")
             
             # Botón de descarga
             json_str = json.dumps(json_data, indent=2, ensure_ascii=False)
