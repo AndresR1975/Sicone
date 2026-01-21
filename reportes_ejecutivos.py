@@ -31,6 +31,7 @@ USO:
     pdf_bytes = generar_reporte_gerencial_pdf(datos)
 """
 import copy
+import io
 from datetime import datetime, date, timedelta
 from typing import Dict, List, Optional, Tuple
 import pandas as pd
