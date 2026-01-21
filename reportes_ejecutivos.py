@@ -388,7 +388,20 @@ def generar_grafico_semaforo(datos: Dict) -> Optional[bytes]:
     (Usado en reporte multiproyecto)
     """
     try:
+        import streamlit as st
+        
         proyectos = datos.get('proyectos', [])
+        
+        # DEBUG: Mostrar qué valores tienen los proyectos
+        st.markdown("### 🚦 DEBUG generar_grafico_semaforo")
+        st.write(f"**Proyectos recibidos:** {len(proyectos)}")
+        
+        for i, p in enumerate(proyectos[:3]):  # Primeros 3
+            st.write(f"**{i+1}. {p.get('nombre')}:**")
+            st.write(f"  - ejecutado: ${p.get('ejecutado', 0)/1_000_000:.1f}M")
+            st.write(f"  - saldo: ${p.get('saldo_real_tesoreria', 0)/1_000_000:.1f}M")
+            st.write(f"  - burn_rate: ${p.get('burn_rate_real', 0)/1_000_000:.2f}M")
+            st.write(f"  - ejecucion_financiera: {len(p.get('ejecucion_financiera', []))} semanas")
         
         if not proyectos or len(proyectos) == 0:
             return None
