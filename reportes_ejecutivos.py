@@ -325,9 +325,15 @@ def generar_grafico_pie_gastos(datos: Dict) -> Optional[bytes]:
     CORREGIDO: Ahora filtra según las semanas en ejecucion_financiera
     """
     try:
+        import streamlit as st
+        
         proyectos = datos.get('proyectos', [])
         
+        st.markdown("### 🥧 DEBUG generar_grafico_pie_gastos")
+        st.write(f"**Proyectos recibidos:** {len(proyectos)}")
+        
         if not proyectos:
+            st.error("❌ Sin proyectos")
             return None
         
         # Consolidar categorías
@@ -338,9 +344,35 @@ def generar_grafico_pie_gastos(datos: Dict) -> Optional[bytes]:
             'Variables': 0
         }
         
+        for i, proyecto in enumerate(proyectos[:2]):  # Debug primeros 2 proyectos
+            nombre = proyecto.get('nombre', f'Proy {i}')
+            st.write(f"**Proyecto {i+1}: {nombre}**")
+            
+            # Verificar ejecucion_financiera
+            ejecucion_financiera = proyecto.get('ejecucion_financiera', [])
+            st.write(f"  - Tiene 'ejecucion_financiera': {'ejecucion_financiera' in proyecto}")
+            st.write(f"  - Tipo: {type(ejecucion_financiera)}")
+            st.write(f"  - Longitud: {len(ejecucion_financiera) if ejecucion_financiera else 0}")
+            
+            # Verificar data.proyeccion_semanal
+            data = proyecto.get('data', {})
+            proyeccion = data.get('proyeccion_semanal', [])
+            st.write(f"  - proyeccion_semanal: {len(proyeccion)} semanas")
+        
+        # Procesar todos los proyectos
         for proyecto in proyectos:
             # Obtener semanas filtradas de ejecucion_financiera
             ejecucion_financiera = proyecto.get('ejecucion_financiera', [])
+            
+            # Si hay ejecucion_financiera con datos, filtrar por esas semanas
+            # Si no hay (caso sin filtro), usar TODAS las semanas
+            if ejecucion_financiera and len(ejecucion_financiera) > 0:
+                # Conjunto de semanas que están en el período filtrado
+                semanas_filtradas = set(s.get('semana') for s in ejecucion_financiera if 'semana' in s)
+                st.write(f"✅ {proyecto.get('nombre')}: Filtrando por {len(semanas_filtradas)} semanas")
+            else:
+                semanas_filtradas = None  # Sin filtro: usar todas las semanas
+                st.write(f"⚠️ {proyecto.get('nombre')}: SIN FILTRO - usando todas las semanas")
             
             # Si hay ejecucion_financiera con datos, filtrar por esas semanas
             # Si no hay (caso sin filtro), usar TODAS las semanas
@@ -420,7 +452,28 @@ def generar_grafico_semaforo(datos: Dict) -> Optional[bytes]:
     (Usado en reporte multiproyecto)
     """
     try:
+        import streamlit as st
+        
         proyectos = datos.get('proyectos', [])
+        
+        st.markdown("### 🚦 DEBUG generar_grafico_semaforo")
+        st.write(f"**Proyectos recibidos:** {len(proyectos)}")
+        
+        for i, p in enumerate(proyectos[:3]):
+            nombre = p.get('nombre', f'Proy {i}')
+            saldo = p.get('saldo_real_tesoreria', 0)
+            burn_rate = p.get('burn_rate_real', 0)
+            ejecutado = p.get('ejecutado', 0)
+            ejecucion = p.get('ejecucion_financiera', [])
+            
+            cobertura = saldo / burn_rate if burn_rate > 0 else 100
+            
+            st.write(f"**{i+1}. {nombre}:**")
+            st.write(f"  - Saldo: ${saldo/1_000_000:.1f}M")
+            st.write(f"  - Burn Rate: ${burn_rate/1_000_000:.2f}M/sem")
+            st.write(f"  - Cobertura: {cobertura:.1f} semanas")
+            st.write(f"  - Ejecutado: ${ejecutado/1_000_000:.1f}M")
+            st.write(f"  - Semanas en ejecucion: {len(ejecucion)}")
         
         if not proyectos or len(proyectos) == 0:
             return None
