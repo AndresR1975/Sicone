@@ -360,9 +360,16 @@ def main():
                 
                 for semana in egresos_semanales:
                     if isinstance(semana, dict):
-                        fecha_semana = semana.get('fecha_inicio', '')
-                        if fecha_inicio_str <= fecha_semana <= fecha_fin_str:
-                            egresos_proyectos += semana.get('total', 0)
+                        fecha_semana_inicio = semana.get('fecha_inicio', '')
+                        fecha_semana_fin = semana.get('fecha_fin', '')
+                        
+                        # ✅ LÓGICA DE OVERLAP: Incluir semana si hay cualquier superposición con el período
+                        # Una semana se incluye SI:
+                        # - Empieza antes (o en) el fin del filtro  AND
+                        # - Termina después (o en) el inicio del filtro
+                        if fecha_semana_inicio and fecha_semana_fin:
+                            if fecha_semana_inicio <= fecha_fin_str and fecha_semana_fin >= fecha_inicio_str:
+                                egresos_proyectos += semana.get('total', 0)
             
             # Gastos fijos del período
             metadata = datos_sicone.get('metadata', {})
