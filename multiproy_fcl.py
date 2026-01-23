@@ -2,9 +2,20 @@
 SICONE - Módulo de Análisis Multiproyecto FCL
 Consolidación y análisis de flujo de caja para múltiples proyectos
 
-Versión: 3.2.0 PRODUCCIÓN
+Versión: 3.3.0 PRODUCCIÓN
 Fecha: 21 Enero 2025
 Autor: AI-MindNovation
+
+VERSIÓN 3.3.0 (21-Ene-2025) - OPCIÓN 1: FECHA_FIN PARA FILTRADO CORRECTO:
+- ⭐ CRÍTICO: Agregado campo `fecha_fin` en ejecucion_financiera[]
+  - Problema: Semanas que cruzan períodos se excluían incorrectamente
+  - Ejemplo: Semana 13 (31/dic/2024 - 06/ene/2025) perdía $50M en filtro 2025
+  - Solución: Calcular fecha_fin = fecha_inicio + 6 días
+  - Filtrado correcto: if fecha_inicio <= filtro_fin AND fecha_fin >= filtro_inicio
+- ⭐ CAMBIO: Campo `fecha` → `fecha_inicio` (renombrado para claridad)
+- ✅ FUNCIONAL: Conciliación ahora captura semanas de transición correctamente
+- ✅ ROBUSTO: Single source of truth - JSON tiene rango completo de cada semana
+- 📊 JSON v3.3.0: ejecucion_financiera con fecha_inicio y fecha_fin
 
 VERSIÓN 3.2.0 (21-Ene-2025) - CAMPO EJECUCION_FINANCIERA PARA REPORTES:
 - ⭐ CRÍTICO: Agregado campo `ejecucion_financiera[]` al nivel raíz de cada proyecto
@@ -1339,10 +1350,22 @@ def render_exportar_json_simple(consolidador: ConsolidadorMultiproyecto, estado:
                         egresos_acum += semana_data.get('Total_Egresos', 0)
                         ingresos_acum += semana_data.get('Ingresos_Proyectados', 0)
                         
+                        # ⭐ OPCIÓN 1: Calcular fecha_fin (fecha_inicio + 6 días)
+                        fecha_inicio_str = semana_data.get('Fecha', '')
+                        fecha_fin_str = ''
+                        if fecha_inicio_str:
+                            try:
+                                fecha_inicio_obj = datetime.strptime(fecha_inicio_str, '%Y-%m-%d').date()
+                                fecha_fin_obj = fecha_inicio_obj + timedelta(days=6)
+                                fecha_fin_str = fecha_fin_obj.strftime('%Y-%m-%d')
+                            except (ValueError, TypeError):
+                                fecha_fin_str = ''
+                        
                         # Construir registro de ejecucion_financiera
                         ejecucion_financiera.append({
                             'semana': int(semana_data.get('Semana', 0)),
-                            'fecha': semana_data.get('Fecha', ''),  # Fecha absoluta ya calculada arriba
+                            'fecha_inicio': fecha_inicio_str,  # ⭐ Renombrado para claridad
+                            'fecha_fin': fecha_fin_str,        # ⭐ NUEVO - Habilita filtrado correcto
                             'egresos_acum': float(egresos_acum),
                             'ingresos_acum': float(ingresos_acum),
                             'egresos_excel': float(semana_data.get('Total_Egresos', 0))
@@ -1373,7 +1396,7 @@ def render_exportar_json_simple(consolidador: ConsolidadorMultiproyecto, estado:
             
             json_data = {
                 "metadata": {
-                    "version": "3.2.0",  # ⭐ CON EJECUCION_FINANCIERA Y FECHAS ABSOLUTAS
+                    "version": "3.3.0",  # ⭐ CON FECHA_INICIO Y FECHA_FIN EN EJECUCION_FINANCIERA
                     "fecha_generacion": datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
                     "semana_actual": int(estado['semana']),
                     "total_proyectos": len(consolidador.proyectos),  # ✅ Total real
@@ -1419,7 +1442,7 @@ def render_exportar_json_simple(consolidador: ConsolidadorMultiproyecto, estado:
             # Guardar en session_state
             st.session_state.json_consolidado = json_data
             
-            st.success(f"✅ JSON v3.2.0 exportado exitosamente")
+            st.success(f"✅ JSON v3.3.0 exportado exitosamente")
             st.caption(f"📁 Guardado en: {ruta_json}")
             st.caption(f"📊 **Incluye:**")
             st.caption(f"   • Universo temporal completo (sin filtros de fecha)")
@@ -1428,8 +1451,8 @@ def render_exportar_json_simple(consolidador: ConsolidadorMultiproyecto, estado:
             st.caption(f"   • Columnas individuales de cada proyecto")
             st.caption(f"   • Métricas de performance de cobranza")
             st.caption(f"   • Detalle de hitos con fechas esperadas vs reales")
-            st.caption(f"   • ⭐ Campo ejecucion_financiera[] con fechas absolutas (filtrable)")
-            st.caption(f"   • ⭐ Fechas absolutas en proyeccion_semanal")
+            st.caption(f"   • ⭐ Campo ejecucion_financiera[] con fecha_inicio y fecha_fin")
+            st.caption(f"   • ⭐ Filtrado correcto de semanas que cruzan períodos")
             
             # Botón de descarga
             json_str = json.dumps(json_data, indent=2, ensure_ascii=False)

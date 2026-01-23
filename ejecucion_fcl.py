@@ -2,9 +2,17 @@
 SICONE - Módulo de Ejecución Real FCL
 Análisis de FCL Real Ejecutado vs FCL Planeado
 
-Versión: 2.4.3
-Fecha: 20 Enero 2025
+Versión: 2.4.4
+Fecha: 22 Enero 2025
 Autor: AI-MindNovation
+
+CORRECCIÓN v2.4.4 (22-Ene-2025):
+- ✅ FIX CRÍTICO: Agregado campo 'fecha_fin' en egresos_semanales
+- 🎯 SOLUCIÓN: Resuelve problema de $50M+ perdidos en conciliación
+- 📊 ESTRUCTURA: fecha_fin = fecha_inicio + 6 días (semana completa)
+- 🔧 COORDINACIÓN: Sync con multiproy_fcl v3.3.0 (ya implementado)
+- ⚡ IMPACTO: Permite filtrado correcto de semanas que cruzan períodos
+- 📝 EJEMPLO: Semana 2024-12-31 a 2025-01-06 ahora se detecta correctamente
 
 CORRECCIÓN v2.4.3 (20-Ene-2025):
 - ✅ FIX CRÍTICO: Eliminado formulario de reclasificación duplicado (que no funcionaba)
@@ -892,7 +900,11 @@ def parse_excel_egresos(
             - semana_ultima: última semana con datos
             - periodo_covered: rango de fechas
             - registros_procesados: cantidad total de registros
-            - egresos_semanales: lista de dict por semana (consolidado)
+            - egresos_semanales: lista de dict por semana con:
+                * semana: número de semana
+                * fecha_inicio: fecha de inicio (YYYY-MM-DD)
+                * fecha_fin: fecha de fin (YYYY-MM-DD) [NUEVO v2.4.4]
+                * materiales, mano_obra, variables, admin, sin_clasificar, total
             - totales_acumulados: dict con totales por categoría
             - cuentas_sin_clasificar: lista de cuentas no mapeadas
     """
@@ -1060,6 +1072,7 @@ def parse_excel_egresos(
         for semana in sorted(todos_egresos_semanales.keys()):
             datos_semana = todos_egresos_semanales[semana]
             fecha_inicio_semana = fecha_inicio_proyecto + timedelta(weeks=semana-1)
+            fecha_fin_semana = fecha_inicio_semana + timedelta(days=6)  # ⭐ NUEVO: Calcular fecha_fin
             
             total_semana = (
                 datos_semana['materiales'] + 
@@ -1072,6 +1085,7 @@ def parse_excel_egresos(
             egresos_semanales_final.append({
                 'semana': semana,
                 'fecha_inicio': fecha_inicio_semana.isoformat(),
+                'fecha_fin': fecha_fin_semana.isoformat(),  # ⭐ NUEVO: Campo fecha_fin
                 'materiales': datos_semana['materiales'],
                 'mano_obra': datos_semana['mano_obra'],
                 'variables': datos_semana['variables'],
@@ -2772,6 +2786,7 @@ def consolidar_egresos_multiples_archivos(lista_datos: List[Dict]) -> Dict:
                 egresos_consolidados[semana] = {
                     'semana': semana,
                     'fecha_inicio': egreso_semanal['fecha_inicio'],
+                    'fecha_fin': egreso_semanal.get('fecha_fin', ''),  # ⭐ NUEVO: Capturar fecha_fin
                     'materiales': 0,
                     'mano_obra': 0,
                     'variables': 0,
