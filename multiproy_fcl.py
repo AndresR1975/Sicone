@@ -2,9 +2,18 @@
 SICONE - Módulo de Análisis Multiproyecto FCL
 Consolidación y análisis de flujo de caja para múltiples proyectos
 
-Versión: 3.4.3 PRODUCCIÓN
-Fecha: 25 Enero 2025 - 19:25
+Versión: 3.4.4 PRODUCCIÓN
+Fecha: 25 Enero 2025 - 19:30
 Autor: AI-MindNovation
+
+VERSIÓN 3.4.4 (25-Ene-2025) - FIX BOTONES EDITAR/ELIMINAR:
+- 🐛 FIX: Botones de editar y eliminar no funcionaban
+  - Problema: Usar `del session_state[key]` en lugar de `= False`
+  - Solución: Replicar estructura exacta de módulo conciliación
+  - Cambio 1: Eliminar → rerun() directo sin limpiar estados
+  - Cambio 2: Editar → usar `= False` en lugar de `del`
+  - Cambio 3: Agregar `type="primary"` al botón Guardar
+- ✅ FUNCIONAL: Editar y eliminar ajustes ahora funciona correctamente
 
 VERSIÓN 3.4.3 (25-Ene-2025) - FIX INDEX ERROR:
 - 🐛 FIX: IndexError en timeline después de filtrar por fecha
@@ -3173,10 +3182,6 @@ def main():
             with col3:
                 if st.button("🗑️", key=f"del_{idx}"):
                     st.session_state.ajustes_multiproyecto.pop(idx)
-                    # Limpiar estados de edición
-                    for key in list(st.session_state.keys()):
-                        if key.startswith('editando_multi_'):
-                            del st.session_state[key]
                     st.rerun()
             
             # Formulario de edición inline
@@ -3229,7 +3234,7 @@ def main():
                     col_save, col_cancel = st.columns(2)
                     
                     with col_save:
-                        if st.form_submit_button("💾 Guardar", use_container_width=True):
+                        if st.form_submit_button("💾 Guardar", type="primary", use_container_width=True):
                             st.session_state.ajustes_multiproyecto[idx] = {
                                 "fecha": fecha_edit.isoformat(),
                                 "categoria": categoria_edit,
@@ -3240,13 +3245,13 @@ def main():
                                 "observaciones": ajuste.get('observaciones', ''),
                                 "evidencia": ajuste.get('evidencia', '')
                             }
-                            del st.session_state[f'editando_multi_{idx}']
+                            st.session_state[f'editando_multi_{idx}'] = False
                             st.success("✅ Ajuste actualizado")
                             st.rerun()
                     
                     with col_cancel:
                         if st.form_submit_button("❌ Cancelar", use_container_width=True):
-                            del st.session_state[f'editando_multi_{idx}']
+                            st.session_state[f'editando_multi_{idx}'] = False
                             st.rerun()
     else:
         st.info("No hay ajustes registrados")
