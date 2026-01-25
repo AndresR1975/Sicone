@@ -2,9 +2,17 @@
 SICONE - Módulo de Análisis Multiproyecto FCL
 Consolidación y análisis de flujo de caja para múltiples proyectos
 
-Versión: 3.4.1 PRODUCCIÓN
-Fecha: 25 Enero 2025 - 19:10
+Versión: 3.4.2 PRODUCCIÓN
+Fecha: 25 Enero 2025 - 19:20
 Autor: AI-MindNovation
+
+VERSIÓN 3.4.2 (25-Ene-2025) - TIMELINE DESDE 2025:
+- 📊 MEJORA: Timeline consolidado ahora arranca desde 01/01/2025
+  - Filtro: df[df['fecha'] >= '2025-01-01']
+  - Razón: Punto de partida conciliado con saldos reales
+  - Beneficio: Gráfico más limpio y enfocado en período actual
+- ✅ VISUAL: Elimina histórico de 2024 del timeline
+- ✅ CONSISTENTE: Alineado con ajustes de conciliación desde 01/01/2025
 
 VERSIÓN 3.4.1 (25-Ene-2025) - FIXES CRÍTICOS:
 - 🐛 FIX: Error de comparación de tipos date vs datetime64[ns] en ajustes
@@ -1495,7 +1503,7 @@ def render_exportar_json_simple(consolidador: ConsolidadorMultiproyecto, estado:
             
             json_data = {
                 "metadata": {
-                    "version": "3.4.1",  # ⭐ CON AJUSTES DE CONCILIACIÓN + FIXES
+                    "version": "3.4.2",  # ⭐ CON AJUSTES + FIXES + TIMELINE 2025
                     "fecha_generacion": datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
                     "semana_actual": int(estado['semana']),
                     "total_proyectos": len(consolidador.proyectos),  # ✅ Total real
@@ -1563,7 +1571,7 @@ def render_exportar_json_simple(consolidador: ConsolidadorMultiproyecto, estado:
             # Guardar en session_state
             st.session_state.json_consolidado = json_data
             
-            st.success(f"✅ JSON v3.4.1 exportado exitosamente")
+            st.success(f"✅ JSON v3.4.2 exportado exitosamente")
             st.caption(f"📁 Guardado en: {ruta_json}")
             st.caption(f"📊 **Incluye:**")
             st.caption(f"   • Universo temporal completo (sin filtros de fecha)")
@@ -1720,6 +1728,14 @@ def render_timeline_consolidado(consolidador: ConsolidadorMultiproyecto):
     
     if df is None or len(df) == 0:
         st.warning("No hay datos para visualizar")
+        return
+    
+    # ⭐ FILTRAR: Mostrar solo desde 01/01/2025 en adelante
+    fecha_inicio_timeline = pd.Timestamp('2025-01-01')
+    df = df[df['fecha'] >= fecha_inicio_timeline].copy()
+    
+    if len(df) == 0:
+        st.warning("No hay datos desde 01/01/2025")
         return
     
     # Convertir fechas de Pandas Timestamp a Python datetime para Plotly
