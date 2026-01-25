@@ -3101,54 +3101,9 @@ def main():
                 use_container_width=True
             )
     
-    # Formulario para agregar ajuste
-    if st.session_state.get('mostrar_form_ajuste', False):
-        with st.form("form_nuevo_ajuste"):
-            st.markdown("#### Nuevo Ajuste")
-            
-            col1, col2 = st.columns(2)
-            
-            with col1:
-                fecha_aj = st.date_input("Fecha", value=date.today())
-                categoria_aj = st.selectbox(
-                    "Categoría",
-                    ["Proyectos 2024", "Otros Ingresos", "Otros Egresos", "Ajustes Contables"]
-                )
-                concepto_aj = st.text_input("Concepto", placeholder="Ej: Pago final Proyecto X")
-            
-            with col2:
-                cuenta_aj = st.selectbox("Cuenta", ["Cuenta Bancaria", "Fiducuenta"])
-                tipo_aj = st.selectbox("Tipo", ["Ingreso", "Egreso"])
-                monto_aj = st.number_input("Monto", min_value=0, step=100_000, format="%d")
-            
-            col_submit, col_cancel = st.columns(2)
-            
-            with col_submit:
-                if st.form_submit_button("💾 Guardar", use_container_width=True):
-                    if concepto_aj and monto_aj > 0:
-                        nuevo_ajuste = {
-                            "fecha": fecha_aj.isoformat(),
-                            "categoria": categoria_aj,
-                            "concepto": concepto_aj,
-                            "cuenta": cuenta_aj,
-                            "tipo": tipo_aj,
-                            "monto": monto_aj,
-                            "observaciones": "",
-                            "evidencia": ""
-                        }
-                        st.session_state.ajustes_multiproyecto.append(nuevo_ajuste)
-                        st.session_state.mostrar_form_ajuste = False
-                        st.success("✅ Ajuste agregado")
-                        st.rerun()
-                    else:
-                        st.error("Complete todos los campos requeridos")
-            
-            with col_cancel:
-                if st.form_submit_button("❌ Cancelar", use_container_width=True):
-                    st.session_state.mostrar_form_ajuste = False
-                    st.rerun()
+    st.markdown("---")
     
-    # Tabla de ajustes
+    # ⭐ TABLA DE AJUSTES (mostrar primero, antes del formulario)
     if st.session_state.ajustes_multiproyecto:
         st.markdown("#### Ajustes Registrados")
         
@@ -3260,8 +3215,57 @@ def main():
     
     st.markdown("---")
     
-    # Paso 3: Consolidar (antes era Paso 2)
-    # Paso 3: Consolidar (antes era Paso 2)
+    # Formulario para agregar ajuste (al final, después de la tabla)
+    if st.session_state.get('mostrar_form_ajuste', False):
+        with st.form("form_nuevo_ajuste"):
+            st.markdown("#### Nuevo Ajuste")
+            
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                fecha_aj = st.date_input("Fecha", value=date.today())
+                categoria_aj = st.selectbox(
+                    "Categoría",
+                    ["Proyectos 2024", "Otros Ingresos", "Otros Egresos", "Ajustes Contables"]
+                )
+                concepto_aj = st.text_input("Concepto", placeholder="Ej: Pago final Proyecto X")
+            
+            with col2:
+                cuenta_aj = st.selectbox("Cuenta", ["Cuenta Bancaria", "Fiducuenta"])
+                tipo_aj = st.selectbox("Tipo", ["Ingreso", "Egreso"])
+                monto_aj = st.number_input("Monto", min_value=0, step=100_000, format="%d")
+            
+            col_submit, col_cancel = st.columns(2)
+            
+            with col_submit:
+                if st.form_submit_button("💾 Guardar", use_container_width=True):
+                    if concepto_aj and monto_aj > 0:
+                        nuevo_ajuste = {
+                            "fecha": fecha_aj.isoformat(),
+                            "categoria": categoria_aj,
+                            "concepto": concepto_aj,
+                            "cuenta": cuenta_aj,
+                            "tipo": tipo_aj,
+                            "monto": monto_aj,
+                            "observaciones": "",
+                            "evidencia": ""
+                        }
+                        st.session_state.ajustes_multiproyecto.append(nuevo_ajuste)
+                        st.session_state.mostrar_form_ajuste = False
+                        st.success("✅ Ajuste agregado")
+                        st.rerun()
+                    else:
+                        st.error("Complete todos los campos requeridos")
+            
+            with col_cancel:
+                if st.form_submit_button("❌ Cancelar", use_container_width=True):
+                    st.session_state.mostrar_form_ajuste = False
+                    st.rerun()
+    
+    
+    st.markdown("---")
+    
+    # Paso 3: Consolidar y Analizar
     st.markdown("## 🔄 Paso 3: Consolidar y Analizar")
     
     if st.button("🚀 Consolidar y Analizar", type="primary", use_container_width=True):
