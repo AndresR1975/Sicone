@@ -2,9 +2,36 @@
 SICONE - Módulo de Análisis Multiproyecto FCL
 Consolidación y análisis de flujo de caja para múltiples proyectos
 
-Versión: 3.3.0 PRODUCCIÓN
-Fecha: 21 Enero 2025
+Versión: 3.4.0 PRODUCCIÓN
+Fecha: 25 Enero 2025
 Autor: AI-MindNovation
+
+VERSIÓN 3.4.0 (25-Ene-2025) - AJUSTES DE CONCILIACIÓN INTEGRADOS:
+- ⭐ NUEVO: Sistema de ajustes de conciliación integrado al multiproyectos
+  - Saldos iniciales configurables: Cuenta Bancaria + Fiducuenta (01/01/2025)
+  - Ajuste inicial AUTOMÁTICO: Sistema iguala saldo SICONE con saldo real
+  - Ajustes adicionales: Ingresos/egresos no modelados (proyectos 2024, otros conceptos)
+  - Persistencia: Ajustes guardados en session_state y exportados en JSON
+  - UI: Nueva sección Paso 2 "Configuración Financiera" con gestión de ajustes
+- ⭐ SECUENCIA ACTUALIZADA:
+  - Paso 1: Cargar proyectos JSON
+  - Paso 2 (NUEVO): Configurar saldos reales + ajustes adicionales
+  - Paso 3: Consolidar y analizar (antes Paso 2)
+- ⭐ CÁLCULO DE AJUSTE INICIAL:
+  - Busca saldo SICONE al 01/01/2025 desde proyectos cargados
+  - Calcula: ajuste_inicial = saldo_sicone - saldo_real
+  - Aplica ajuste a TODAS las semanas para igualar realidad
+- ⭐ VISUALIZACIÓN:
+  - Dashboard muestra ajuste inicial calculado
+  - Resumen de ajustes adicionales aplicados
+  - Diferencia entre saldo SICONE vs saldo real explicada
+- ⭐ EXPORTACIÓN JSON:
+  - Nueva sección "ajustes_conciliacion" en JSON consolidado
+  - Incluye: saldos_iniciales, ajuste_inicial, ajustes_adicionales, resumen
+  - Permite trazabilidad completa del punto de partida
+- ✅ CONCILIADO: Punto de partida ahora es 100% conciliado con realidad
+- ✅ TRAZABILIDAD: Auditoría completa de saldo inicial y ajustes
+- 📊 JSON v3.4.0: Con ajustes de conciliación completos
 
 VERSIÓN 3.3.0 (21-Ene-2025) - OPCIÓN 1: FECHA_FIN PARA FILTRADO CORRECTO:
 - ⭐ CRÍTICO: Agregado campo `fecha_fin` en ejecucion_financiera[]
@@ -269,6 +296,12 @@ class ConsolidadorMultiproyecto:
         self.fecha_inicio_empresa = None
         self.fecha_actual = date.today()
         self.semana_actual_consolidada = None
+        
+        # ⭐ NUEVO: Saldos iniciales y ajustes para conciliación
+        self.saldo_banco_inicial = 550_820_851  # Default, se actualiza antes de consolidar
+        self.saldo_fiducuenta_inicial = 310_617_303  # Default, se actualiza antes de consolidar
+        self.ajustes_periodo = []  # Lista de ajustes adicionales del período
+        self.ajuste_inicial_calculado = 0  # Se calcula en consolidar()
     
     def cargar_proyecto(self, ruta_json: str) -> bool:
         """
@@ -466,6 +499,60 @@ class ConsolidadorMultiproyecto:
         # st.caption(f"   • Semana actual: {self.semana_actual_consolidada}")
         
         self.df_consolidado = df_consolidado
+        
+        # ⭐ NUEVO: Calcular y aplicar ajuste inicial + ajustes adicionales
+        self._aplicar_ajustes_conciliacion()
+    
+    def _aplicar_ajustes_conciliacion(self):
+        """
+        Calcula y aplica ajuste inicial automático + ajustes adicionales del período
+        Similar a lógica del módulo de conciliación
+        """
+        if self.df_consolidado is None or len(self.df_consolidado) == 0:
+            return
+        
+        # PASO 1: Calcular saldo SICONE al 01/01/2025
+        fecha_inicio_2025 = date(2025, 1, 1)
+        
+        # Buscar la fila correspondiente a 01/01/2025
+        df_2025 = self.df_consolidado[self.df_consolidado['fecha'] == fecha_inicio_2025]
+        
+        if len(df_2025) > 0:
+            saldo_sicone_01_01_2025 = df_2025['saldo_consolidado'].iloc[0]
+        else:
+            # Si no hay fila exacta de 01/01/2025, buscar la más cercana anterior
+            df_antes = self.df_consolidado[self.df_consolidado['fecha'] < fecha_inicio_2025]
+            if len(df_antes) > 0:
+                saldo_sicone_01_01_2025 = df_antes['saldo_consolidado'].iloc[-1]
+            else:
+                # Si no hay datos antes de 2025, usar el primer saldo
+                saldo_sicone_01_01_2025 = self.df_consolidado['saldo_consolidado'].iloc[0]
+        
+        # PASO 2: Calcular ajuste inicial automático
+        saldo_real_01_01_2025 = self.saldo_banco_inicial + self.saldo_fiducuenta_inicial
+        self.ajuste_inicial_calculado = saldo_sicone_01_01_2025 - saldo_real_01_01_2025
+        
+        # PASO 3: Aplicar ajuste inicial a TODAS las semanas
+        # Esto iguala el saldo SICONE con el saldo real al 01/01/2025
+        self.df_consolidado['saldo_consolidado'] = self.df_consolidado['saldo_consolidado'] - self.ajuste_inicial_calculado
+        self.df_consolidado['saldo_consolidado_ajustado'] = self.df_consolidado['saldo_consolidado_ajustado'] - self.ajuste_inicial_calculado
+        
+        # PASO 4: Calcular impacto de ajustes adicionales del período
+        if self.ajustes_periodo:
+            # Sumar ajustes por tipo
+            ajustes_ingresos = sum(a['monto'] for a in self.ajustes_periodo if a['tipo'] == 'Ingreso')
+            ajustes_egresos = sum(a['monto'] for a in self.ajustes_periodo if a['tipo'] == 'Egreso')
+            ajustes_neto = ajustes_ingresos - ajustes_egresos
+            
+            # Aplicar ajustes netos a semanas desde 01/01/2025 en adelante
+            # Los ajustes se aplican de forma acumulativa desde la fecha de inicio 2025
+            mask_desde_2025 = self.df_consolidado['fecha'] >= fecha_inicio_2025
+            self.df_consolidado.loc[mask_desde_2025, 'saldo_consolidado'] += ajustes_neto
+            self.df_consolidado.loc[mask_desde_2025, 'saldo_consolidado_ajustado'] += ajustes_neto
+        
+        # PASO 5: Asegurar que saldos no sean negativos después de ajustes
+        self.df_consolidado['saldo_consolidado'] = self.df_consolidado['saldo_consolidado'].clip(lower=0)
+        self.df_consolidado['saldo_consolidado_ajustado'] = self.df_consolidado['saldo_consolidado_ajustado'].clip(lower=0)
     
     def _determinar_rango_temporal(self):
         """Determina el rango temporal para la consolidación"""
@@ -1396,7 +1483,7 @@ def render_exportar_json_simple(consolidador: ConsolidadorMultiproyecto, estado:
             
             json_data = {
                 "metadata": {
-                    "version": "3.3.0",  # ⭐ CON FECHA_INICIO Y FECHA_FIN EN EJECUCION_FINANCIERA
+                    "version": "3.4.0",  # ⭐ CON AJUSTES DE CONCILIACIÓN
                     "fecha_generacion": datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
                     "semana_actual": int(estado['semana']),
                     "total_proyectos": len(consolidador.proyectos),  # ✅ Total real
@@ -1404,7 +1491,29 @@ def render_exportar_json_simple(consolidador: ConsolidadorMultiproyecto, estado:
                     "semanas_margen": int(estado['semanas_margen']),
                     "semanas_futuro": int(consolidador.semanas_futuro),
                     "incluye_ingresos_reales": True,  # ⭐ NUEVO: Indicador de soporte de ingresos reales
-                    "universo_temporal_completo": True  # ⭐ NUEVO: JSON contiene TODO sin filtrar
+                    "universo_temporal_completo": True,  # ⭐ NUEVO: JSON contiene TODO sin filtrar
+                    "incluye_ajustes_conciliacion": True  # ⭐ NUEVO: JSON incluye ajustes de conciliación
+                },
+                "ajustes_conciliacion": {  # ⭐ NUEVO: Sección de ajustes
+                    "saldos_iniciales": {
+                        "fecha_referencia": "2025-01-01",
+                        "cuenta_bancaria": float(consolidador.saldo_banco_inicial),
+                        "fiducuenta": float(consolidador.saldo_fiducuenta_inicial),
+                        "total_real": float(consolidador.saldo_banco_inicial + consolidador.saldo_fiducuenta_inicial),
+                        "saldo_sicone_calculado": float((consolidador.saldo_banco_inicial + consolidador.saldo_fiducuenta_inicial) + consolidador.ajuste_inicial_calculado)
+                    },
+                    "ajuste_inicial": {
+                        "monto": float(consolidador.ajuste_inicial_calculado),
+                        "tipo": "Egreso" if consolidador.ajuste_inicial_calculado > 0 else "Ingreso",
+                        "descripcion": "Ajuste automático para igualar saldo SICONE con saldo real al 01/01/2025"
+                    },
+                    "ajustes_adicionales": consolidador.ajustes_periodo.copy() if consolidador.ajustes_periodo else [],
+                    "resumen_ajustes": {
+                        "total_ajustes": len(consolidador.ajustes_periodo),
+                        "ingresos_adicionales": float(sum(a['monto'] for a in consolidador.ajustes_periodo if a['tipo'] == 'Ingreso')),
+                        "egresos_adicionales": float(sum(a['monto'] for a in consolidador.ajustes_periodo if a['tipo'] == 'Egreso')),
+                        "neto_ajustes": float(sum(a['monto'] for a in consolidador.ajustes_periodo if a['tipo'] == 'Ingreso') - sum(a['monto'] for a in consolidador.ajustes_periodo if a['tipo'] == 'Egreso'))
+                    }
                 },
                 "estado_caja": {
                     "saldo_total": float(estado['saldo_total']),
@@ -1442,7 +1551,7 @@ def render_exportar_json_simple(consolidador: ConsolidadorMultiproyecto, estado:
             # Guardar en session_state
             st.session_state.json_consolidado = json_data
             
-            st.success(f"✅ JSON v3.3.0 exportado exitosamente")
+            st.success(f"✅ JSON v3.4.0 exportado exitosamente")
             st.caption(f"📁 Guardado en: {ruta_json}")
             st.caption(f"📊 **Incluye:**")
             st.caption(f"   • Universo temporal completo (sin filtros de fecha)")
@@ -1453,6 +1562,7 @@ def render_exportar_json_simple(consolidador: ConsolidadorMultiproyecto, estado:
             st.caption(f"   • Detalle de hitos con fechas esperadas vs reales")
             st.caption(f"   • ⭐ Campo ejecucion_financiera[] con fecha_inicio y fecha_fin")
             st.caption(f"   • ⭐ Filtrado correcto de semanas que cruzan períodos")
+            st.caption(f"   • ⭐ Ajustes de conciliación (saldos iniciales + ajuste automático + ajustes adicionales)")
             
             # Botón de descarga
             json_str = json.dumps(json_data, indent=2, ensure_ascii=False)
@@ -2797,6 +2907,15 @@ def render_performance_cobranza(consolidador: ConsolidadorMultiproyecto):
 
 def main():
     """Función principal del módulo multiproyecto"""
+    # Inicializar session_state para ajustes y saldos
+    if 'ajustes_multiproyecto' not in st.session_state:
+        st.session_state.ajustes_multiproyecto = []
+    
+    if 'saldo_banco_inicial' not in st.session_state:
+        st.session_state.saldo_banco_inicial = 550_820_851
+    
+    if 'saldo_fiducuenta_inicial' not in st.session_state:
+        st.session_state.saldo_fiducuenta_inicial = 310_617_303
     
     st.title("🏢 SICONE - Análisis Multiproyecto FCL")
     st.caption("Consolidación y análisis de flujo de caja empresarial")
@@ -2898,10 +3017,186 @@ def main():
     
     st.markdown("---")
     
-    # Paso 2: Consolidar
-    if st.button("🔄 Consolidar y Analizar", type="primary", use_container_width=True):
+    # ═══════════════════════════════════════════════════════════
+    # PASO 2: CONFIGURACIÓN FINANCIERA (NUEVO)
+    # ═══════════════════════════════════════════════════════════
+    st.markdown("## 💰 Paso 2: Configuración Financiera")
+    
+    # Subsección A: Saldos Iniciales
+    st.markdown("### 📅 Saldos Iniciales (01/01/2025)")
+    
+    col_banco, col_fidu = st.columns(2)
+    
+    with col_banco:
+        st.session_state.saldo_banco_inicial = st.number_input(
+            "Cuenta Bancaria",
+            min_value=0,
+            value=st.session_state.saldo_banco_inicial,
+            step=1_000_000,
+            format="%d",
+            help="Saldo real según extracto bancario al 01/01/2025",
+            key="input_saldo_banco"
+        )
+    
+    with col_fidu:
+        st.session_state.saldo_fiducuenta_inicial = st.number_input(
+            "Fiducuenta",
+            min_value=0,
+            value=st.session_state.saldo_fiducuenta_inicial,
+            step=1_000_000,
+            format="%d",
+            help="Saldo real según extracto fiducuenta al 01/01/2025",
+            key="input_saldo_fidu"
+        )
+    
+    saldo_total_real = st.session_state.saldo_banco_inicial + st.session_state.saldo_fiducuenta_inicial
+    
+    st.metric("**Total Saldos Iniciales**", f"${saldo_total_real:,.0f}")
+    st.caption("ℹ️ Fuente: Extractos bancarios 01/01/2025")
+    
+    st.markdown("---")
+    
+    # Subsección B: Ajustes Adicionales
+    st.markdown("### 🔧 Ajustes Adicionales del Período")
+    
+    st.info(
+        "**⚠️ IMPORTANTE:**\n\n"
+        "• El sistema calcula AUTOMÁTICAMENTE el ajuste inicial para igualar el Saldo Inicial Real con el Saldo Inicial SICONE\n"
+        "• NO incluyas una \"diferencia histórica inicial\" en el JSON\n"
+        "• Solo registra aquí los ajustes ADICIONALES del período (ingresos/egresos no modelados, etc.)"
+    )
+    
+    # Botones de gestión
+    col_imp, col_agr, col_exp = st.columns(3)
+    
+    with col_imp:
+        uploaded_ajustes = st.file_uploader(
+            "📤 Importar",
+            type=['json'],
+            help="Importar ajustes desde JSON",
+            key="uploader_ajustes"
+        )
+        if uploaded_ajustes:
+            try:
+                ajustes_data = json.load(uploaded_ajustes)
+                if isinstance(ajustes_data, list):
+                    st.session_state.ajustes_multiproyecto = ajustes_data
+                    st.success(f"✅ {len(ajustes_data)} ajuste(s) importado(s)")
+                    st.rerun()
+            except Exception as e:
+                st.error(f"Error al importar: {str(e)}")
+    
+    with col_agr:
+        if st.button("➕ Agregar", use_container_width=True):
+            st.session_state.mostrar_form_ajuste = True
+    
+    with col_exp:
+        if st.button("📥 Exportar", use_container_width=True, disabled=len(st.session_state.ajustes_multiproyecto)==0):
+            json_ajustes = json.dumps(st.session_state.ajustes_multiproyecto, indent=2, ensure_ascii=False)
+            st.download_button(
+                label="💾 Descargar JSON",
+                data=json_ajustes,
+                file_name=f"ajustes_multiproyecto_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json",
+                mime="application/json",
+                use_container_width=True
+            )
+    
+    # Formulario para agregar ajuste
+    if st.session_state.get('mostrar_form_ajuste', False):
+        with st.form("form_nuevo_ajuste"):
+            st.markdown("#### Nuevo Ajuste")
+            
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                fecha_aj = st.date_input("Fecha", value=date.today())
+                categoria_aj = st.selectbox(
+                    "Categoría",
+                    ["Proyectos 2024", "Otros Ingresos", "Otros Egresos", "Ajustes Contables"]
+                )
+                concepto_aj = st.text_input("Concepto", placeholder="Ej: Pago final Proyecto X")
+            
+            with col2:
+                cuenta_aj = st.selectbox("Cuenta", ["Cuenta Bancaria", "Fiducuenta"])
+                tipo_aj = st.selectbox("Tipo", ["Ingreso", "Egreso"])
+                monto_aj = st.number_input("Monto", min_value=0, step=100_000, format="%d")
+            
+            col_submit, col_cancel = st.columns(2)
+            
+            with col_submit:
+                if st.form_submit_button("💾 Guardar", use_container_width=True):
+                    if concepto_aj and monto_aj > 0:
+                        nuevo_ajuste = {
+                            "fecha": fecha_aj.isoformat(),
+                            "categoria": categoria_aj,
+                            "concepto": concepto_aj,
+                            "cuenta": cuenta_aj,
+                            "tipo": tipo_aj,
+                            "monto": monto_aj,
+                            "observaciones": "",
+                            "evidencia": ""
+                        }
+                        st.session_state.ajustes_multiproyecto.append(nuevo_ajuste)
+                        st.session_state.mostrar_form_ajuste = False
+                        st.success("✅ Ajuste agregado")
+                        st.rerun()
+                    else:
+                        st.error("Complete todos los campos requeridos")
+            
+            with col_cancel:
+                if st.form_submit_button("❌ Cancelar", use_container_width=True):
+                    st.session_state.mostrar_form_ajuste = False
+                    st.rerun()
+    
+    # Tabla de ajustes
+    if st.session_state.ajustes_multiproyecto:
+        st.markdown("#### Ajustes Registrados")
+        
+        # Calcular totales
+        total_ing = sum(a['monto'] for a in st.session_state.ajustes_multiproyecto if a['tipo'] == 'Ingreso')
+        total_egr = sum(a['monto'] for a in st.session_state.ajustes_multiproyecto if a['tipo'] == 'Egreso')
+        total_neto = total_ing - total_egr
+        
+        col_ing, col_egr, col_neto = st.columns(3)
+        col_ing.metric("Ingresos", f"${total_ing:,.0f}")
+        col_egr.metric("Egresos", f"${total_egr:,.0f}")
+        col_neto.metric("Neto", f"${total_neto:,.0f}")
+        
+        # Mostrar tabla
+        for idx, ajuste in enumerate(st.session_state.ajustes_multiproyecto):
+            with st.expander(f"{'📈' if ajuste['tipo']=='Ingreso' else '📉'} {ajuste['concepto']} - ${ajuste['monto']:,.0f}"):
+                col_info, col_actions = st.columns([3, 1])
+                
+                with col_info:
+                    st.write(f"**Fecha:** {ajuste['fecha']}")
+                    st.write(f"**Categoría:** {ajuste['categoria']}")
+                    st.write(f"**Cuenta:** {ajuste['cuenta']}")
+                    st.write(f"**Tipo:** {ajuste['tipo']}")
+                
+                with col_actions:
+                    if st.button("🗑️ Eliminar", key=f"del_{idx}"):
+                        st.session_state.ajustes_multiproyecto.pop(idx)
+                        st.rerun()
+    else:
+        st.info("No hay ajustes registrados")
+    
+    st.markdown("---")
+    
+    # Paso 3: Consolidar (antes era Paso 2)
+    # Paso 3: Consolidar (antes era Paso 2)
+    st.markdown("## 🔄 Paso 3: Consolidar y Analizar")
+    
+    if st.button("🚀 Consolidar y Analizar", type="primary", use_container_width=True):
         with st.spinner("Consolidando datos..."):
+            # Aplicar saldos y ajustes al consolidador antes de consolidar
+            consolidador.saldo_banco_inicial = st.session_state.saldo_banco_inicial
+            consolidador.saldo_fiducuenta_inicial = st.session_state.saldo_fiducuenta_inicial
+            consolidador.ajustes_periodo = st.session_state.ajustes_multiproyecto.copy()
+            
+            # Consolidar
             consolidador.consolidar()
+            
+            # Guardar en session_state
             st.session_state.consolidador = consolidador
             st.session_state.gastos_fijos_mensuales = gastos_fijos_mensuales
             st.session_state.semanas_futuro = semanas_futuro
@@ -2996,6 +3291,46 @@ def main():
         
         st.markdown("---")
         st.markdown("## 📊 Dashboard Consolidado")
+        
+        # ⭐ NUEVO: Mostrar información de ajustes de conciliación
+        if consolidador_previo.ajuste_inicial_calculado != 0 or len(consolidador_previo.ajustes_periodo) > 0:
+            with st.expander("🔧 Ajustes de Conciliación Aplicados", expanded=False):
+                st.markdown("#### Ajuste Inicial Automático")
+                
+                saldo_real_total = consolidador_previo.saldo_banco_inicial + consolidador_previo.saldo_fiducuenta_inicial
+                saldo_sicone_01_01 = saldo_real_total + consolidador_previo.ajuste_inicial_calculado
+                
+                col1, col2, col3 = st.columns(3)
+                col1.metric("Saldo SICONE (01/01/2025)", f"${saldo_sicone_01_01:,.0f}")
+                col2.metric("Saldo Real (01/01/2025)", f"${saldo_real_total:,.0f}")
+                col3.metric(
+                    "Ajuste Inicial Calculado", 
+                    f"${abs(consolidador_previo.ajuste_inicial_calculado):,.0f}",
+                    delta=f"{'Ingreso' if consolidador_previo.ajuste_inicial_calculado > 0 else 'Egreso'} no capturado"
+                )
+                
+                st.caption(
+                    "ℹ️ El sistema ajustó automáticamente el Saldo Inicial SICONE para igualarlo "
+                    "con el Saldo Inicial Real de las cuentas bancarias."
+                )
+                
+                # Mostrar ajustes adicionales si existen
+                if len(consolidador_previo.ajustes_periodo) > 0:
+                    st.markdown("---")
+                    st.markdown("#### Ajustes Adicionales del Período")
+                    
+                    total_ing_aj = sum(a['monto'] for a in consolidador_previo.ajustes_periodo if a['tipo'] == 'Ingreso')
+                    total_egr_aj = sum(a['monto'] for a in consolidador_previo.ajustes_periodo if a['tipo'] == 'Egreso')
+                    total_neto_aj = total_ing_aj - total_egr_aj
+                    
+                    col_aj1, col_aj2, col_aj3 = st.columns(3)
+                    col_aj1.metric("Ingresos Adicionales", f"${total_ing_aj:,.0f}")
+                    col_aj2.metric("Egresos Adicionales", f"${total_egr_aj:,.0f}")
+                    col_aj3.metric("Neto Ajustes", f"${total_neto_aj:,.0f}")
+                    
+                    st.caption(f"📝 {len(consolidador_previo.ajustes_periodo)} ajuste(s) aplicado(s)")
+                
+                st.markdown("---")
         
         # Renderizar secciones del dashboard
         render_metricas_principales(estado)
