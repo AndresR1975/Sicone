@@ -2,9 +2,16 @@
 SICONE - Módulo de Análisis Multiproyecto FCL
 Consolidación y análisis de flujo de caja para múltiples proyectos
 
-Versión: 3.4.2 PRODUCCIÓN
-Fecha: 25 Enero 2025 - 19:20
+Versión: 3.4.3 PRODUCCIÓN
+Fecha: 25 Enero 2025 - 19:25
 Autor: AI-MindNovation
+
+VERSIÓN 3.4.3 (25-Ene-2025) - FIX INDEX ERROR:
+- 🐛 FIX: IndexError en timeline después de filtrar por fecha
+  - Problema: Índices del df filtrado no coincidían con array fechas_py
+  - Solución: df.reset_index(drop=True) después del filtro
+  - Línea: 1741
+- ✅ FUNCIONAL: Timeline desde 2025 sin errores
 
 VERSIÓN 3.4.2 (25-Ene-2025) - TIMELINE DESDE 2025:
 - 📊 MEJORA: Timeline consolidado ahora arranca desde 01/01/2025
@@ -1503,7 +1510,7 @@ def render_exportar_json_simple(consolidador: ConsolidadorMultiproyecto, estado:
             
             json_data = {
                 "metadata": {
-                    "version": "3.4.2",  # ⭐ CON AJUSTES + FIXES + TIMELINE 2025
+                    "version": "3.4.3",  # ⭐ TIMELINE 2025 FUNCIONAL
                     "fecha_generacion": datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
                     "semana_actual": int(estado['semana']),
                     "total_proyectos": len(consolidador.proyectos),  # ✅ Total real
@@ -1737,6 +1744,9 @@ def render_timeline_consolidado(consolidador: ConsolidadorMultiproyecto):
     if len(df) == 0:
         st.warning("No hay datos desde 01/01/2025")
         return
+    
+    # ⭐ FIX: Resetear índice después del filtro
+    df = df.reset_index(drop=True)
     
     # Convertir fechas de Pandas Timestamp a Python datetime para Plotly
     fechas_py = []
