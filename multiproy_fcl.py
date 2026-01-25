@@ -2,9 +2,21 @@
 SICONE - Módulo de Análisis Multiproyecto FCL
 Consolidación y análisis de flujo de caja para múltiples proyectos
 
-Versión: 3.4.0 PRODUCCIÓN
-Fecha: 25 Enero 2025
+Versión: 3.4.1 PRODUCCIÓN
+Fecha: 25 Enero 2025 - 19:10
 Autor: AI-MindNovation
+
+VERSIÓN 3.4.1 (25-Ene-2025) - FIXES CRÍTICOS:
+- 🐛 FIX: Error de comparación de tipos date vs datetime64[ns] en ajustes
+  - Problema: TypeError al consolidar - comparación entre date() y pandas datetime
+  - Solución: Usar pd.Timestamp('2025-01-01') en lugar de date(2025, 1, 1)
+  - Afectaba: Método _aplicar_ajustes_conciliacion() líneas 518, 524, 549
+- 🐛 FIX: Ajustes importados no se mostraban inmediatamente
+  - Problema: Tabla de ajustes no se renderizaba después de importar JSON
+  - Solución: Remover st.rerun() innecesario después de import
+  - Ahora: Tabla se muestra inmediatamente sin necesidad de salir/volver
+- ✅ FUNCIONAL: Importar ajustes → Ver tabla → Editar → Consolidar
+- ✅ ESTABLE: Comparaciones de fecha correctas en todo el módulo
 
 VERSIÓN 3.4.0 (25-Ene-2025) - AJUSTES DE CONCILIACIÓN INTEGRADOS:
 - ⭐ NUEVO: Sistema de ajustes de conciliación integrado al multiproyectos
@@ -31,7 +43,7 @@ VERSIÓN 3.4.0 (25-Ene-2025) - AJUSTES DE CONCILIACIÓN INTEGRADOS:
   - Permite trazabilidad completa del punto de partida
 - ✅ CONCILIADO: Punto de partida ahora es 100% conciliado con realidad
 - ✅ TRAZABILIDAD: Auditoría completa de saldo inicial y ajustes
-- 📊 JSON v3.4.0: Con ajustes de conciliación completos
+- 📊 JSON v3.4.1: Con ajustes de conciliación completos + fixes de tipos de fecha
 
 VERSIÓN 3.3.0 (21-Ene-2025) - OPCIÓN 1: FECHA_FIN PARA FILTRADO CORRECTO:
 - ⭐ CRÍTICO: Agregado campo `fecha_fin` en ejecucion_financiera[]
@@ -512,7 +524,7 @@ class ConsolidadorMultiproyecto:
             return
         
         # PASO 1: Calcular saldo SICONE al 01/01/2025
-        fecha_inicio_2025 = date(2025, 1, 1)
+        fecha_inicio_2025 = pd.Timestamp('2025-01-01')  # ⭐ FIX: Usar pd.Timestamp para compatibilidad
         
         # Buscar la fila correspondiente a 01/01/2025
         df_2025 = self.df_consolidado[self.df_consolidado['fecha'] == fecha_inicio_2025]
@@ -1483,7 +1495,7 @@ def render_exportar_json_simple(consolidador: ConsolidadorMultiproyecto, estado:
             
             json_data = {
                 "metadata": {
-                    "version": "3.4.0",  # ⭐ CON AJUSTES DE CONCILIACIÓN
+                    "version": "3.4.1",  # ⭐ CON AJUSTES DE CONCILIACIÓN + FIXES
                     "fecha_generacion": datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
                     "semana_actual": int(estado['semana']),
                     "total_proyectos": len(consolidador.proyectos),  # ✅ Total real
@@ -1551,7 +1563,7 @@ def render_exportar_json_simple(consolidador: ConsolidadorMultiproyecto, estado:
             # Guardar en session_state
             st.session_state.json_consolidado = json_data
             
-            st.success(f"✅ JSON v3.4.0 exportado exitosamente")
+            st.success(f"✅ JSON v3.4.1 exportado exitosamente")
             st.caption(f"📁 Guardado en: {ruta_json}")
             st.caption(f"📊 **Incluye:**")
             st.caption(f"   • Universo temporal completo (sin filtros de fecha)")
@@ -3082,7 +3094,7 @@ def main():
                 if isinstance(ajustes_data, list):
                     st.session_state.ajustes_multiproyecto = ajustes_data
                     st.success(f"✅ {len(ajustes_data)} ajuste(s) importado(s)")
-                    st.rerun()
+                    # ⭐ FIX: No hacer rerun, dejar que continúe y muestre la tabla
             except Exception as e:
                 st.error(f"Error al importar: {str(e)}")
     
