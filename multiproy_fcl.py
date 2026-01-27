@@ -2,9 +2,17 @@
 SICONE - Módulo de Análisis Multiproyecto FCL
 Consolidación y análisis de flujo de caja para múltiples proyectos
 
-Versión: 3.4.7 PRODUCCIÓN
-Fecha: 26 Enero 2025 - 08:00
+Versión: 3.4.8 DEBUG
+Fecha: 26 Enero 2025 - 09:00
 Autor: AI-MindNovation
+
+VERSIÓN 3.4.8 (26-Ene-2025) - MENSAJES DE DEBUG:
+- 🔍 DEBUG: Mensajes agregados para diagnosticar flujo
+  - Debug en carga de archivos JSON
+  - Debug en consolidador de session_state
+  - Debug en sección de ajustes
+  - Debug en botones editar/eliminar
+- ⚠️ TEMPORAL: Para identificar problema exacto
 
 VERSIÓN 3.4.7 (26-Ene-2025) - FIX CONSOLIDADOR EN SESSION_STATE:
 - 🐛 FIX RAÍZ DEL PROBLEMA: Consolidador se recreaba en cada rerun
@@ -3051,6 +3059,9 @@ def main():
     # Paso 1: Cargar proyectos
     st.markdown("## 📥 Paso 1: Cargar Proyectos")
     
+    # ⭐ DEBUG
+    st.caption(f"🔍 DEBUG: archivos_json={'Sí' if archivos_json else 'No'}, consolidador_en_session={'Sí' if 'consolidador_multiproyecto' in st.session_state else 'No'}")
+    
     archivos_json = st.file_uploader(
         "Seleccione los archivos JSON completos de los proyectos",
         type=['json'],
@@ -3060,8 +3071,10 @@ def main():
     
     # ⭐ Si hay archivos, cargar y guardar en session_state
     if archivos_json:
+        st.caption(f"🔍 DEBUG: Entrando a bloque de carga, {len(archivos_json)} archivo(s)")
         # Solo recargar si cambió el número de archivos
         if 'archivos_cargados_count' not in st.session_state or st.session_state.archivos_cargados_count != len(archivos_json):
+            st.caption("🔍 DEBUG: Cargando proyectos...")
             # Cargar proyectos
             consolidador = ConsolidadorMultiproyecto(
                 semanas_futuro=semanas_futuro,
@@ -3088,13 +3101,19 @@ def main():
             st.session_state.consolidador_multiproyecto = consolidador
             st.session_state.archivos_cargados_count = len(archivos_json)
             st.success(f"✅ {proyectos_cargados} proyecto(s) cargado(s) exitosamente")
+            st.caption("🔍 DEBUG: Guardado en session_state")
+        else:
+            st.caption("🔍 DEBUG: Ya cargado, usando de session_state")
     
     # ⭐ Usar consolidador de session_state o mostrar mensaje
     if 'consolidador_multiproyecto' not in st.session_state:
         st.info("👆 Cargue 2 o más archivos JSON para comenzar el análisis")
+        st.caption("🔍 DEBUG: No hay consolidador, saliendo con return")
         return
     
+    st.caption("🔍 DEBUG: Usando consolidador de session_state")
     consolidador = st.session_state.consolidador_multiproyecto
+    st.caption(f"🔍 DEBUG: Consolidador tiene {len(consolidador.proyectos)} proyectos")
     
     # Mostrar lista de proyectos en sidebar
     with st.sidebar:
@@ -3145,6 +3164,8 @@ def main():
     
     # Subsección B: Ajustes Adicionales
     st.markdown("### 🔧 Ajustes Adicionales del Período")
+    
+    st.caption(f"🔍 DEBUG: Llegué a sección de ajustes. Ajustes actuales: {len(st.session_state.ajustes_multiproyecto)}")
     
     st.info(
         "**⚠️ IMPORTANTE:**\n\n"
@@ -3214,10 +3235,12 @@ def main():
                 st.text(f"{emoji} #{idx+1}: {ajuste['concepto'][:50]} - {ajuste['tipo']} ${ajuste['monto']:,.0f}")
             with col2:
                 if st.button("✏️", key=f"edit_{idx}"):
+                    st.caption(f"🔍 DEBUG: Click en editar #{idx}")
                     st.session_state[f'editando_multi_{idx}'] = True
                     st.rerun()
             with col3:
                 if st.button("🗑️", key=f"del_{idx}"):
+                    st.caption(f"🔍 DEBUG: Click en eliminar #{idx}")
                     st.session_state.ajustes_multiproyecto.pop(idx)
                     st.rerun()
             
