@@ -2,9 +2,19 @@
 SICONE - Módulo de Análisis Multiproyecto FCL
 Consolidación y análisis de flujo de caja para múltiples proyectos
 
-Versión: 3.4.8 DEBUG
-Fecha: 26 Enero 2025 - 09:00
+Versión: 3.4.9 DEBUG
+Fecha: 26 Enero 2025 - 10:00
 Autor: AI-MindNovation
+
+VERSIÓN 3.4.9 (26-Ene-2025) - FIX FLAG PROYECTOS_YA_CARGADOS:
+- 🐛 FIX CRÍTICO: Usar flag booleano en lugar de verificar consolidador
+  - Problema: Verificaba if 'consolidador_multiproyecto' not in st.session_state
+  - Causa: Pero consolidador existía, entonces nunca hacía return
+  - Pero archivos_json estaba vacío después del rerun
+  - Solución: Flag proyectos_ya_cargados persiste entre reruns
+  - if not st.session_state.get('proyectos_ya_cargados', False): return
+- ✅ AHORA: Flujo continúa mostrando tabla después de editar/eliminar
+- 🔍 DEBUG: Mensajes para confirmar fix
 
 VERSIÓN 3.4.8 (26-Ene-2025) - MENSAJES DE DEBUG:
 - 🔍 DEBUG: Mensajes agregados para diagnosticar flujo
@@ -3066,7 +3076,7 @@ def main():
         help="Cargar archivos SICONE_*_Completo_*.json"
     )
     
-    # ⭐ DEBUG (después de definir archivos_json)
+    # ⭐ DEBUG
     st.caption(f"🔍 DEBUG: archivos_json={'Sí' if archivos_json else 'No'}, consolidador_en_session={'Sí' if 'consolidador_multiproyecto' in st.session_state else 'No'}")
     
     # ⭐ Si hay archivos, cargar y guardar en session_state
@@ -3100,18 +3110,19 @@ def main():
             # ⭐ Guardar en session_state
             st.session_state.consolidador_multiproyecto = consolidador
             st.session_state.archivos_cargados_count = len(archivos_json)
+            st.session_state.proyectos_ya_cargados = True  # ⭐ FLAG NUEVO
             st.success(f"✅ {proyectos_cargados} proyecto(s) cargado(s) exitosamente")
             st.caption("🔍 DEBUG: Guardado en session_state")
         else:
             st.caption("🔍 DEBUG: Ya cargado, usando de session_state")
     
-    # ⭐ Usar consolidador de session_state o mostrar mensaje
-    if 'consolidador_multiproyecto' not in st.session_state:
+    # ⭐ CAMBIO CLAVE: Verificar flag en lugar de archivos_json
+    if not st.session_state.get('proyectos_ya_cargados', False):
         st.info("👆 Cargue 2 o más archivos JSON para comenzar el análisis")
-        st.caption("🔍 DEBUG: No hay consolidador, saliendo con return")
+        st.caption("🔍 DEBUG: No hay proyectos cargados (flag=False), saliendo con return")
         return
     
-    st.caption("🔍 DEBUG: Usando consolidador de session_state")
+    st.caption("🔍 DEBUG: Flag proyectos_ya_cargados=True, continuando...")
     consolidador = st.session_state.consolidador_multiproyecto
     st.caption(f"🔍 DEBUG: Consolidador tiene {len(consolidador.proyectos)} proyectos")
     
