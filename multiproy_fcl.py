@@ -3059,15 +3059,15 @@ def main():
     # Paso 1: Cargar proyectos
     st.markdown("## 📥 Paso 1: Cargar Proyectos")
     
-    # ⭐ DEBUG
-    st.caption(f"🔍 DEBUG: archivos_json={'Sí' if archivos_json else 'No'}, consolidador_en_session={'Sí' if 'consolidador_multiproyecto' in st.session_state else 'No'}")
-    
     archivos_json = st.file_uploader(
         "Seleccione los archivos JSON completos de los proyectos",
         type=['json'],
         accept_multiple_files=True,
         help="Cargar archivos SICONE_*_Completo_*.json"
     )
+    
+    # ⭐ DEBUG (después de definir archivos_json)
+    st.caption(f"🔍 DEBUG: archivos_json={'Sí' if archivos_json else 'No'}, consolidador_en_session={'Sí' if 'consolidador_multiproyecto' in st.session_state else 'No'}")
     
     # ⭐ Si hay archivos, cargar y guardar en session_state
     if archivos_json:
