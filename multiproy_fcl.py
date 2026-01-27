@@ -2,9 +2,28 @@
 SICONE - Módulo de Análisis Multiproyecto FCL
 Consolidación y análisis de flujo de caja para múltiples proyectos
 
-Versión: 3.4.9 DEBUG
-Fecha: 26 Enero 2025 - 10:00
+Versión: 3.5.0 PRODUCCIÓN  
+Fecha: 27 Enero 2025 - 12:30
 Autor: AI-MindNovation
+
+VERSIÓN 3.5.0 (27-Ene-2025) - FIX DEFINITIVO FILE_UPLOADER KEY:
+- 🐛 FIX RAÍZ: file_uploader con key estático causaba problemas
+  - Problema REAL identificado comparando con conciliación.py:
+    * Conciliación usa: key=f"uploader_{hash(last_upload_time)}"
+    * Multiproy usaba: key="uploader_ajustes" (estático)
+  - Por qué fallaba:
+    1. Importas JSON → file_uploader queda con archivo cargado
+    2. Eliminas ajuste → session_state.pop(idx)
+    3. st.rerun() → Streamlit re-ejecuta main()
+    4. file_uploader MANTIENE archivo (key estático)
+    5. if uploaded_ajustes: ejecuta de nuevo
+    6. Sobreescribe session_state con JSON original ❌
+  - Solución (copiada de conciliación):
+    * key dinámico que cambia con last_upload_ajustes_multi
+    * Después de import: st.rerun() para resetear uploader
+    * file_uploader se resetea = no resobreescribe
+- ✅ PROBADO: Mismo patrón que conciliación (funciona)
+- ✅ AHORA: Editar/eliminar funciona al primer intento
 
 VERSIÓN 3.4.9 (26-Ene-2025) - FIX FLAG PROYECTOS_YA_CARGADOS:
 - 🐛 FIX CRÍTICO: Usar flag booleano en lugar de verificar consolidador
@@ -3076,15 +3095,10 @@ def main():
         help="Cargar archivos SICONE_*_Completo_*.json"
     )
     
-    # ⭐ DEBUG
-    st.caption(f"🔍 DEBUG: archivos_json={'Sí' if archivos_json else 'No'}, consolidador_en_session={'Sí' if 'consolidador_multiproyecto' in st.session_state else 'No'}")
-    
     # ⭐ Si hay archivos, cargar y guardar en session_state
     if archivos_json:
-        st.caption(f"🔍 DEBUG: Entrando a bloque de carga, {len(archivos_json)} archivo(s)")
         # Solo recargar si cambió el número de archivos
         if 'archivos_cargados_count' not in st.session_state or st.session_state.archivos_cargados_count != len(archivos_json):
-            st.caption("🔍 DEBUG: Cargando proyectos...")
             # Cargar proyectos
             consolidador = ConsolidadorMultiproyecto(
                 semanas_futuro=semanas_futuro,
@@ -3112,19 +3126,13 @@ def main():
             st.session_state.archivos_cargados_count = len(archivos_json)
             st.session_state.proyectos_ya_cargados = True  # ⭐ FLAG NUEVO
             st.success(f"✅ {proyectos_cargados} proyecto(s) cargado(s) exitosamente")
-            st.caption("🔍 DEBUG: Guardado en session_state")
-        else:
-            st.caption("🔍 DEBUG: Ya cargado, usando de session_state")
     
     # ⭐ CAMBIO CLAVE: Verificar flag en lugar de archivos_json
     if not st.session_state.get('proyectos_ya_cargados', False):
         st.info("👆 Cargue 2 o más archivos JSON para comenzar el análisis")
-        st.caption("🔍 DEBUG: No hay proyectos cargados (flag=False), saliendo con return")
         return
     
-    st.caption("🔍 DEBUG: Flag proyectos_ya_cargados=True, continuando...")
     consolidador = st.session_state.consolidador_multiproyecto
-    st.caption(f"🔍 DEBUG: Consolidador tiene {len(consolidador.proyectos)} proyectos")
     
     # Mostrar lista de proyectos en sidebar
     with st.sidebar:
@@ -3176,8 +3184,6 @@ def main():
     # Subsección B: Ajustes Adicionales
     st.markdown("### 🔧 Ajustes Adicionales del Período")
     
-    st.caption(f"🔍 DEBUG: Llegué a sección de ajustes. Ajustes actuales: {len(st.session_state.ajustes_multiproyecto)}")
-    
     st.info(
         "**⚠️ IMPORTANTE:**\n\n"
         "• El sistema calcula AUTOMÁTICAMENTE el ajuste inicial para igualar el Saldo Inicial Real con el Saldo Inicial SICONE\n"
@@ -3189,21 +3195,28 @@ def main():
     col_imp, col_agr, col_exp = st.columns(3)
     
     with col_imp:
+        # ⭐ KEY DINÁMICO como conciliación - se resetea después de cada import
+        archivo_id_key = f"uploader_ajustes_{hash(str(st.session_state.get('last_upload_ajustes_multi', '')))}"
         uploaded_ajustes = st.file_uploader(
             "📤 Importar",
             type=['json'],
             help="Importar ajustes desde JSON",
-            key="uploader_ajustes"
+            key=archivo_id_key
         )
         if uploaded_ajustes:
-            try:
-                ajustes_data = json.load(uploaded_ajustes)
-                if isinstance(ajustes_data, list):
-                    st.session_state.ajustes_multiproyecto = ajustes_data
-                    st.success(f"✅ {len(ajustes_data)} ajuste(s) importado(s)")
-                    # ⭐ FIX: No hacer rerun, dejar que continúe y muestre la tabla
-            except Exception as e:
-                st.error(f"Error al importar: {str(e)}")
+            # ⭐ FIX CRÍTICO: Solo importar si es un archivo NUEVO
+            archivo_id = f"{uploaded_ajustes.name}_{uploaded_ajustes.size}"
+            if st.session_state.get('ultimo_archivo_ajustes_multi') != archivo_id:
+                try:
+                    ajustes_data = json.load(uploaded_ajustes)
+                    if isinstance(ajustes_data, list):
+                        st.session_state.ajustes_multiproyecto = ajustes_data
+                        st.session_state.ultimo_archivo_ajustes_multi = archivo_id
+                        st.session_state.last_upload_ajustes_multi = datetime.now()  # ⭐ Cambia el key
+                        st.success(f"✅ {len(ajustes_data)} ajuste(s) importado(s)")
+                        st.rerun()  # ⭐ Ahora sí hacer rerun para resetear uploader
+                except Exception as e:
+                    st.error(f"Error al importar: {str(e)}")
     
     with col_agr:
         if st.button("➕ Agregar", use_container_width=True):
@@ -3222,21 +3235,25 @@ def main():
     
     st.markdown("---")
     
-    # ⭐ TABLA DE AJUSTES (mostrar primero, antes del formulario)
-    if st.session_state.ajustes_multiproyecto:
-        st.markdown("#### Ajustes Registrados")
-        
-        # Calcular totales
-        total_ing = sum(a['monto'] for a in st.session_state.ajustes_multiproyecto if a['tipo'] == 'Ingreso')
-        total_egr = sum(a['monto'] for a in st.session_state.ajustes_multiproyecto if a['tipo'] == 'Egreso')
-        total_neto = total_ing - total_egr
-        
-        col_ing, col_egr, col_neto = st.columns(3)
-        col_ing.metric("Ingresos", f"${total_ing:,.0f}")
-        col_egr.metric("Egresos", f"${total_egr:,.0f}")
-        col_neto.metric("Neto", f"${total_neto:,.0f}")
-        
-        st.markdown("---")
+    # ⭐ Usar container para forzar regeneración completa
+    container_ajustes = st.container()
+    
+    with container_ajustes:
+        # ⭐ TABLA DE AJUSTES (mostrar primero, antes del formulario)
+        if st.session_state.ajustes_multiproyecto:
+            st.markdown("#### Ajustes Registrados")
+            
+            # Calcular totales
+            total_ing = sum(a['monto'] for a in st.session_state.ajustes_multiproyecto if a['tipo'] == 'Ingreso')
+            total_egr = sum(a['monto'] for a in st.session_state.ajustes_multiproyecto if a['tipo'] == 'Egreso')
+            total_neto = total_ing - total_egr
+            
+            col_ing, col_egr, col_neto = st.columns(3)
+            col_ing.metric("Ingresos", f"${total_ing:,.0f}")
+            col_egr.metric("Egresos", f"${total_egr:,.0f}")
+            col_neto.metric("Neto", f"${total_neto:,.0f}")
+            
+            st.markdown("---")
         
         # Lista con editar y eliminar (EXACTO como conciliación)
         for idx, ajuste in enumerate(st.session_state.ajustes_multiproyecto):
@@ -3246,12 +3263,10 @@ def main():
                 st.text(f"{emoji} #{idx+1}: {ajuste['concepto'][:50]} - {ajuste['tipo']} ${ajuste['monto']:,.0f}")
             with col2:
                 if st.button("✏️", key=f"edit_{idx}"):
-                    st.caption(f"🔍 DEBUG: Click en editar #{idx}")
                     st.session_state[f'editando_multi_{idx}'] = True
                     st.rerun()
             with col3:
                 if st.button("🗑️", key=f"del_{idx}"):
-                    st.caption(f"🔍 DEBUG: Click en eliminar #{idx}")
                     st.session_state.ajustes_multiproyecto.pop(idx)
                     st.rerun()
             
