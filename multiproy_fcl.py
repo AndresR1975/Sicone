@@ -2,9 +2,28 @@
 SICONE - Módulo de Análisis Multiproyecto FCL
 Consolidación y análisis de flujo de caja para múltiples proyectos
 
-Versión: 3.6.0 PRODUCCIÓN  
-Fecha: 27 Enero 2025 - 13:00
+Versión: 3.7.0 PRODUCCIÓN  
+Fecha: 27 Enero 2025 - 14:00
 Autor: AI-MindNovation
+
+VERSIÓN 3.7.0 (27-Ene-2025) - FIX SALDOS REALES Y CONTROL MANUAL:
+- 🐛 FIX CRÍTICO: Selector de fecha ahora funciona correctamente
+  - Movido ANTES del Paso 1 (carga de proyectos)
+  - Fecha se aplica desde la primera carga de proyectos
+  - Eliminado selector duplicado
+- ✅ CONTROL MANUAL: Botón "♻️ Recalcular" agregado
+  - Aparece junto a "Consolidar y Analizar"
+  - Se activa cuando hay cambios en: fecha, gastos fijos, horizonte, margen
+  - Muestra advertencia de cambios pendientes
+  - Recarga proyectos con nueva fecha_limite
+- ✅ CONSOLIDACIÓN: Eliminada consolidación automática
+  - Requiere click explícito en botón
+  - Evita recalcular en cada cambio de parámetro
+  - Mejor control sobre cuándo consolidar
+- 🎯 BENEFICIO: Saldos ahora reflejan fecha seleccionada
+  - 31/12/2025 → Muestra saldos reales al fin de año
+  - HOY → Muestra saldos reales actuales
+- 🎯 BENEFICIO: UX mejorada con control explícito
 
 VERSIÓN 3.6.0 (27-Ene-2025) - FILTRO TEMPORAL Y SALDOS REALES:
 - ✅ SOLUCIÓN 1: Filtro temporal movido ANTES del Timeline
@@ -3090,6 +3109,43 @@ def main():
         st.markdown("---")
         st.markdown("### 📁 Proyectos Cargados")
     
+    # ═══════════════════════════════════════════════════════════
+    # 📅 SELECTOR DE FECHA PARA SALDOS REALES (ANTES DE CARGAR)
+    # ═══════════════════════════════════════════════════════════
+    st.markdown("### 📅 Fecha de Corte para Saldos Reales")
+    
+    col_fecha_corte, col_info_corte = st.columns([2, 3])
+    
+    with col_fecha_corte:
+        # Inicializar fecha_corte_saldos en session_state ANTES de cargar
+        if 'fecha_corte_saldos' not in st.session_state:
+            st.session_state.fecha_corte_saldos = datetime.today().date()
+        
+        fecha_corte_input = st.date_input(
+            "Fecha de corte",
+            value=st.session_state.fecha_corte_saldos,
+            help="Los saldos mostrados corresponderán a esta fecha (no incluye proyecciones)",
+            key="input_fecha_corte_inicial"
+        )
+        
+        # Actualizar session_state si cambió
+        if fecha_corte_input != st.session_state.fecha_corte_saldos:
+            st.session_state.fecha_corte_saldos = fecha_corte_input
+            # Limpiar consolidador para forzar recarga
+            if 'proyectos_ya_cargados' in st.session_state:
+                st.info(f"♻️ La fecha cambió a {fecha_corte_input.strftime('%d/%m/%Y')}. Por favor recargue los proyectos o presione 'Recalcular'")
+    
+    with col_info_corte:
+        st.info(f"""
+        ℹ️ **Saldos Reales hasta:** {st.session_state.fecha_corte_saldos.strftime('%d/%m/%Y')}
+        
+        • Los valores mostrados son **saldos reales** registrados hasta esta fecha
+        • **No incluyen proyecciones** futuras
+        • Cambiar la fecha requiere recalcular
+        """)
+    
+    st.markdown("---")
+    
     # Paso 1: Cargar proyectos
     st.markdown("## 📥 Paso 1: Cargar Proyectos")
     
@@ -3123,8 +3179,8 @@ def main():
                     
                     temp_paths.append(temp_path)
                     
-                    # Cargar con fecha_corte_saldos si existe
-                    fecha_limite = st.session_state.get('fecha_corte_saldos', datetime.today().date())
+                    # ⭐ FIX: Usar fecha_corte_saldos si ya existe, sino hoy
+                    fecha_limite = st.session_state.get('fecha_corte_saldos', None)
                     if consolidador.cargar_proyecto(temp_path, fecha_limite=fecha_limite):
                         proyectos_cargados += 1
             
@@ -3145,69 +3201,6 @@ def main():
         return
     
     consolidador = st.session_state.consolidador_multiproyecto
-    
-    st.markdown("---")
-    
-    # ═══════════════════════════════════════════════════════════
-    # 📅 SELECTOR DE FECHA PARA SALDOS REALES
-    # ═══════════════════════════════════════════════════════════
-    st.markdown("### 📅 Fecha de Corte para Saldos Reales")
-    
-    col_fecha_corte, col_info_corte = st.columns([2, 3])
-    
-    with col_fecha_corte:
-        # Inicializar fecha_corte_saldos en session_state
-        if 'fecha_corte_saldos' not in st.session_state:
-            st.session_state.fecha_corte_saldos = datetime.today().date()
-        
-        fecha_corte_input = st.date_input(
-            "Fecha de corte",
-            value=st.session_state.fecha_corte_saldos,
-            help="Los saldos mostrados corresponderán a esta fecha (no incluye proyecciones)",
-            key="input_fecha_corte"
-        )
-        
-        # Detectar cambio de fecha y recargar proyectos si cambió
-        if fecha_corte_input != st.session_state.fecha_corte_saldos:
-            st.session_state.fecha_corte_saldos = fecha_corte_input
-            
-            # Recargar proyectos con nueva fecha_limite
-            st.info(f"♻️ Recalculando saldos hasta {fecha_corte_input.strftime('%d/%m/%Y')}...")
-            
-            # Obtener archivos desde session_state o recargar
-            if 'archivos_temp_paths' in st.session_state:
-                consolidador_temp = ConsolidadorMultiproyecto(
-                    semanas_futuro=semanas_futuro,
-                    gastos_fijos_mensuales=gastos_fijos_mensuales,
-                    semanas_margen=semanas_margen
-                )
-                
-                for temp_path in st.session_state.archivos_temp_paths:
-                    consolidador_temp.cargar_proyecto(temp_path, fecha_limite=fecha_corte_input)
-                
-                # Aplicar configuración financiera
-                consolidador_temp.saldo_banco_inicial = st.session_state.saldo_banco_inicial
-                consolidador_temp.saldo_fiducuenta_inicial = st.session_state.saldo_fiducuenta_inicial
-                consolidador_temp.ajustes_periodo = st.session_state.ajustes_multiproyecto.copy()
-                
-                # Consolidar
-                consolidador_temp.consolidar()
-                
-                # Actualizar session_state
-                st.session_state.consolidador_multiproyecto = consolidador_temp
-                st.session_state.consolidador = consolidador_temp
-                
-                consolidador = consolidador_temp
-                st.rerun()
-    
-    with col_info_corte:
-        st.info(f"""
-        ℹ️ **Saldos Reales hasta:** {st.session_state.fecha_corte_saldos.strftime('%d/%m/%Y')}
-        
-        • Los valores mostrados son **saldos reales** registrados hasta esta fecha
-        • **No incluyen proyecciones** futuras
-        • Cambiar la fecha recalcula automáticamente los saldos
-        """)
     
     # Mostrar lista de proyectos en sidebar
     with st.sidebar:
@@ -3454,54 +3447,86 @@ def main():
     # Paso 3: Consolidar y Analizar
     st.markdown("## 🔄 Paso 3: Consolidar y Analizar")
     
-    if st.button("🚀 Consolidar y Analizar", type="primary", use_container_width=True):
-        with st.spinner("Consolidando datos..."):
-            # Aplicar saldos y ajustes al consolidador antes de consolidar
-            consolidador.saldo_banco_inicial = st.session_state.saldo_banco_inicial
-            consolidador.saldo_fiducuenta_inicial = st.session_state.saldo_fiducuenta_inicial
-            consolidador.ajustes_periodo = st.session_state.ajustes_multiproyecto.copy()
-            
-            # Consolidar
-            consolidador.consolidar()
-            
-            # Guardar en session_state (actualizar el mismo objeto)
-            st.session_state.consolidador_multiproyecto = consolidador
-            st.session_state.consolidador = consolidador  # mantener por compatibilidad
-            st.session_state.gastos_fijos_mensuales = gastos_fijos_mensuales
-            st.session_state.semanas_futuro = semanas_futuro
-            st.session_state.semanas_margen = semanas_margen
-            st.success("✅ Consolidación completada")
-            st.rerun()
+    # Detectar si hay cambios pendientes
+    cambios_pendientes = False
+    mensaje_cambios = []
     
-    # Mostrar dashboard si ya está consolidado
     if 'consolidador' in st.session_state:
-        consolidador_previo = st.session_state.consolidador
-        
-        # Verificar si cambiaron los parámetros
         gastos_fijos_previos = st.session_state.get('gastos_fijos_mensuales', gastos_fijos_mensuales)
         semanas_futuro_previas = st.session_state.get('semanas_futuro', semanas_futuro)
         semanas_margen_previas = st.session_state.get('semanas_margen', semanas_margen)
         
-        cambio_gastos = gastos_fijos_previos != gastos_fijos_mensuales
-        cambio_horizonte = semanas_futuro_previas != semanas_futuro
-        cambio_margen = semanas_margen_previas != semanas_margen
-        
-        if cambio_gastos or cambio_horizonte or cambio_margen:
-            # Reconsolidar con nuevos parámetros
-            with st.spinner("Recalculando..."):
-                if cambio_gastos:
-                    consolidador_previo.gastos_fijos_semanales = gastos_fijos_mensuales / 4.33
-                if cambio_horizonte:
-                    consolidador_previo.semanas_futuro = semanas_futuro
-                if cambio_margen:
-                    consolidador_previo.semanas_margen = semanas_margen
+        if gastos_fijos_previos != gastos_fijos_mensuales:
+            cambios_pendientes = True
+            mensaje_cambios.append("Gastos fijos")
+        if semanas_futuro_previas != semanas_futuro:
+            cambios_pendientes = True
+            mensaje_cambios.append("Horizonte de proyección")
+        if semanas_margen_previas != semanas_margen:
+            cambios_pendientes = True
+            mensaje_cambios.append("Margen de protección")
+    
+    if cambios_pendientes:
+        st.warning(f"⚠️ Hay cambios pendientes: {', '.join(mensaje_cambios)}. Presione 'Recalcular' para aplicar.")
+    
+    col_consolidar, col_recalcular = st.columns(2)
+    
+    with col_consolidar:
+        if st.button("🚀 Consolidar y Analizar", type="primary", use_container_width=True):
+            with st.spinner("Consolidando datos..."):
+                # Aplicar saldos y ajustes al consolidador antes de consolidar
+                consolidador.saldo_banco_inicial = st.session_state.saldo_banco_inicial
+                consolidador.saldo_fiducuenta_inicial = st.session_state.saldo_fiducuenta_inicial
+                consolidador.ajustes_periodo = st.session_state.ajustes_multiproyecto.copy()
                 
-                consolidador_previo.consolidar()
-                st.session_state.consolidador = consolidador_previo
+                # Consolidar
+                consolidador.consolidar()
+                
+                # Guardar en session_state (actualizar el mismo objeto)
+                st.session_state.consolidador_multiproyecto = consolidador
+                st.session_state.consolidador = consolidador  # mantener por compatibilidad
                 st.session_state.gastos_fijos_mensuales = gastos_fijos_mensuales
                 st.session_state.semanas_futuro = semanas_futuro
                 st.session_state.semanas_margen = semanas_margen
-        
+                st.success("✅ Consolidación completada")
+                st.rerun()
+    
+    with col_recalcular:
+        if st.button("♻️ Recalcular", use_container_width=True, disabled=not cambios_pendientes):
+            with st.spinner("Recalculando con nuevos parámetros..."):
+                # Recargar proyectos con fecha_limite actual
+                if 'archivos_temp_paths' in st.session_state:
+                    consolidador_temp = ConsolidadorMultiproyecto(
+                        semanas_futuro=semanas_futuro,
+                        gastos_fijos_mensuales=gastos_fijos_mensuales,
+                        semanas_margen=semanas_margen
+                    )
+                    
+                    fecha_limite = st.session_state.get('fecha_corte_saldos', None)
+                    for temp_path in st.session_state.archivos_temp_paths:
+                        consolidador_temp.cargar_proyecto(temp_path, fecha_limite=fecha_limite)
+                    
+                    # Aplicar configuración financiera
+                    consolidador_temp.saldo_banco_inicial = st.session_state.saldo_banco_inicial
+                    consolidador_temp.saldo_fiducuenta_inicial = st.session_state.saldo_fiducuenta_inicial
+                    consolidador_temp.ajustes_periodo = st.session_state.ajustes_multiproyecto.copy()
+                    
+                    # Consolidar
+                    consolidador_temp.consolidar()
+                    
+                    # Actualizar session_state
+                    st.session_state.consolidador_multiproyecto = consolidador_temp
+                    st.session_state.consolidador = consolidador_temp
+                    st.session_state.gastos_fijos_mensuales = gastos_fijos_mensuales
+                    st.session_state.semanas_futuro = semanas_futuro
+                    st.session_state.semanas_margen = semanas_margen
+                    
+                    consolidador = consolidador_temp
+                    st.success("✅ Recalculación completada")
+                    st.rerun()
+    
+    # Mostrar dashboard si ya está consolidado
+    if 'consolidador' in st.session_state:
         consolidador = st.session_state.consolidador
         
         # Obtener estado actual
