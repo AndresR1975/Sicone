@@ -2,9 +2,19 @@
 SICONE - Módulo de Análisis Multiproyecto FCL
 Consolidación y análisis de flujo de caja para múltiples proyectos
 
-Versión: 3.4.5 PRODUCCIÓN
-Fecha: 25 Enero 2025 - 19:40
+Versión: 3.4.6 PRODUCCIÓN
+Fecha: 25 Enero 2025 - 19:50
 Autor: AI-MindNovation
+
+VERSIÓN 3.4.6 (25-Ene-2025) - COPIA EXACTA DE CONCILIACIÓN:
+- 🐛 FIX: Replicado código EXACTO de conciliación.py que funciona
+  - Problema: Callbacks causaban problemas de scope
+  - Solución: Código simple sin callbacks, igual que conciliación
+  - Cambio 1: Eliminadas funciones callback innecesarias
+  - Cambio 2: Botones con if statement directo + st.rerun()
+  - Cambio 3: Format %.2f en number_input como conciliación
+- ✅ PROBADO: Patrón verificado en módulo conciliación
+- ✅ SIMPLE: Sin complejidades innecesarias
 
 VERSIÓN 3.4.5 (25-Ene-2025) - FIX CALLBACKS PARA BOTONES:
 - 🐛 FIX DEFINITIVO: Botones editar/eliminar ahora usan callbacks
@@ -3175,37 +3185,22 @@ def main():
         
         st.markdown("---")
         
-        # ⭐ CALLBACKS para eliminar/editar (se ejecutan ANTES del rerun)
-        def eliminar_ajuste(idx):
-            st.session_state.ajustes_multiproyecto.pop(idx)
-        
-        def activar_edicion(idx):
-            st.session_state[f'editando_multi_{idx}'] = True
-        
-        def guardar_ajuste(idx, nuevo_ajuste):
-            st.session_state.ajustes_multiproyecto[idx] = nuevo_ajuste
-            st.session_state[f'editando_multi_{idx}'] = False
-        
-        def cancelar_edicion(idx):
-            st.session_state[f'editando_multi_{idx}'] = False
-        
-        # Lista de ajustes con editar y eliminar
+        # Lista con editar y eliminar (EXACTO como conciliación)
         for idx, ajuste in enumerate(st.session_state.ajustes_multiproyecto):
             col1, col2, col3 = st.columns([6, 1, 1])
-            
             with col1:
                 emoji = "📈" if ajuste['tipo'] == 'Ingreso' else "📉"
                 st.text(f"{emoji} #{idx+1}: {ajuste['concepto'][:50]} - {ajuste['tipo']} ${ajuste['monto']:,.0f}")
-            
             with col2:
-                # ⭐ Botón con callback - cambio se aplica inmediatamente
-                st.button("✏️", key=f"edit_{idx}", on_click=activar_edicion, args=(idx,))
-            
+                if st.button("✏️", key=f"edit_{idx}"):
+                    st.session_state[f'editando_multi_{idx}'] = True
+                    st.rerun()
             with col3:
-                # ⭐ Botón con callback - elimina antes del rerun
-                st.button("🗑️", key=f"del_{idx}", on_click=eliminar_ajuste, args=(idx,))
+                if st.button("🗑️", key=f"del_{idx}"):
+                    st.session_state.ajustes_multiproyecto.pop(idx)
+                    st.rerun()
             
-            # Formulario de edición inline
+            # Formulario de edición
             if st.session_state.get(f'editando_multi_{idx}', False):
                 with st.form(f"form_edit_{idx}"):
                     st.markdown(f"**Editando Ajuste #{idx+1}:**")
@@ -3213,66 +3208,48 @@ def main():
                     col1, col2 = st.columns(2)
                     
                     with col1:
-                        fecha_edit = st.date_input(
-                            "Fecha",
-                            value=datetime.strptime(ajuste['fecha'], '%Y-%m-%d').date(),
-                            key=f"fecha_edit_{idx}"
-                        )
-                        categoria_edit = st.selectbox(
+                        fecha_ed = st.date_input("Fecha", value=pd.to_datetime(ajuste['fecha']).date())
+                        categoria_ed = st.selectbox(
                             "Categoría",
                             ["Proyectos 2024", "Otros Ingresos", "Otros Egresos", "Ajustes Contables"],
-                            index=["Proyectos 2024", "Otros Ingresos", "Otros Egresos", "Ajustes Contables"].index(ajuste['categoria']) if ajuste['categoria'] in ["Proyectos 2024", "Otros Ingresos", "Otros Egresos", "Ajustes Contables"] else 0,
-                            key=f"cat_edit_{idx}"
+                            index=["Proyectos 2024", "Otros Ingresos", "Otros Egresos", "Ajustes Contables"].index(ajuste['categoria']) if ajuste['categoria'] in ["Proyectos 2024", "Otros Ingresos", "Otros Egresos", "Ajustes Contables"] else 0
                         )
-                        concepto_edit = st.text_input(
-                            "Concepto",
-                            value=ajuste['concepto'],
-                            key=f"concepto_edit_{idx}"
-                        )
+                        concepto_ed = st.text_input("Concepto", value=ajuste['concepto'])
                     
                     with col2:
-                        cuenta_edit = st.selectbox(
+                        cuenta_ed = st.selectbox(
                             "Cuenta",
                             ["Cuenta Bancaria", "Fiducuenta"],
-                            index=0 if ajuste['cuenta'] == "Cuenta Bancaria" else 1,
-                            key=f"cuenta_edit_{idx}"
+                            index=["Cuenta Bancaria", "Fiducuenta"].index(ajuste['cuenta']) if ajuste['cuenta'] in ["Cuenta Bancaria", "Fiducuenta"] else 0
                         )
-                        tipo_edit = st.selectbox(
+                        tipo_ed = st.selectbox(
                             "Tipo",
                             ["Ingreso", "Egreso"],
-                            index=0 if ajuste['tipo'] == "Ingreso" else 1,
-                            key=f"tipo_edit_{idx}"
+                            index=["Ingreso", "Egreso"].index(ajuste['tipo'])
                         )
-                        monto_edit = st.number_input(
-                            "Monto",
-                            value=float(ajuste['monto']),
-                            min_value=0.0,
-                            step=100_000.0,
-                            format="%.0f",
-                            key=f"monto_edit_{idx}"
-                        )
+                        monto_ed = st.number_input("Monto ($)", value=float(ajuste['monto']),
+                                                  min_value=0.0, step=100000.0, format="%.2f")
                     
                     col_save, col_cancel = st.columns(2)
-                    
                     with col_save:
                         if st.form_submit_button("💾 Guardar", type="primary", use_container_width=True):
-                            nuevo_ajuste = {
-                                "fecha": fecha_edit.isoformat(),
-                                "categoria": categoria_edit,
-                                "concepto": concepto_edit,
-                                "cuenta": cuenta_edit,
-                                "tipo": tipo_edit,
-                                "monto": monto_edit,
+                            st.session_state.ajustes_multiproyecto[idx] = {
+                                "fecha": fecha_ed.isoformat(),
+                                "categoria": categoria_ed,
+                                "concepto": concepto_ed,
+                                "cuenta": cuenta_ed,
+                                "tipo": tipo_ed,
+                                "monto": monto_ed,
                                 "observaciones": ajuste.get('observaciones', ''),
                                 "evidencia": ajuste.get('evidencia', '')
                             }
-                            guardar_ajuste(idx, nuevo_ajuste)
-                            st.success("✅ Ajuste actualizado")
+                            st.session_state[f'editando_multi_{idx}'] = False
+                            st.success("✅ Actualizado")
                             st.rerun()
                     
                     with col_cancel:
                         if st.form_submit_button("❌ Cancelar", use_container_width=True):
-                            cancelar_edicion(idx)
+                            st.session_state[f'editando_multi_{idx}'] = False
                             st.rerun()
     else:
         st.info("No hay ajustes registrados")
