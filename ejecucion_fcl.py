@@ -2,17 +2,21 @@
 SICONE - Módulo de Ejecución Real FCL
 Análisis de FCL Real Ejecutado vs FCL Planeado
 
-Versión: 2.4.4
-Fecha: 22 Enero 2025
+Versión: 2.4.5
+Fecha: 27 Enero 2025
 Autor: AI-MindNovation
 
+CORRECCIÓN CRÍTICA v2.4.5 (27-Ene-2025):
+- 🐛 FIX CRÍTICO: Agregados campos 'fecha_inicio' y 'fecha_fin' en METRICAS_SEMANALES
+- ⚠️ PROBLEMA: v2.4.4 agregó estos campos solo en egresos_semanales, NO en métricas
+- 🎯 SOLUCIÓN: Ahora metricas_semanales incluye fecha_inicio y fecha_fin para cada semana
+- 📊 CÁLCULO: fecha_inicio = fecha_proyecto + (semana-1)*7, fecha_fin = fecha_inicio + 6
+- 🔧 IMPACTO: Permite filtrado correcto en multiproy_fcl sin calcular fechas
+- ✅ COORDINACIÓN: Sync con multiproy_fcl v3.8.0
+
 CORRECCIÓN v2.4.4 (22-Ene-2025):
-- ✅ FIX CRÍTICO: Agregado campo 'fecha_fin' en egresos_semanales
+- ✅ FIX CRÍTICO: Agregado campo 'fecha_fin' en EGRESOS_SEMANALES
 - 🎯 SOLUCIÓN: Resuelve problema de $50M+ perdidos en conciliación
-- 📊 ESTRUCTURA: fecha_fin = fecha_inicio + 6 días (semana completa)
-- 🔧 COORDINACIÓN: Sync con multiproy_fcl v3.3.0 (ya implementado)
-- ⚡ IMPACTO: Permite filtrado correcto de semanas que cruzan períodos
-- 📝 EJEMPLO: Semana 2024-12-31 a 2025-01-06 ahora se detecta correctamente
 
 CORRECCIÓN v2.4.3 (20-Ene-2025):
 - ✅ FIX CRÍTICO: Eliminado formulario de reclasificación duplicado (que no funcionaba)
@@ -3228,6 +3232,10 @@ def calcular_metricas_tesoreria(proyeccion: Dict, egresos_data: Dict, contratos_
     ingresos_acum = 0
     egresos_acum = 0
     
+    # ⭐ NUEVO: Obtener fecha_inicio del proyecto (ya disponible en línea 3183)
+    # fecha_inicio ya está como date() después de la conversión
+    fecha_inicio_proyecto = fecha_inicio
+    
     # Calcular gastos fijos semanales (prorrateo mensual)
     gastos_fijos_semanales = gastos_fijos_mensuales / 4.33  # Promedio semanas/mes
     
@@ -3239,6 +3247,12 @@ def calcular_metricas_tesoreria(proyeccion: Dict, egresos_data: Dict, contratos_
     
     # Para cada semana, calcular métricas
     for semana in range(1, semanas_total + 1):
+        # ⭐ NUEVO: Calcular fechas de inicio y fin de la semana
+        # Semana 1 inicia en fecha_inicio_proyecto
+        # Semana N inicia en fecha_inicio + (N-1) * 7 días
+        fecha_inicio_semana = fecha_inicio_proyecto + timedelta(days=(semana - 1) * 7)
+        fecha_fin_semana = fecha_inicio_semana + timedelta(days=6)  # Semana completa (7 días)
+        
         # Acumular ingresos
         ingresos_acum += ingresos_por_semana.get(semana, 0)
         
@@ -3264,6 +3278,8 @@ def calcular_metricas_tesoreria(proyeccion: Dict, egresos_data: Dict, contratos_
         
         metricas_semanales.append({
             'semana': semana,
+            'fecha_inicio': fecha_inicio_semana.isoformat(),  # ⭐ NUEVO: Fecha inicio de semana (YYYY-MM-DD)
+            'fecha_fin': fecha_fin_semana.isoformat(),  # ⭐ NUEVO: Fecha fin de semana (YYYY-MM-DD)
             'ingresos_semana': ingresos_por_semana.get(semana, 0),  # Nuevo: ingreso de la semana
             'ingresos_acum': ingresos_acum,
             'egresos_acum': egresos_acum,

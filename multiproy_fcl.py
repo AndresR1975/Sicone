@@ -2,9 +2,34 @@
 SICONE - Módulo de Análisis Multiproyecto FCL
 Consolidación y análisis de flujo de caja para múltiples proyectos
 
-Versión: 3.7.0 PRODUCCIÓN  
-Fecha: 27 Enero 2025 - 14:00
+Versión: 3.8.1 PRODUCCIÓN  
+Fecha: 27 Enero 2025 - 16:00
 Autor: AI-MindNovation
+
+VERSIÓN 3.8.1 (27-Ene-2025) - COMPATIBILIDAD CON FECHA_FIN:
+- ✅ MEJORA: Usa campo fecha_fin de métricas cuando existe (JSONs v2.4.5+)
+- ✅ FALLBACK: Calcula fechas manualmente si no existe (JSONs viejos)
+- 🔧 COORDINACIÓN: Sync con ejecucion_fcl v2.4.5
+- 🎯 BENEFICIO: Filtrado más eficiente y preciso
+- ⚡ COMPATIBILIDAD: Funciona con JSONs nuevos y viejos
+
+VERSIÓN 3.8.0 (27-Ene-2025) - FILTRO UNIFICADO Y FECHAS CALCULADAS:
+- 🐛 FIX CRÍTICO: Métricas no tenían campo fecha_fin
+  - Ahora calcula fechas correctamente: fecha_inicio + (semana - 1) × 7 + 6 días
+  - Usa fecha de FIN de semana para comparación con fecha_limite
+  - Elimina dependencia de campo inexistente
+- ✅ FILTRO UNIFICADO: Desde/Hasta en un solo selector
+  - Eliminados selectores duplicados y confusos
+  - Un solo filtro que controla: saldos + timeline + análisis
+  - Ubicado ANTES de cargar proyectos
+  - Default: 01/01/2025 - 31/12/2025
+- ✅ TIMELINE CORREGIDO: Respeta rango completo
+  - Filtra por filtro_fecha_desde Y filtro_fecha_hasta
+  - Incluye semana anterior a fecha_desde como punto de partida
+  - Ya no muestra datos fuera del rango seleccionado
+- 🎯 BENEFICIO: Saldos ahora SÍ reflejan fecha límite correctamente
+  - 31/12/2025 → Debe mostrar ~$1,503M (no $2,542M)
+  - HOY → Debe mostrar ~$2,140M
 
 VERSIÓN 3.7.0 (27-Ene-2025) - FIX SALDOS REALES Y CONTROL MANUAL:
 - 🐛 FIX CRÍTICO: Selector de fecha ahora funciona correctamente
@@ -490,22 +515,34 @@ class ConsolidadorMultiproyecto:
             if 'tesoreria' in data and 'metricas_semanales' in data['tesoreria']:
                 metricas = data['tesoreria']['metricas_semanales']
                 if metricas:
-                    # ⭐ SOLUCIÓN 2: Filtrar por fecha_limite si se proporciona
+                    # ⭐ SOLUCIÓN: Filtrar por fecha_limite usando fecha_fin (si existe) o calculando
                     if fecha_limite:
                         metricas_filtradas = []
+                        fecha_inicio_proyecto = proyecto_info['fecha_inicio']
+                        
                         for m in metricas:
-                            # Verificar si la métrica tiene fecha_fin
+                            # Verificar si tiene campo fecha_fin (JSONs nuevos de ejecucion_fcl v2.4.5+)
                             if 'fecha_fin' in m:
                                 try:
-                                    fecha_metrica = datetime.fromisoformat(m['fecha_fin']).date()
-                                    if fecha_metrica <= fecha_limite:
+                                    fecha_fin_metrica = datetime.fromisoformat(m['fecha_fin']).date()
+                                    if fecha_fin_metrica <= fecha_limite:
                                         metricas_filtradas.append(m)
                                 except (ValueError, TypeError):
-                                    # Si hay error parseando fecha, incluir la métrica
-                                    metricas_filtradas.append(m)
+                                    # Si hay error parseando, usar cálculo manual
+                                    numero_semana = m.get('semana', 0)
+                                    if numero_semana > 0:
+                                        dias_desde_inicio = (numero_semana - 1) * 7 + 6
+                                        fecha_fin_calculada = fecha_inicio_proyecto + timedelta(days=dias_desde_inicio)
+                                        if fecha_fin_calculada <= fecha_limite:
+                                            metricas_filtradas.append(m)
                             else:
-                                # Si no tiene fecha_fin, incluir por seguridad
-                                metricas_filtradas.append(m)
+                                # JSONs viejos sin fecha_fin: calcular manualmente
+                                numero_semana = m.get('semana', 0)
+                                if numero_semana > 0:
+                                    dias_desde_inicio = (numero_semana - 1) * 7 + 6
+                                    fecha_fin_calculada = fecha_inicio_proyecto + timedelta(days=dias_desde_inicio)
+                                    if fecha_fin_calculada <= fecha_limite:
+                                        metricas_filtradas.append(m)
                         
                         if metricas_filtradas:
                             ultima_metrica = metricas_filtradas[-1]  # ✅ Última histórica
@@ -1876,32 +1913,26 @@ def render_timeline_consolidado(consolidador: ConsolidadorMultiproyecto):
         st.warning("No hay datos para visualizar")
         return
     
-    # ⭐ SOLUCIÓN 3: Incluir última semana ANTES de 2025 para punto de partida
-    fecha_inicio_2025 = pd.Timestamp('2025-01-01')
-    
-    df_antes_2025 = df[df['fecha'] < fecha_inicio_2025]
-    if len(df_antes_2025) > 0:
-        # Incluir última semana antes de 2025 como punto de partida
-        ultima_antes = df_antes_2025.iloc[[-1]]
-        df_desde_2025 = df[df['fecha'] >= fecha_inicio_2025]
-        df = pd.concat([ultima_antes, df_desde_2025]).reset_index(drop=True)
-    else:
-        # Si no hay datos antes de 2025, continuar normal
-        df = df[df['fecha'] >= fecha_inicio_2025].copy()
-        df = df.reset_index(drop=True)
-    
-    if len(df) == 0:
-        st.warning("No hay datos desde 01/01/2025")
-        return
-    
-    # ⭐ APLICAR FILTRO GLOBAL de session_state
+    # ⭐ APLICAR FILTRO de session_state
     fecha_desde_filtro = st.session_state.get('filtro_fecha_desde')
     fecha_hasta_filtro = st.session_state.get('filtro_fecha_hasta')
     
-    if fecha_desde_filtro is not None:
-        df = df[df['fecha'] >= pd.Timestamp(fecha_desde_filtro)]
+    # Si hay filtro desde, incluir la semana ANTERIOR para punto de partida
+    if fecha_desde_filtro:
+        fecha_desde_ts = pd.Timestamp(fecha_desde_filtro)
+        
+        # Incluir última semana ANTES de fecha_desde para punto de partida
+        df_antes = df[df['fecha'] < fecha_desde_ts]
+        if len(df_antes) > 0:
+            ultima_antes = df_antes.iloc[[-1]]
+            df_desde = df[df['fecha'] >= fecha_desde_ts]
+            df = pd.concat([ultima_antes, df_desde]).reset_index(drop=True)
+        else:
+            df = df[df['fecha'] >= fecha_desde_ts].copy()
+            df = df.reset_index(drop=True)
     
-    if fecha_hasta_filtro is not None:
+    # Aplicar filtro hasta
+    if fecha_hasta_filtro:
         df = df[df['fecha'] <= pd.Timestamp(fecha_hasta_filtro)]
     
     # Resetear índice después del filtro
@@ -3110,39 +3141,57 @@ def main():
         st.markdown("### 📁 Proyectos Cargados")
     
     # ═══════════════════════════════════════════════════════════
-    # 📅 SELECTOR DE FECHA PARA SALDOS REALES (ANTES DE CARGAR)
+    # 📅 FILTRO DE FECHAS UNIFICADO (aplica a todo)
     # ═══════════════════════════════════════════════════════════
-    st.markdown("### 📅 Fecha de Corte para Saldos Reales")
+    st.markdown("### 📅 Filtro Temporal")
+    st.caption("Ajusta el rango de fechas para saldos y visualizaciones")
     
-    col_fecha_corte, col_info_corte = st.columns([2, 3])
+    col_desde, col_hasta, col_reset = st.columns([2, 2, 1])
     
-    with col_fecha_corte:
-        # Inicializar fecha_corte_saldos en session_state ANTES de cargar
-        if 'fecha_corte_saldos' not in st.session_state:
-            st.session_state.fecha_corte_saldos = datetime.today().date()
-        
-        fecha_corte_input = st.date_input(
-            "Fecha de corte",
-            value=st.session_state.fecha_corte_saldos,
-            help="Los saldos mostrados corresponderán a esta fecha (no incluye proyecciones)",
-            key="input_fecha_corte_inicial"
+    # Inicializar fechas en session_state
+    if 'filtro_fecha_desde' not in st.session_state:
+        st.session_state.filtro_fecha_desde = date(2025, 1, 1)
+    if 'filtro_fecha_hasta' not in st.session_state:
+        st.session_state.filtro_fecha_hasta = date(2025, 12, 31)
+    
+    with col_desde:
+        fecha_desde_input = st.date_input(
+            "Desde",
+            value=st.session_state.filtro_fecha_desde,
+            help="Fecha inicial - se usa inicio de semana que contiene esta fecha",
+            key="input_filtro_desde"
         )
-        
-        # Actualizar session_state si cambió
-        if fecha_corte_input != st.session_state.fecha_corte_saldos:
-            st.session_state.fecha_corte_saldos = fecha_corte_input
-            # Limpiar consolidador para forzar recarga
-            if 'proyectos_ya_cargados' in st.session_state:
-                st.info(f"♻️ La fecha cambió a {fecha_corte_input.strftime('%d/%m/%Y')}. Por favor recargue los proyectos o presione 'Recalcular'")
     
-    with col_info_corte:
-        st.info(f"""
-        ℹ️ **Saldos Reales hasta:** {st.session_state.fecha_corte_saldos.strftime('%d/%m/%Y')}
-        
-        • Los valores mostrados son **saldos reales** registrados hasta esta fecha
-        • **No incluyen proyecciones** futuras
-        • Cambiar la fecha requiere recalcular
-        """)
+    with col_hasta:
+        fecha_hasta_input = st.date_input(
+            "Hasta",
+            value=st.session_state.filtro_fecha_hasta,
+            help="Fecha final - los saldos serán los reales hasta esta fecha (sin proyecciones)",
+            key="input_filtro_hasta"
+        )
+    
+    with col_reset:
+        if st.button("🔄 Resetear", help="Resetear a 2025 completo"):
+            st.session_state.filtro_fecha_desde = date(2025, 1, 1)
+            st.session_state.filtro_fecha_hasta = date(2025, 12, 31)
+            st.rerun()
+    
+    # Detectar cambios y actualizar
+    if fecha_desde_input != st.session_state.filtro_fecha_desde or fecha_hasta_input != st.session_state.filtro_fecha_hasta:
+        st.session_state.filtro_fecha_desde = fecha_desde_input
+        st.session_state.filtro_fecha_hasta = fecha_hasta_input
+        # Limpiar proyectos para forzar recarga
+        if 'proyectos_ya_cargados' in st.session_state:
+            st.info(f"♻️ Rango cambió. Por favor recargue los proyectos o presione 'Recalcular' en Paso 3")
+    
+    # Mostrar información del período
+    st.info(f"""
+    📊 **Período seleccionado:** {st.session_state.filtro_fecha_desde.strftime('%d/%m/%Y')} - {st.session_state.filtro_fecha_hasta.strftime('%d/%m/%Y')}
+    
+    • **Saldos:** Reales hasta **{st.session_state.filtro_fecha_hasta.strftime('%d/%m/%Y')}** (sin proyecciones futuras)
+    • **Timeline y análisis:** Se muestran solo datos del rango seleccionado
+    • **Cambiar fechas:** Requiere recalcular para aplicar cambios
+    """)
     
     st.markdown("---")
     
@@ -3179,8 +3228,8 @@ def main():
                     
                     temp_paths.append(temp_path)
                     
-                    # ⭐ FIX: Usar fecha_corte_saldos si ya existe, sino hoy
-                    fecha_limite = st.session_state.get('fecha_corte_saldos', None)
+                    # ⭐ FIX: Usar filtro_fecha_hasta para limitar saldos
+                    fecha_limite = st.session_state.get('filtro_fecha_hasta', None)
                     if consolidador.cargar_proyecto(temp_path, fecha_limite=fecha_limite):
                         proyectos_cargados += 1
             
@@ -3502,7 +3551,7 @@ def main():
                         semanas_margen=semanas_margen
                     )
                     
-                    fecha_limite = st.session_state.get('fecha_corte_saldos', None)
+                    fecha_limite = st.session_state.get('filtro_fecha_hasta', None)
                     for temp_path in st.session_state.archivos_temp_paths:
                         consolidador_temp.cargar_proyecto(temp_path, fecha_limite=fecha_limite)
                     
@@ -3636,86 +3685,6 @@ def main():
         st.markdown("---")
         
         render_excedente_invertible(estado)
-        
-        st.markdown("---")
-        
-        # ═══════════════════════════════════════════════════════════
-        # 🎯 FILTRO TEMPORAL GLOBAL (aplica a Timeline y análisis)
-        # ═══════════════════════════════════════════════════════════
-        st.markdown("### 📅 Filtro Temporal")
-        st.caption("Ajusta el rango de fechas para Timeline y análisis de flujos")
-        
-        # Obtener rango de fechas disponibles de datos históricos
-        df_temp = consolidador.df_consolidado
-        if df_temp is not None and len(df_temp) > 0:
-            df_historico_temp = df_temp[df_temp['es_historica']].copy()
-            
-            if len(df_historico_temp) > 0:
-                fecha_min = df_historico_temp['fecha'].min()
-                fecha_max = df_historico_temp['fecha'].max()
-                
-                # Convertir a date si son Timestamp
-                if hasattr(fecha_min, 'date'):
-                    fecha_min_date = fecha_min.date()
-                    fecha_max_date = fecha_max.date()
-                else:
-                    fecha_min_date = fecha_min
-                    fecha_max_date = fecha_max
-                
-                # Inicializar filtros en session_state
-                if 'filtro_fecha_desde' not in st.session_state:
-                    st.session_state.filtro_fecha_desde = None
-                if 'filtro_fecha_hasta' not in st.session_state:
-                    st.session_state.filtro_fecha_hasta = None
-                
-                col_desde, col_hasta, col_reset = st.columns([2, 2, 1])
-                
-                with col_desde:
-                    fecha_desde = st.date_input(
-                        "Desde",
-                        value=st.session_state.filtro_fecha_desde,
-                        min_value=fecha_min_date,
-                        max_value=fecha_max_date,
-                        help="Dejar vacío para ver desde el inicio",
-                        key="filtro_global_desde"
-                    )
-                    st.session_state.filtro_fecha_desde = fecha_desde
-                
-                with col_hasta:
-                    fecha_hasta = st.date_input(
-                        "Hasta",
-                        value=st.session_state.filtro_fecha_hasta,
-                        min_value=fecha_min_date,
-                        max_value=fecha_max_date,
-                        help="Dejar vacío para ver hasta el final",
-                        key="filtro_global_hasta"
-                    )
-                    st.session_state.filtro_fecha_hasta = fecha_hasta
-                
-                with col_reset:
-                    if st.button("🔄 Ver Todo", help="Limpiar filtros", key="filtro_global_reset"):
-                        st.session_state.filtro_fecha_desde = None
-                        st.session_state.filtro_fecha_hasta = None
-                        st.rerun()
-                
-                # Mostrar información del período seleccionado
-                if fecha_desde is not None or fecha_hasta is not None:
-                    periodo_texto = "Mostrando datos "
-                    if fecha_desde is not None:
-                        periodo_texto += f"desde {fecha_desde.strftime('%d/%m/%Y')} "
-                    if fecha_hasta is not None:
-                        periodo_texto += f"hasta {fecha_hasta.strftime('%d/%m/%Y')}"
-                    
-                    # Contar semanas en el rango
-                    df_rango = df_historico_temp.copy()
-                    if fecha_desde is not None:
-                        df_rango = df_rango[df_rango['fecha'] >= pd.Timestamp(fecha_desde)]
-                    if fecha_hasta is not None:
-                        df_rango = df_rango[df_rango['fecha'] <= pd.Timestamp(fecha_hasta)]
-                    
-                    st.info(f"📊 {periodo_texto} ({len(df_rango)} semanas)")
-                else:
-                    st.success(f"✅ Mostrando todos los datos históricos ({len(df_historico_temp)} semanas)")
         
         st.markdown("---")
         
