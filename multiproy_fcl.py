@@ -2,9 +2,20 @@
 SICONE - Módulo de Análisis Multiproyecto FCL
 Consolidación y análisis de flujo de caja para múltiples proyectos
 
-Versión: 3.4.6 PRODUCCIÓN
-Fecha: 25 Enero 2025 - 19:50
+Versión: 3.4.7 PRODUCCIÓN
+Fecha: 26 Enero 2025 - 08:00
 Autor: AI-MindNovation
+
+VERSIÓN 3.4.7 (26-Ene-2025) - FIX CONSOLIDADOR EN SESSION_STATE:
+- 🐛 FIX RAÍZ DEL PROBLEMA: Consolidador se recreaba en cada rerun
+  - Problema: file_uploader no es sticky → after rerun archivos_json está vacío
+  - Causa: `if not archivos_json: return` salía sin mostrar tabla de ajustes
+  - Resultado: Cambios a ajustes no se veían hasta recargar JSON manualmente
+  - Solución: Guardar consolidador en session_state después de cargar
+  - session_state.consolidador_multiproyecto persiste entre reruns
+  - session_state.archivos_cargados_count evita recargas innecesarias
+- ✅ AHORA: Editar/eliminar funciona al primer click
+- ✅ SIN: Necesidad de salir y volver a entrar al módulo
 
 VERSIÓN 3.4.6 (25-Ene-2025) - COPIA EXACTA DE CONCILIACIÓN:
 - 🐛 FIX: Replicado código EXACTO de conciliación.py que funciona
@@ -3047,33 +3058,43 @@ def main():
         help="Cargar archivos SICONE_*_Completo_*.json"
     )
     
-    if not archivos_json:
+    # ⭐ Si hay archivos, cargar y guardar en session_state
+    if archivos_json:
+        # Solo recargar si cambió el número de archivos
+        if 'archivos_cargados_count' not in st.session_state or st.session_state.archivos_cargados_count != len(archivos_json):
+            # Cargar proyectos
+            consolidador = ConsolidadorMultiproyecto(
+                semanas_futuro=semanas_futuro,
+                gastos_fijos_mensuales=gastos_fijos_mensuales,
+                semanas_margen=semanas_margen
+            )
+            
+            with st.spinner("Cargando proyectos..."):
+                proyectos_cargados = 0
+                for archivo in archivos_json:
+                    # Guardar temporalmente
+                    temp_path = f"/tmp/{archivo.name}"
+                    with open(temp_path, 'wb') as f:
+                        f.write(archivo.getvalue())
+                    
+                    if consolidador.cargar_proyecto(temp_path):
+                        proyectos_cargados += 1
+            
+            if proyectos_cargados == 0:
+                st.error("❌ No se pudo cargar ningún proyecto")
+                return
+            
+            # ⭐ Guardar en session_state
+            st.session_state.consolidador_multiproyecto = consolidador
+            st.session_state.archivos_cargados_count = len(archivos_json)
+            st.success(f"✅ {proyectos_cargados} proyecto(s) cargado(s) exitosamente")
+    
+    # ⭐ Usar consolidador de session_state o mostrar mensaje
+    if 'consolidador_multiproyecto' not in st.session_state:
         st.info("👆 Cargue 2 o más archivos JSON para comenzar el análisis")
         return
     
-    # Cargar proyectos
-    consolidador = ConsolidadorMultiproyecto(
-        semanas_futuro=semanas_futuro,
-        gastos_fijos_mensuales=gastos_fijos_mensuales,
-        semanas_margen=semanas_margen
-    )
-    
-    with st.spinner("Cargando proyectos..."):
-        proyectos_cargados = 0
-        for archivo in archivos_json:
-            # Guardar temporalmente
-            temp_path = f"/tmp/{archivo.name}"
-            with open(temp_path, 'wb') as f:
-                f.write(archivo.getvalue())
-            
-            if consolidador.cargar_proyecto(temp_path):
-                proyectos_cargados += 1
-    
-    if proyectos_cargados == 0:
-        st.error("❌ No se pudo cargar ningún proyecto")
-        return
-    
-    st.success(f"✅ {proyectos_cargados} proyecto(s) cargado(s) exitosamente")
+    consolidador = st.session_state.consolidador_multiproyecto
     
     # Mostrar lista de proyectos en sidebar
     with st.sidebar:
@@ -3319,8 +3340,9 @@ def main():
             # Consolidar
             consolidador.consolidar()
             
-            # Guardar en session_state
-            st.session_state.consolidador = consolidador
+            # Guardar en session_state (actualizar el mismo objeto)
+            st.session_state.consolidador_multiproyecto = consolidador
+            st.session_state.consolidador = consolidador  # mantener por compatibilidad
             st.session_state.gastos_fijos_mensuales = gastos_fijos_mensuales
             st.session_state.semanas_futuro = semanas_futuro
             st.session_state.semanas_margen = semanas_margen
