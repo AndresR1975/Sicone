@@ -3254,75 +3254,75 @@ def main():
             col_neto.metric("Neto", f"${total_neto:,.0f}")
             
             st.markdown("---")
-        
-        # Lista con editar y eliminar (EXACTO como conciliación)
-        for idx, ajuste in enumerate(st.session_state.ajustes_multiproyecto):
-            col1, col2, col3 = st.columns([6, 1, 1])
-            with col1:
-                emoji = "📈" if ajuste['tipo'] == 'Ingreso' else "📉"
-                st.text(f"{emoji} #{idx+1}: {ajuste['concepto'][:50]} - {ajuste['tipo']} ${ajuste['monto']:,.0f}")
-            with col2:
-                if st.button("✏️", key=f"edit_{idx}"):
-                    st.session_state[f'editando_multi_{idx}'] = True
-                    st.rerun()
-            with col3:
-                if st.button("🗑️", key=f"del_{idx}"):
-                    st.session_state.ajustes_multiproyecto.pop(idx)
-                    st.rerun()
             
-            # Formulario de edición
-            if st.session_state.get(f'editando_multi_{idx}', False):
-                with st.form(f"form_edit_{idx}"):
-                    st.markdown(f"**Editando Ajuste #{idx+1}:**")
-                    
-                    col1, col2 = st.columns(2)
-                    
-                    with col1:
-                        fecha_ed = st.date_input("Fecha", value=pd.to_datetime(ajuste['fecha']).date())
-                        categoria_ed = st.selectbox(
-                            "Categoría",
-                            ["Proyectos 2024", "Otros Ingresos", "Otros Egresos", "Ajustes Contables"],
-                            index=["Proyectos 2024", "Otros Ingresos", "Otros Egresos", "Ajustes Contables"].index(ajuste['categoria']) if ajuste['categoria'] in ["Proyectos 2024", "Otros Ingresos", "Otros Egresos", "Ajustes Contables"] else 0
-                        )
-                        concepto_ed = st.text_input("Concepto", value=ajuste['concepto'])
-                    
-                    with col2:
-                        cuenta_ed = st.selectbox(
-                            "Cuenta",
-                            ["Cuenta Bancaria", "Fiducuenta"],
-                            index=["Cuenta Bancaria", "Fiducuenta"].index(ajuste['cuenta']) if ajuste['cuenta'] in ["Cuenta Bancaria", "Fiducuenta"] else 0
-                        )
-                        tipo_ed = st.selectbox(
-                            "Tipo",
-                            ["Ingreso", "Egreso"],
-                            index=["Ingreso", "Egreso"].index(ajuste['tipo'])
-                        )
-                        monto_ed = st.number_input("Monto ($)", value=float(ajuste['monto']),
-                                                  min_value=0.0, step=100000.0, format="%.2f")
-                    
-                    col_save, col_cancel = st.columns(2)
-                    with col_save:
-                        if st.form_submit_button("💾 Guardar", type="primary", use_container_width=True):
-                            st.session_state.ajustes_multiproyecto[idx] = {
-                                "fecha": fecha_ed.isoformat(),
-                                "categoria": categoria_ed,
-                                "concepto": concepto_ed,
-                                "cuenta": cuenta_ed,
-                                "tipo": tipo_ed,
-                                "monto": monto_ed,
-                                "observaciones": ajuste.get('observaciones', ''),
-                                "evidencia": ajuste.get('evidencia', '')
-                            }
-                            st.session_state[f'editando_multi_{idx}'] = False
-                            st.success("✅ Actualizado")
-                            st.rerun()
-                    
-                    with col_cancel:
-                        if st.form_submit_button("❌ Cancelar", use_container_width=True):
-                            st.session_state[f'editando_multi_{idx}'] = False
-                            st.rerun()
-    else:
-        st.info("No hay ajustes registrados")
+            # Lista con editar y eliminar (EXACTO como conciliación)
+            for idx, ajuste in enumerate(st.session_state.ajustes_multiproyecto):
+                col1, col2, col3 = st.columns([6, 1, 1])
+                with col1:
+                    emoji = "📈" if ajuste['tipo'] == 'Ingreso' else "📉"
+                    st.text(f"{emoji} #{idx+1}: {ajuste['concepto'][:50]} - {ajuste['tipo']} ${ajuste['monto']:,.0f}")
+                with col2:
+                    if st.button("✏️", key=f"edit_{idx}"):
+                        st.session_state[f'editando_multi_{idx}'] = True
+                        st.rerun()
+                with col3:
+                    if st.button("🗑️", key=f"del_{idx}"):
+                        st.session_state.ajustes_multiproyecto.pop(idx)
+                        st.rerun()
+                
+                # Formulario de edición
+                if st.session_state.get(f'editando_multi_{idx}', False):
+                    with st.form(f"form_edit_{idx}"):
+                        st.markdown(f"**Editando Ajuste #{idx+1}:**")
+                        
+                        col1, col2 = st.columns(2)
+                        
+                        with col1:
+                            fecha_ed = st.date_input("Fecha", value=pd.to_datetime(ajuste['fecha']).date())
+                            categoria_ed = st.selectbox(
+                                "Categoría",
+                                ["Proyectos 2024", "Otros Ingresos", "Otros Egresos", "Ajustes Contables"],
+                                index=["Proyectos 2024", "Otros Ingresos", "Otros Egresos", "Ajustes Contables"].index(ajuste['categoria']) if ajuste['categoria'] in ["Proyectos 2024", "Otros Ingresos", "Otros Egresos", "Ajustes Contables"] else 0
+                            )
+                            concepto_ed = st.text_input("Concepto", value=ajuste['concepto'])
+                        
+                        with col2:
+                            cuenta_ed = st.selectbox(
+                                "Cuenta",
+                                ["Cuenta Bancaria", "Fiducuenta"],
+                                index=["Cuenta Bancaria", "Fiducuenta"].index(ajuste['cuenta']) if ajuste['cuenta'] in ["Cuenta Bancaria", "Fiducuenta"] else 0
+                            )
+                            tipo_ed = st.selectbox(
+                                "Tipo",
+                                ["Ingreso", "Egreso"],
+                                index=["Ingreso", "Egreso"].index(ajuste['tipo'])
+                            )
+                            monto_ed = st.number_input("Monto ($)", value=float(ajuste['monto']),
+                                                      min_value=0.0, step=100000.0, format="%.2f")
+                        
+                        col_save, col_cancel = st.columns(2)
+                        with col_save:
+                            if st.form_submit_button("💾 Guardar", type="primary", use_container_width=True):
+                                st.session_state.ajustes_multiproyecto[idx] = {
+                                    "fecha": fecha_ed.isoformat(),
+                                    "categoria": categoria_ed,
+                                    "concepto": concepto_ed,
+                                    "cuenta": cuenta_ed,
+                                    "tipo": tipo_ed,
+                                    "monto": monto_ed,
+                                    "observaciones": ajuste.get('observaciones', ''),
+                                    "evidencia": ajuste.get('evidencia', '')
+                                }
+                                st.session_state[f'editando_multi_{idx}'] = False
+                                st.success("✅ Actualizado")
+                                st.rerun()
+                        
+                        with col_cancel:
+                            if st.form_submit_button("❌ Cancelar", use_container_width=True):
+                                st.session_state[f'editando_multi_{idx}'] = False
+                                st.rerun()
+        else:
+            st.info("No hay ajustes registrados")
     
     st.markdown("---")
     
