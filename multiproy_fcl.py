@@ -2,9 +2,18 @@
 SICONE - Módulo de Análisis Multiproyecto FCL
 Consolidación y análisis de flujo de caja para múltiples proyectos
 
-Versión: 3.4.4 PRODUCCIÓN
-Fecha: 25 Enero 2025 - 19:30
+Versión: 3.4.5 PRODUCCIÓN
+Fecha: 25 Enero 2025 - 19:40
 Autor: AI-MindNovation
+
+VERSIÓN 3.4.5 (25-Ene-2025) - FIX CALLBACKS PARA BOTONES:
+- 🐛 FIX DEFINITIVO: Botones editar/eliminar ahora usan callbacks
+  - Problema: Cambios requerían entrar 2 veces al módulo para verse
+  - Causa: Timing de st.rerun() vs modificación de session_state
+  - Solución: Usar on_click callbacks que se ejecutan ANTES del rerun
+  - Callbacks: eliminar_ajuste(), activar_edicion(), guardar_ajuste(), cancelar_edicion()
+- ✅ FUNCIONAL: Click único ahora procesa cambios inmediatamente
+- ✅ ROBUSTO: No hay race conditions ni problemas de timing
 
 VERSIÓN 3.4.4 (25-Ene-2025) - FIX BOTONES EDITAR/ELIMINAR:
 - 🐛 FIX: Botones de editar y eliminar no funcionaban
@@ -3166,6 +3175,20 @@ def main():
         
         st.markdown("---")
         
+        # ⭐ CALLBACKS para eliminar/editar (se ejecutan ANTES del rerun)
+        def eliminar_ajuste(idx):
+            st.session_state.ajustes_multiproyecto.pop(idx)
+        
+        def activar_edicion(idx):
+            st.session_state[f'editando_multi_{idx}'] = True
+        
+        def guardar_ajuste(idx, nuevo_ajuste):
+            st.session_state.ajustes_multiproyecto[idx] = nuevo_ajuste
+            st.session_state[f'editando_multi_{idx}'] = False
+        
+        def cancelar_edicion(idx):
+            st.session_state[f'editando_multi_{idx}'] = False
+        
         # Lista de ajustes con editar y eliminar
         for idx, ajuste in enumerate(st.session_state.ajustes_multiproyecto):
             col1, col2, col3 = st.columns([6, 1, 1])
@@ -3175,14 +3198,12 @@ def main():
                 st.text(f"{emoji} #{idx+1}: {ajuste['concepto'][:50]} - {ajuste['tipo']} ${ajuste['monto']:,.0f}")
             
             with col2:
-                if st.button("✏️", key=f"edit_{idx}"):
-                    st.session_state[f'editando_multi_{idx}'] = True
-                    st.rerun()
+                # ⭐ Botón con callback - cambio se aplica inmediatamente
+                st.button("✏️", key=f"edit_{idx}", on_click=activar_edicion, args=(idx,))
             
             with col3:
-                if st.button("🗑️", key=f"del_{idx}"):
-                    st.session_state.ajustes_multiproyecto.pop(idx)
-                    st.rerun()
+                # ⭐ Botón con callback - elimina antes del rerun
+                st.button("🗑️", key=f"del_{idx}", on_click=eliminar_ajuste, args=(idx,))
             
             # Formulario de edición inline
             if st.session_state.get(f'editando_multi_{idx}', False):
@@ -3235,7 +3256,7 @@ def main():
                     
                     with col_save:
                         if st.form_submit_button("💾 Guardar", type="primary", use_container_width=True):
-                            st.session_state.ajustes_multiproyecto[idx] = {
+                            nuevo_ajuste = {
                                 "fecha": fecha_edit.isoformat(),
                                 "categoria": categoria_edit,
                                 "concepto": concepto_edit,
@@ -3245,13 +3266,13 @@ def main():
                                 "observaciones": ajuste.get('observaciones', ''),
                                 "evidencia": ajuste.get('evidencia', '')
                             }
-                            st.session_state[f'editando_multi_{idx}'] = False
+                            guardar_ajuste(idx, nuevo_ajuste)
                             st.success("✅ Ajuste actualizado")
                             st.rerun()
                     
                     with col_cancel:
                         if st.form_submit_button("❌ Cancelar", use_container_width=True):
-                            st.session_state[f'editando_multi_{idx}'] = False
+                            cancelar_edicion(idx)
                             st.rerun()
     else:
         st.info("No hay ajustes registrados")
