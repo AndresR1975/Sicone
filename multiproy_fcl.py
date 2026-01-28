@@ -2,9 +2,16 @@
 SICONE - Módulo de Análisis Multiproyecto FCL
 Consolidación y análisis de flujo de caja para múltiples proyectos
 
-Versión: 3.8.1 PRODUCCIÓN  
-Fecha: 27 Enero 2025 - 16:00
+Versión: 3.8.2 PRODUCCIÓN  
+Fecha: 28 Enero 2025 - 17:00
 Autor: AI-MindNovation
+
+VERSIÓN 3.8.2 (28-Ene-2025) - FIX ERROR CONSOLIDADOR_PREVIO:
+- 🐛 FIX: Error "name 'consolidador_previo' is not defined"
+- 🎯 CAUSA: Variable no actualizada después de eliminar reconsolidación automática
+- ✅ SOLUCIÓN: Cambiar todas las referencias de consolidador_previo a consolidador
+- 📍 UBICACIÓN: Líneas 3639-3674 (sección ajustes de conciliación)
+- 🔧 IMPACTO: Dashboard ahora se muestra correctamente después de consolidar
 
 VERSIÓN 3.8.1 (27-Ene-2025) - COMPATIBILIDAD CON FECHA_FIN:
 - ✅ MEJORA: Usa campo fecha_fin de métricas cuando existe (JSONs v2.4.5+)
@@ -3636,20 +3643,20 @@ def main():
         st.markdown("## 📊 Dashboard Consolidado")
         
         # ⭐ NUEVO: Mostrar información de ajustes de conciliación
-        if consolidador_previo.ajuste_inicial_calculado != 0 or len(consolidador_previo.ajustes_periodo) > 0:
+        if consolidador.ajuste_inicial_calculado != 0 or len(consolidador.ajustes_periodo) > 0:
             with st.expander("🔧 Ajustes de Conciliación Aplicados", expanded=False):
                 st.markdown("#### Ajuste Inicial Automático")
                 
-                saldo_real_total = consolidador_previo.saldo_banco_inicial + consolidador_previo.saldo_fiducuenta_inicial
-                saldo_sicone_01_01 = saldo_real_total + consolidador_previo.ajuste_inicial_calculado
+                saldo_real_total = consolidador.saldo_banco_inicial + consolidador.saldo_fiducuenta_inicial
+                saldo_sicone_01_01 = saldo_real_total + consolidador.ajuste_inicial_calculado
                 
                 col1, col2, col3 = st.columns(3)
                 col1.metric("Saldo SICONE (01/01/2025)", f"${saldo_sicone_01_01:,.0f}")
                 col2.metric("Saldo Real (01/01/2025)", f"${saldo_real_total:,.0f}")
                 col3.metric(
                     "Ajuste Inicial Calculado", 
-                    f"${abs(consolidador_previo.ajuste_inicial_calculado):,.0f}",
-                    delta=f"{'Ingreso' if consolidador_previo.ajuste_inicial_calculado > 0 else 'Egreso'} no capturado"
+                    f"${abs(consolidador.ajuste_inicial_calculado):,.0f}",
+                    delta=f"{'Ingreso' if consolidador.ajuste_inicial_calculado > 0 else 'Egreso'} no capturado"
                 )
                 
                 st.caption(
@@ -3658,12 +3665,12 @@ def main():
                 )
                 
                 # Mostrar ajustes adicionales si existen
-                if len(consolidador_previo.ajustes_periodo) > 0:
+                if len(consolidador.ajustes_periodo) > 0:
                     st.markdown("---")
                     st.markdown("#### Ajustes Adicionales del Período")
                     
-                    total_ing_aj = sum(a['monto'] for a in consolidador_previo.ajustes_periodo if a['tipo'] == 'Ingreso')
-                    total_egr_aj = sum(a['monto'] for a in consolidador_previo.ajustes_periodo if a['tipo'] == 'Egreso')
+                    total_ing_aj = sum(a['monto'] for a in consolidador.ajustes_periodo if a['tipo'] == 'Ingreso')
+                    total_egr_aj = sum(a['monto'] for a in consolidador.ajustes_periodo if a['tipo'] == 'Egreso')
                     total_neto_aj = total_ing_aj - total_egr_aj
                     
                     col_aj1, col_aj2, col_aj3 = st.columns(3)
@@ -3671,7 +3678,7 @@ def main():
                     col_aj2.metric("Egresos Adicionales", f"${total_egr_aj:,.0f}")
                     col_aj3.metric("Neto Ajustes", f"${total_neto_aj:,.0f}")
                     
-                    st.caption(f"📝 {len(consolidador_previo.ajustes_periodo)} ajuste(s) aplicado(s)")
+                    st.caption(f"📝 {len(consolidador.ajustes_periodo)} ajuste(s) aplicado(s)")
                 
                 st.markdown("---")
         
