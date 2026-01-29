@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="view_order_form_inherit_project" model="ir.ui.view">
+        <field name="name">sale.order.form.inherit.project</field>
+        <field name="model">sale.order</field>
+        <field name="inherit_id" ref="sale.view_order_form"/>
+        <field name="arch" type="xml">
+            <xpath expr="//sheet/group" position="after">
+                <group string="Datos del Proyecto">
+                    <field name="project_name"/>
+                    <field name="project_address"/>
+                    <field name="project_phone"/>
+                    <field name="business_manager"/>
+                    <field name="contact_method"/>
+                    <field name="area_base"/>
+                    <field name="area_cubierta"/>
+                    <field name="area_entrepiso"/>
+                    <field name="niveles"/>
+                    <field name="muro_tipo"/>
+                    <field name="project_date"/>
+                </group>
+            </xpath>
+        </field>
+    </record>
+</odoo>
