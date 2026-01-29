@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <data noupdate="0">
+        
+        <!-- Categoría del módulo -->
+        <record id="module_category_sicone" model="ir.module.category">
+            <field name="name">SICONE</field>
+            <field name="description">Sistema Integrado de Construcción Eficiente</field>
+            <field name="sequence">50</field>
+        </record>
+        
+        <!-- Grupo: Usuario SICONE -->
+        <record id="group_sicone_user" model="res.groups">
+            <field name="name">Usuario SICONE</field>
+            <field name="category_id" ref="module_category_sicone"/>
+            <field name="implied_ids" eval="[(4, ref('base.group_user'))]"/>
+        </record>
+        
+        <!-- Grupo: Administrador SICONE -->
+        <record id="group_sicone_manager" model="res.groups">
+            <field name="name">Administrador SICONE</field>
+            <field name="category_id" ref="module_category_sicone"/>
+            <field name="implied_ids" eval="[(4, ref('group_sicone_user'))]"/>
+            <field name="users" eval="[(4, ref('base.user_root')), (4, ref('base.user_admin'))]"/>
+        </record>
+        
+    </data>
+</odoo>
