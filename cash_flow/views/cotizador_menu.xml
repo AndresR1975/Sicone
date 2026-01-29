@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <menuitem id="menu_cotizador_root" name="Cotizador Sicone" sequence="10"/>
+    <menuitem id="menu_cotizador_cotizaciones" name="Cotizaciones" parent="menu_cotizador_root" action="action_cotizador_sicone"/>
+
+    <record id="action_cotizador_sicone" model="ir.actions.act_window">
+        <field name="name">Cotizaciones</field>
+        <field name="res_model">cotizador.sicone</field>
+        <field name="view_mode">tree,form</field>
+    </record>
+
+    <record id="view_cotizador_sicone_tree" model="ir.ui.view">
+        <field name="name">cotizador.sicone.tree</field>
+        <field name="model">cotizador.sicone</field>
+        <field name="arch" type="xml">
+            <tree>
+                <field name="name"/>
+                <field name="cliente"/>
+                <field name="proyecto"/>
+                <field name="total_costo_directo"/>
+                <field name="area_base"/>
+                <field name="fecha_guardado"/>
+            </tree>
+        </field>
+    </record>
+
+    <record id="view_cotizador_sicone_form" model="ir.ui.view">
+        <field name="name">cotizador.sicone.form</field>
+        <field name="model">cotizador.sicone</field>
+        <field name="arch" type="xml">
+            <form string="Cotización de Proyecto Sicone">
+                <sheet>
+                    <group>
+                        <field name="name"/>
+                        <field name="cliente"/>
+                        <field name="proyecto"/>
+                        <field name="total_costo_directo"/>
+                        <field name="area_base"/>
+                        <field name="fecha_guardado"/>
+                        <field name="datos_json"/>
+                    </group>
+                </sheet>
+            </form>
+        </field>
+    </record>
+</odoo>
