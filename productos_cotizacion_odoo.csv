@@ -1,0 +1,47 @@
+Product Name,Category,Type,Unit of Measure,Sale Price
+Diseño Arquitectónico,Diseños y Planificación,Service,Unidad,0
+Diseño Estructural,Diseños y Planificación,Service,Unidad,21000
+Desarrollo del Proyecto,Diseños y Planificación,Service,Unidad,18900
+Visita Técnica,Diseños y Planificación,Service,Unidad,0
+Estructura General,Estructura,Service,Global,127386450
+Mampostería,Mampostería,Service,m²,67000
+Cubierta, Superboard y Manto,Techos y Otros,Service,m²,175000
+Ruana,Techos y Otros,Service,ml,40000
+Contramarcos - Ventana,Techos y Otros,Service,ml,15000
+Contramarcos - Puerta,Techos y Otros,Service,ml,15000
+Embudos y Boquillas,Techos y Otros,Service,und,60000
+Cubierta, Superboard y Shingle,Techos y Otros,Service,m²,210000
+Entrepiso Placa Fácil,Techos y Otros,Service,m²,175000
+Canoas,Techos y Otros,Service,ml,85000
+Pérgolas y Estructura sin Techo,Techos y Otros,Service,m²,175000
+Tapacanal y Lagrimal,Techos y Otros,Service,ml,80000
+Pilas a 3m y 5m,Cimentaciones,Service,und,1340000
+Cimentación Vigas y Losa,Cimentaciones,Service,m²,280000
+Pilotes de Apoyo,Cimentaciones,Service,und,320000
+Red Aguas Lluvias,Complementarios,Service,Global,6150000
+Red Hidrosanitaria,Complementarios,Service,Global,13520000
+Estructura Escalas Metálicas,Complementarios,Service,und,8600000
+Campamento y baño,Complementarios,Service,Global,3000000
+Cerramiento en tela,Complementarios,Service,ml,14500
+Canoa Metálica Calibre 24,Complementarios,Service,ml,145000
+Ruana Metálica Calibre 24,Complementarios,Service,ml,58000
+Revoque,Complementarios,Service,m²,32500
+Fajas, Ranuras y Filetes,Complementarios,Service,ml,7000
+Otros conceptos,Complementarios,Service,Global,0
+Director de Obra,Personal Profesional y Administrativo,Service,Mes,4407865
+Supervisor Técnico,Personal Profesional y Administrativo,Service,Mes,1889085
+Profesional Presupuesto,Personal Profesional y Administrativo,Service,Mes,2896597
+Arquitecto Diseñador,Personal Profesional y Administrativo,Service,Mes,1259390
+Oficial Obra,Personal Profesional y Administrativo,Service,Mes,2266902
+Ayudante de Obra,Personal Profesional y Administrativo,Service,Mes,811488
+Profesional de Procesos,Personal Profesional y Administrativo,Service,Mes,4407865
+Gerente General,Personal Profesional y Administrativo,Service,Mes,5667255
+Compras,Personal Profesional y Administrativo,Service,Mes,3148475
+Contabilidad,Personal Profesional y Administrativo,Service,Mes,3148475
+Atención al Cliente,Personal Profesional y Administrativo,Service,Mes,1259390
+Mantenimiento y Servicios Generales,Personal Profesional y Administrativo,Service,Mes,811489
+Desarrollo y Gestión Humana,Personal Profesional y Administrativo,Service,Mes,2140963
+Personal Administrativo Planta,Personal Profesional y Administrativo,Service,Mes,3434700
+Personal Operativo Planta,Personal Profesional y Administrativo,Service,Mes,737717
+Personal Gestión Ambiental,Personal Profesional y Administrativo,Service,Mes,3000000
+Pólizas de Seguros,Otros conceptos administrativos,Service,Global,0
