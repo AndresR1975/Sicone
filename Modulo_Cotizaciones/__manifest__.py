@@ -30,8 +30,8 @@
         - Catálogo de precios históricos
         - Cálculos automáticos con valores sugeridos editables
     """,
-    'author': 'SICONE SAS',
-    'website': 'https://www.sicone.com',
+    'author': 'AI-MindNovation',
+    'website': 'https://www.ai-mindnovation.com',
     'license': 'LGPL-3',
     'depends': [
         'base',
@@ -43,28 +43,27 @@
         'security/sicone_security.xml',
         'security/ir.model.access.csv',
         
-        # Datos iniciales
-        'data/precios_referencia_data.xml',
         'data/secuencias.xml',
-        
+        # 'data/precios_referencia_data.xml',
+          
         # Vistas
         'views/proyecto_views.xml',
-        'views/cotizacion_views.xml',
-        'views/cotizacion_version_views.xml',
-        'views/precio_referencia_views.xml',
+        # 'views/cotizacion_views.xml',
+        # 'views/cotizacion_version_views.xml',
+        # 'views/precio_referencia_views.xml',
         'views/menus.xml',
         
         # Wizards
-        'wizard/importar_excel_views.xml',
-        'wizard/exportar_excel_views.xml',
+        # 'wizard/importar_excel_views.xml',
+        # 'wizard/exportar_excel_views.xml',
         
         # Reportes
-        'report/cotizacion_report.xml',
-        'report/cotizacion_templates.xml',
+        # 'report/cotizacion_report.xml',
+        # 'report/cotizacion_templates.xml',
     ],
     'demo': [],
     'installable': True,
     'application': True,
     'auto_install': False,
-    'images': ['static/description/banner.png'],
+    'images': ['static/description/banner.png', 'static/description/icon.png'],
 }

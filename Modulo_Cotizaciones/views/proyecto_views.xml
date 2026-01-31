@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!-- Vista de lista de proyectos -->
+    <record id="view_sicone_proyecto_tree" model="ir.ui.view">
+        <field name="name">sicone.proyecto.tree</field>
+        <field name="model">sicone.proyecto</field>
+        <field name="arch" type="xml">
+            <list string="Proyectos">
+                <field name="name"/>
+                <field name="codigo"/>
+                <field name="partner_id"/>
+                <field name="active"/>
+            </list>
+        </field>
+    </record>
+
+    <!-- Vista de formulario de proyectos -->
+    <record id="view_sicone_proyecto_form" model="ir.ui.view">
+        <field name="name">sicone.proyecto.form</field>
+        <field name="model">sicone.proyecto</field>
+        <field name="arch" type="xml">
+            <form string="Proyecto de Construcción">
+                <sheet>
+                    <group>
+                        <field name="name"/>
+                        <field name="codigo"/>
+                        <field name="partner_id"/>
+                        <field name="active"/>
+                    </group>
+                    <group string="Características Técnicas">
+                        <field name="area_base"/>
+                        <field name="area_cubierta"/>
+                        <field name="area_entrepiso"/>
+                        <field name="descripcion"/>
+                    </group>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <!-- Vista de búsqueda de proyectos -->
+    <record id="view_sicone_proyecto_search" model="ir.ui.view">
+        <field name="name">sicone.proyecto.search</field>
+        <field name="model">sicone.proyecto</field>
+        <field name="arch" type="xml">
+            <search string="Buscar Proyecto">
+                <field name="name"/>
+                <field name="codigo"/>
+                <field name="partner_id"/>
+                <filter name="active" string="Activos" domain="[('active','=',True)]"/>
+            </search>
+        </field>
+    </record>
+</odoo>

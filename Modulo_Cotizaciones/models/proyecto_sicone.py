@@ -42,33 +42,12 @@ class ProyectoSicone(models.Model):
     # INFORMACIÓN DEL CLIENTE
     # ============================================================================
     
-    cliente = fields.Char(
-        string='Cliente',
+    partner_id = fields.Many2one(
+        'res.partner',
+        string='Contacto Principal',
         required=True,
         tracking=True,
-        help='Nombre del cliente o empresa contratante'
-    )
-    
-    direccion = fields.Text(
-        string='Dirección',
-        tracking=True
-    )
-    
-    telefono = fields.Char(
-        string='Teléfono',
-        tracking=True
-    )
-    
-    business_manager = fields.Char(
-        string='Business Manager',
-        tracking=True,
-        help='Responsable comercial del proyecto'
-    )
-    
-    medio_contacto = fields.Char(
-        string='Medio de Contacto',
-        tracking=True,
-        help='Cómo se estableció el contacto con el cliente'
+        help='Contacto o empresa principal asociada al proyecto.'
     )
     
     # ============================================================================
@@ -133,16 +112,16 @@ class ProyectoSicone(models.Model):
     # RELACIONES
     # ============================================================================
     
-    cotizacion_ids = fields.One2many(
-        'sicone.cotizacion',
-        'proyecto_id',
-        string='Cotizaciones'
-    )
+    # cotizacion_ids = fields.One2many(
+    #     'sicone.cotizacion',
+    #     'proyecto_id',
+    #     string='Cotizaciones'
+    # )
     
-    cotizacion_count = fields.Integer(
-        string='N° Cotizaciones',
-        compute='_compute_cotizacion_count'
-    )
+    # cotizacion_count = fields.Integer(
+    #     string='N° Cotizaciones',
+    #     compute='_compute_cotizacion_count'
+    # )
     
     # ============================================================================
     # CAMPOS DE CONTROL
@@ -177,11 +156,11 @@ class ProyectoSicone(models.Model):
     # MÉTODOS COMPUTE
     # ============================================================================
     
-    @api.depends('cotizacion_ids')
-    def _compute_cotizacion_count(self):
-        """Calcula el número de cotizaciones asociadas"""
-        for proyecto in self:
-            proyecto.cotizacion_count = len(proyecto.cotizacion_ids)
+    # @api.depends('cotizacion_ids')
+    # def _compute_cotizacion_count(self):
+    #     """Calcula el número de cotizaciones asociadas"""
+    #     for proyecto in self:
+    #         proyecto.cotizacion_count = len(proyecto.cotizacion_ids)
     
     # ============================================================================
     # MÉTODOS CRUD Y CONSTRAINTS
@@ -217,45 +196,48 @@ class ProyectoSicone(models.Model):
     # MÉTODOS DE ACCIÓN
     # ============================================================================
     
-    def action_view_cotizaciones(self):
-        """Abre la vista de cotizaciones del proyecto"""
-        self.ensure_one()
-        return {
-            'name': 'Cotizaciones',
-            'type': 'ir.actions.act_window',
-            'res_model': 'sicone.cotizacion',
-            'view_mode': 'tree,form',
-            'domain': [('proyecto_id', '=', self.id)],
-            'context': {
-                'default_proyecto_id': self.id,
-                'default_cliente': self.cliente,
-                'default_direccion': self.direccion,
-            }
-        }
-    
-    def action_crear_cotizacion(self):
-        """Crea una nueva cotización para este proyecto"""
-        self.ensure_one()
-        return {
-            'name': 'Nueva Cotización',
-            'type': 'ir.actions.act_window',
-            'res_model': 'sicone.cotizacion',
-            'view_mode': 'form',
-            'target': 'current',
-            'context': {
-                'default_proyecto_id': self.id,
-                'default_cliente': self.cliente,
-                'default_direccion': self.direccion,
-            }
-        }
+    # def action_view_cotizaciones(self):
+    #     """Abre la vista de cotizaciones del proyecto"""
+    #     self.ensure_one()
+    #     return {
+    #         'name': 'Cotizaciones',
+    #         'type': 'ir.actions.act_window',
+    #         'res_model': 'sicone.cotizacion',
+    #         'view_mode': 'tree,form',
+    #         'domain': [('proyecto_id', '=', self.id)],
+    #         'context': {
+    #             'default_proyecto_id': self.id,
+    #             'default_cliente': self.cliente,
+    #             'default_direccion': self.direccion,
+    #         }
+    #     }
+    # 
+    # def action_crear_cotizacion(self):
+    #     """Crea una nueva cotización para este proyecto"""
+    #     self.ensure_one()
+    #     return {
+    #         'name': 'Nueva Cotización',
+    #         'type': 'ir.actions.act_window',
+    #         'res_model': 'sicone.cotizacion',
+    #         'view_mode': 'form',
+    #         'target': 'current',
+    #         'context': {
+    #             'default_proyecto_id': self.id,
+    #             'default_cliente': self.cliente,
+    #             'default_direccion': self.direccion,
+    #         }
+    #     }
     
     def name_get(self):
         """Personaliza el nombre mostrado del proyecto"""
         result = []
         for proyecto in self:
+            partner = proyecto.partner_id.display_name if proyecto.partner_id else ''
             if proyecto.codigo:
                 name = f"[{proyecto.codigo}] {proyecto.name}"
             else:
                 name = proyecto.name
+            if partner:
+                name = f"{name} - {partner}"
             result.append((proyecto.id, name))
         return result
