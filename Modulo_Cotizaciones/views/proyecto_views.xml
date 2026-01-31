@@ -9,6 +9,7 @@
                 <field name="name"/>
                 <field name="codigo"/>
                 <field name="partner_id"/>
+                <field name="estado"/>
                 <field name="active"/>
             </list>
         </field>
@@ -25,6 +26,7 @@
                         <field name="name"/>
                         <field name="codigo"/>
                         <field name="partner_id"/>
+                        <field name="estado"/>
                         <field name="active"/>
                     </group>
                     <group string="Características Técnicas">

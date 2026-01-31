@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="view_order_form_inherit_proyecto" model="ir.ui.view">
+        <field name="name">sale.order.form.inherit.proyecto</field>
+        <field name="model">sale.order</field>
+        <field name="inherit_id" ref="sale.view_order_form"/>
+        <field name="arch" type="xml">
+            <xpath expr="//sheet/group" position="after">
+                <group string="Proyecto Asociado">
+                    <field name="proyecto_id" domain="[('partner_id', '=', partner_id)]"/>
+                </group>
+            </xpath>
+        </field>
+    </record>
+</odoo>
