@@ -28,4 +28,10 @@
 
         <!-- Menú Cotizaciones bajo Proyectos -->
         <menuitem id="menu_sicone_sale_order" name="Cotizaciones" parent="menu_sicone_proyectos" action="action_sicone_sale_order" sequence="2"/>
+
+
+    <!-- Menú de Configuración al mismo nivel que Proyectos -->
+    <menuitem id="menu_sicone_configuracion" name="Configuración" parent="menu_sicone_root" sequence="20"/>
+    <menuitem id="menu_cotizacion_template" name="Plantillas de Cotización" parent="menu_sicone_configuracion" action="action_cotizacion_template" sequence="10"/>
+
 </odoo>

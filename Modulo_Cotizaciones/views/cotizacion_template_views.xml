@@ -1,0 +1,65 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+    <!-- Acción para abrir la vista de plantilla -->
+    <record id="action_cotizacion_template" model="ir.actions.act_window">
+        <field name="name">Plantillas de Cotización</field>
+        <field name="res_model">sicone.cotizacion.template</field>
+        <field name="view_mode">list,form</field>
+        <field name="help" type="html">
+            <p>Define aquí las plantillas de capítulos e ítems para cotizaciones de proyectos.</p>
+        </field>
+    </record>
+
+    <!-- Vista árbol de plantillas -->
+    <record id="view_cotizacion_template_tree" model="ir.ui.view">
+        <field name="name">sicone.cotizacion.template.tree</field>
+        <field name="model">sicone.cotizacion.template</field>
+        <field name="arch" type="xml">
+            <list>
+                <field name="name"/>
+                <field name="chapter_ids"/>
+            </list>
+        </field>
+    </record>
+
+    <!-- Vista formulario de plantilla -->
+    <record id="view_cotizacion_template_form" model="ir.ui.view">
+        <field name="name">sicone.cotizacion.template.form</field>
+        <field name="model">sicone.cotizacion.template</field>
+        <field name="arch" type="xml">
+            <form string="Plantilla de Cotización">
+                <sheet>
+                    <group>
+                        <field name="name"/>
+                    </group>
+                    <notebook>
+                        <page string="Capítulos">
+                            <field name="chapter_ids">
+                                <list editable="bottom">
+                                    <field name="sequence"/>
+                                    <field name="name"/>
+                                    <field name="item_ids"/>
+                                </list>
+                                <form string="Capítulo">
+                                    <group>
+                                        <field name="sequence"/>
+                                        <field name="name"/>
+                                    </group>
+                                    <field name="item_ids">
+                                        <list editable="bottom">
+                                            <field name="sequence"/>
+                                            <field name="product_id"/>
+                                            <field name="quantity"/>
+                                            <field name="uom_id"/>
+                                        </list>
+                                    </field>
+                                </form>
+                            </field>
+                        </page>
+                    </notebook>
+                </sheet>
+            </form>
+        </field>
+    </record>
+</odoo>

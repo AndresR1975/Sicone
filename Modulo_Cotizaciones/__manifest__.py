@@ -52,8 +52,9 @@
         # 'views/cotizacion_views.xml',
         # 'views/cotizacion_version_views.xml',
         # 'views/precio_referencia_views.xml',
-        'views/menus.xml',
         'views/sale_order_view.xml',
+        'views/cotizacion_template_views.xml',
+        'views/menus.xml',
         
         # Wizards
         # 'wizard/importar_excel_views.xml',
