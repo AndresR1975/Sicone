@@ -31,21 +31,19 @@
             <form string="Plantilla de Cotización">
                 <sheet>
                     <group>
-                        <field name="name"/>
+                        <field name="name" placeholder="Nombre de la Plantilla"/>
                     </group>
                     <notebook>
                         <page string="Capítulos">
                             <field name="chapter_ids">
-                                <list editable="bottom">
-                                    <field name="sequence"/>
-                                    <field name="name"/>
+                                <list>
+                                    <field name="sequence" placeholder="Secuencia"/>
+                                    <field name="name" placeholder="Nombre del Capítulo"/>
                                     <field name="item_ids"/>
                                 </list>
-                                <form string="Capítulo">
-                                    <group>
-                                        <field name="sequence"/>
-                                        <field name="name"/>
-                                    </group>
+                                <form string="Capítulo" >
+                                    <field name="sequence" placeholder="Secuencia"/>
+                                    <field name="name" placeholder="Nombre del Capítulo"/>
                                     <field name="item_ids">
                                         <list editable="bottom">
                                             <field name="sequence"/>
@@ -58,6 +56,30 @@
                             </field>
                         </page>
                     </notebook>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <!-- Vista formulario de capítulo -->
+    <record id="view_cotizacion_template_chapter_form" model="ir.ui.view">
+        <field name="name">sicone.cotizacion.template.chapter.form</field>
+        <field name="model">sicone.cotizacion.template.chapter</field>
+        <field name="arch" type="xml">
+            <form string="Capítulo de Plantilla">
+                <sheet>
+                    <group>
+                        <field name="sequence" placeholder="Secuencia"/>
+                        <field name="name" placeholder="Nombre del Capítulo"/>
+                    </group>
+                    <field name="item_ids">
+                        <list editable="bottom">
+                            <field name="sequence" placeholder="Secuencia"/>
+                            <field name="product_id"/>
+                            <field name="quantity"/>
+                            <field name="uom_id"/>
+                        </list>
+                    </field>
                 </sheet>
             </form>
         </field>
