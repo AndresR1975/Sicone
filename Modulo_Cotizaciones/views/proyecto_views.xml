@@ -28,6 +28,7 @@
                         <field name="partner_id"/>
                         <field name="estado"/>
                         <field name="active"/>
+                        <field name="cotizacion_template_id"/>
                     </group>
                     <group string="Características Técnicas">
                         <field name="area_base"/>

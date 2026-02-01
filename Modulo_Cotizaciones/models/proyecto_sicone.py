@@ -51,6 +51,15 @@ class ProyectoSicone(models.Model):
     )
     
     # ============================================================================
+    # PLANTILLA DE COTIZACIÓN ASOCIADA (opcional)
+    # ============================================================================
+    cotizacion_template_id = fields.Many2one(
+        'sicone.cotizacion.template',
+        string='Plantilla de Cotización por Defecto',
+        help='Plantilla sugerida para cotizaciones de este proyecto.'
+    )
+
+    # ============================================================================
     # DATOS TÉCNICOS DEL PROYECTO
     # ============================================================================
     

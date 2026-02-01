@@ -8,6 +8,10 @@
             <xpath expr="//sheet/group" position="after">
                 <group string="Proyecto Asociado">
                     <field name="proyecto_id" domain="[('partner_id', '=', partner_id)]"/>
+                    <field name="cotizacion_template_id" invisible="not proyecto_id"/>
+                    <button name="action_load_template_lines" type="object" string="Cargar capítulos e ítems"
+                        invisible="not proyecto_id or not cotizacion_template_id"
+                        class="oe_highlight"/>
                 </group>
             </xpath>
         </field>
