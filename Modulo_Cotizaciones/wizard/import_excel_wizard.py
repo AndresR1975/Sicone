@@ -143,7 +143,7 @@ class ImportExcelWizard(models.TransientModel):
                     return 0.0
             return 0.0
 
-        # Posiciones correctas: [3]Materiales, [5]Equipos, [7]Mano_Obra, [9]Subtotal
+        # Posiciones correctas: [4]Materiales, [6]Equipos, [8]Mano_Obra, [9]Subtotal
         materiales = parse_val(value_row[4]) if len(value_row) > 4 else 0.0
         equipos = parse_val(value_row[6]) if len(value_row) > 6 else 0.0
         mano_obra = parse_val(value_row[8]) if len(value_row) > 8 else 0.0
@@ -165,6 +165,71 @@ class ImportExcelWizard(models.TransientModel):
             'mano_obra': mano_obra,
             'sequence': sequence,
         })
+        sequence += 1
+
+        # Agregar ítem Estructura General: tomar siempre la fila 27 (índice 27, 1-based)
+        try:
+            value_row_estructura = list(ws.iter_rows(min_row=27, max_row=27, values_only=True))[0]
+            if value_row_estructura and any(v is not None for v in value_row_estructura):
+                descripcion_estr = 'Estructura General'
+                ref_estr = 'ESTRUCTURA_GENERAL'
+                uom_estr = value_row_estructura[1] if len(value_row_estructura) > 1 else ''
+                cantidad_estr = value_row_estructura[2] if len(value_row_estructura) > 2 and isinstance(value_row_estructura[2], (int, float)) else 1.0
+                materiales_estr = parse_val(value_row_estructura[4]) if len(value_row_estructura) > 4 else 0.0
+                equipos_estr = parse_val(value_row_estructura[6]) if len(value_row_estructura) > 6 else 0.0
+                mano_obra_estr = parse_val(value_row_estructura[8]) if len(value_row_estructura) > 8 else 0.0
+                subtotal_estr = parse_val(value_row_estructura[9]) if len(value_row_estructura) > 9 else 0.0
+
+                product_estr = self._get_product_by_name(ref_estr)
+                if not product_estr:
+                    raise UserError("No se encontró el producto 'ESTRUCTURA_GENERAL' en Odoo para la sección de especificaciones.")
+
+                SaleOrderLine.create({
+                    'order_id': self.sale_order_id.id,
+                    'product_id': product_estr.id,
+                    'name': descripcion_estr,
+                    'product_uom_qty': cantidad_estr,
+                    'price_unit': subtotal_estr / cantidad_estr if cantidad_estr else 0.0,
+                    'materiales': materiales_estr,
+                    'equipos': equipos_estr,
+                    'mano_obra': mano_obra_estr,
+                    'sequence': sequence,
+                })
+                sequence += 1
+        except Exception:
+            pass
+
+        # Agregar ítem Cubierta, Superboard y Manto: tomar siempre la fila 30 (índice 30, 1-based)
+        try:
+            value_row_cubierta = list(ws.iter_rows(min_row=30, max_row=30, values_only=True))[0]
+            if value_row_cubierta and any(v is not None for v in value_row_cubierta):
+                descripcion_cub = 'Cubierta, Superboard y Manto'
+                ref_cub = 'CUBIERTA'
+                uom_cub = value_row_cubierta[1] if len(value_row_cubierta) > 1 else ''
+                cantidad_cub = value_row_cubierta[2] if len(value_row_cubierta) > 2 and isinstance(value_row_cubierta[2], (int, float)) else 1.0
+                materiales_cub = parse_val(value_row_cubierta[4]) if len(value_row_cubierta) > 4 else 0.0
+                equipos_cub = parse_val(value_row_cubierta[6]) if len(value_row_cubierta) > 6 else 0.0
+                mano_obra_cub = parse_val(value_row_cubierta[8]) if len(value_row_cubierta) > 8 else 0.0
+                subtotal_cub = parse_val(value_row_cubierta[9]) if len(value_row_cubierta) > 9 else 0.0
+
+                product_cub = self._get_product_by_name(ref_cub)
+                if not product_cub:
+                    raise UserError("No se encontró el producto 'CUBIERTA' en Odoo para la sección de especificaciones.")
+
+                SaleOrderLine.create({
+                    'order_id': self.sale_order_id.id,
+                    'product_id': product_cub.id,
+                    'name': descripcion_cub,
+                    'product_uom_qty': cantidad_cub,
+                    'price_unit': subtotal_cub / cantidad_cub if cantidad_cub else 0.0,
+                    'materiales': materiales_cub,
+                    'equipos': equipos_cub,
+                    'mano_obra': mano_obra_cub,
+                    'sequence': sequence,
+                })
+                sequence += 1
+        except Exception:
+            pass
 
     def _parse_excel_structure(self, ws):
         """
