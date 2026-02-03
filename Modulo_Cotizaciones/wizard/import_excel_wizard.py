@@ -60,23 +60,111 @@ class ImportExcelWizard(models.TransientModel):
             
             # Parsear la estructura del Excel
             parsed_data = self._parse_excel_structure(ws)
-            
-            # Cargar los datos en la cotización
+            # Cargar los datos en la cotización (DISEÑOS Y PLANIFICACIÓN)
             self._load_data_to_quotation(parsed_data)
-            
+
+            # Cargar la sección ESPECIFICACIONES GENERALES DEL PROYECTO
+            self._import_especificaciones_generales(ws)
+
             return {
                 'type': 'ir.actions.client',
                 'tag': 'display_notification',
                 'params': {
                     'title': 'Importación exitosa',
-                    'message': f'Se cargaron {len(parsed_data)} líneas en la cotización',
+                    'message': f'Se cargaron {len(parsed_data)} líneas en la cotización (más especificaciones generales)',
                     'type': 'success',
                     'sticky': False,
                 }
             }
+            
         
         except Exception as e:
             raise UserError(f'Error al procesar el Excel: {str(e)}')
+
+    def _import_especificaciones_generales(self, ws):
+        """
+        Importa la sección 'ESPECIFICACIONES GENERALES DEL PROYECTO' (ejemplo: mampostería)
+        Agrega una línea de sección y líneas de ítem con valores correctos.
+        """
+        SaleOrderLine = self.env['sale.order.line']
+        sequence = SaleOrderLine.search_count([('order_id', '=', self.sale_order_id.id)]) + 100
+
+        # Buscar la fila donde inicia la sección
+        start_row = None
+        for idx, row in enumerate(ws.iter_rows(values_only=True)):
+            row_text = ' '.join([str(v).upper() for v in row if v is not None])
+            if 'ESPECIFICACIONES GENERALES DEL PROYECTO' in row_text:
+                start_row = idx
+                break
+
+        if start_row is None:
+            # No se encontró la sección, no hacer nada
+            return
+
+        # Crear línea de sección
+        SaleOrderLine.create({
+            'order_id': self.sale_order_id.id,
+            'display_type': 'line_section',
+            'name': 'ESPECIFICACIONES GENERALES DEL PROYECTO',
+            'sequence': sequence,
+        })
+        sequence += 1
+
+        # Buscar la fila de valores (la fila después de la fila de títulos)
+        # start_row es el índice de la fila con "ESPECIFICACIONES GENERALES DEL PROYECTO"
+        # Las filas de títulos están en start_row+1, los valores en start_row+2
+        value_row = None
+        try:
+            # Leer la fila directamente usando el número de fila real (start_row es índice 0-based)
+            row_num = start_row + 3  # +1 para fila, +2 para saltar a fila de valores
+            row = list(ws.iter_rows(min_row=row_num, max_row=row_num, values_only=True))[0]
+            if row and any(v is not None for v in row):
+                value_row = row
+        except Exception as e:
+            pass
+        
+        if not value_row:
+            return
+
+        # Extraer valores según columnas del Excel:
+        # Fila 24: [0]empty, [1]m², [2]845.00, [3]$67.000, [4]$56.615.000, [5]$7.500, [6]$6.337.500, [7]$45.000, [8]$38.025.000, [9]$100.977.500
+        descripcion = 'Mampostería'
+        uom = value_row[1] if len(value_row) > 1 else ''
+        cantidad = value_row[2] if len(value_row) > 2 and isinstance(value_row[2], (int, float)) else 1.0
+
+        def parse_val(val):
+            if isinstance(val, (int, float)):
+                return float(val)
+            if isinstance(val, str):
+                cleaned = val.replace('$','').replace(' ','').replace('.','').replace(',','.')
+                try:
+                    return float(cleaned)
+                except Exception:
+                    return 0.0
+            return 0.0
+
+        # Posiciones correctas: [3]Materiales, [5]Equipos, [7]Mano_Obra, [9]Subtotal
+        materiales = parse_val(value_row[4]) if len(value_row) > 4 else 0.0
+        equipos = parse_val(value_row[6]) if len(value_row) > 6 else 0.0
+        mano_obra = parse_val(value_row[8]) if len(value_row) > 8 else 0.0
+        subtotal = parse_val(value_row[9]) if len(value_row) > 9 else 0.0
+
+        # Buscar producto por nombre o referencia
+        product = self._get_product_by_name('MAMPOSTERIA')
+        if not product:
+            raise UserError("No se encontró el producto 'MAMPOSTERIA' en Odoo para la sección de especificaciones.")
+
+        SaleOrderLine.create({
+            'order_id': self.sale_order_id.id,
+            'product_id': product.id,
+            'name': descripcion,
+            'product_uom_qty': cantidad,
+            'price_unit': subtotal/ cantidad if cantidad else 0.0,
+            'materiales': materiales,
+            'equipos': equipos,
+            'mano_obra': mano_obra,
+            'sequence': sequence,
+        })
 
     def _parse_excel_structure(self, ws):
         """
@@ -221,6 +309,7 @@ class ImportExcelWizard(models.TransientModel):
             }
         
         return None
+    
 
     def _load_data_to_quotation(self, items):
         """
