@@ -1,8 +1,7 @@
 id,name,model_id:id,group_id:id,perm_read,perm_write,perm_create,perm_unlink
 access_sicone_proyecto_user,sicone.proyecto.user,model_sicone_proyecto,group_sicone_user,1,1,1,0
 access_sicone_proyecto_manager,sicone.proyecto.manager,model_sicone_proyecto,group_sicone_manager,1,1,1,1
-access_sicone_proyecto_user,sicone.proyecto.user,model_sicone_proyecto,group_sicone_user,1,1,1,0
-access_sicone_proyecto_manager,sicone.proyecto.manager,model_sicone_proyecto,group_sicone_manager,1,1,1,1
 access_cotizacion_template_all,sicone.cotizacion.template,model_sicone_cotizacion_template,,1,1,1,1
 access_cotizacion_template_chapter_all,sicone.cotizacion.template.chapter,model_sicone_cotizacion_template_chapter,,1,1,1,1
 access_cotizacion_template_item_all,sicone.cotizacion.template.item,model_sicone_cotizacion_template_item,,1,1,1,1
+access_import_excel_wizard_user,sicone.import.excel.wizard,model_sicone_import_excel_wizard,,1,1,1,0

@@ -1,0 +1,324 @@
+# -*- coding: utf-8 -*-
+import base64
+import io
+from odoo import models, fields, api
+from odoo.exceptions import UserError
+import openpyxl
+from openpyxl.utils import get_column_letter
+
+
+class ImportExcelWizard(models.TransientModel):
+    _name = 'sicone.import.excel.wizard'
+    _description = 'Asistente para Importar Cotización de Excel'
+
+    sale_order_id = fields.Many2one(
+        'sale.order',
+        string='Cotización',
+        required=True,
+        help='Cotización donde se cargarán los datos del Excel'
+    )
+    
+    excel_file = fields.Binary(
+        string='Archivo Excel',
+        required=True,
+        help='Archivo de cotización en formato Excel'
+    )
+    
+    filename = fields.Char(
+        string='Nombre del archivo',
+        help='Nombre del archivo Excel cargado'
+    )
+
+    @api.model
+    def default_get(self, fields_list):
+        """Obtiene el sale_order del contexto si está disponible"""
+        defaults = super().default_get(fields_list)
+        if 'sale_order_id' in fields_list and self.env.context.get('active_id'):
+            defaults['sale_order_id'] = self.env.context.get('active_id')
+        return defaults
+
+    def action_import_excel(self):
+        """
+        Parsea el archivo Excel y carga los datos en la cotización (sale.order)
+        """
+        self.ensure_one()
+        
+        if not self.excel_file:
+            raise UserError('Debe seleccionar un archivo Excel')
+        
+        if not self.sale_order_id:
+            raise UserError('Debe seleccionar una cotización')
+
+        try:
+            # Decodificar el archivo
+            excel_data = base64.b64decode(self.excel_file)
+            excel_file = io.BytesIO(excel_data)
+            
+            # Cargar el workbook leyendo valores calculados (no fórmulas)
+            wb = openpyxl.load_workbook(excel_file, data_only=True)
+            ws = wb.active
+            
+            # Parsear la estructura del Excel
+            parsed_data = self._parse_excel_structure(ws)
+            
+            # Cargar los datos en la cotización
+            self._load_data_to_quotation(parsed_data)
+            
+            return {
+                'type': 'ir.actions.client',
+                'tag': 'display_notification',
+                'params': {
+                    'title': 'Importación exitosa',
+                    'message': f'Se cargaron {len(parsed_data)} líneas en la cotización',
+                    'type': 'success',
+                    'sticky': False,
+                }
+            }
+        
+        except Exception as e:
+            raise UserError(f'Error al procesar el Excel: {str(e)}')
+
+    def _parse_excel_structure(self, ws):
+        """
+        Parsea la estructura del Excel según el formato F-CDO-2014
+        Retorna una lista de diccionarios con la información extraída
+        """
+        parsed_data = []
+        
+        # Recorrer las filas del Excel
+        for row in ws.iter_rows(min_row=1, values_only=False):
+            # Obtener valores de celdas
+            row_data = [cell.value for cell in row]
+            
+            # Filtrar filas vacías
+            if all(v is None for v in row_data):
+                continue
+            
+            parsed_data.append(row_data)
+        
+        # Aquí procesaremos la estructura específica del Excel
+        return self._extract_chapters_and_items(parsed_data, ws)
+
+    def _extract_chapters_and_items(self, raw_data, ws=None):
+        """
+        Extrae los capítulos e ítems de los datos crudos del Excel
+        Basado en la estructura F-CDO-2014
+        Los ítems están en columnas horizontales, no filas verticales
+        Lee los valores de celdas fijas según la plantilla.
+        """
+        # Mapeo: nombre en Excel, nombre en Odoo, índice de columna (basado en la plantilla real)
+        # B=1, D=3, F=5, H=7 (índices 0-based)
+        items_map = [
+            {'excel_name': 'DISEÑO ARQUITECTONICO', 'odoo_name': 'DISEÑO_ARQ', 'col': 1},  # B
+            {'excel_name': 'DISEÑO ESTRUCTURAL', 'odoo_name': 'DISEÑO_ESTR', 'col': 3},    # D
+            {'excel_name': 'DESARROLLO DEL PROYECTO', 'odoo_name': 'DESARROLLO_PROY', 'col': 5}, # F
+            {'excel_name': 'VISITA TECNICA', 'odoo_name': 'VISITATECNICA', 'col': 7},     # H
+        ]
+
+        # Buscar la fila de títulos y la fila de valores
+        title_row_idx = None
+        value_row_idx = None
+        for idx, row in enumerate(raw_data):
+            row_text = ' '.join([str(v).upper() for v in row if v is not None])
+            if 'DISEÑO ARQUITECTONICO' in row_text and 'DISEÑO ESTRUCTURAL' in row_text:
+                title_row_idx = idx
+                value_row_idx = idx + 1
+                break
+
+        if title_row_idx is None or value_row_idx is None:
+            raise UserError(
+                'No se encontró la sección "DISEÑOS Y PLANIFICACIÓN" en el archivo Excel. '
+                'Verifique que el archivo tenga la estructura correcta.'
+            )
+
+        value_row = raw_data[value_row_idx]
+        items = []
+        def parse_number(val):
+            if isinstance(val, (int, float)):
+                return float(val)
+            if isinstance(val, str):
+                # Eliminar símbolos de moneda, puntos de miles, espacios y convertir coma decimal a punto
+                cleaned = val.replace('$', '').replace(' ', '').replace('.', '').replace(',', '.')
+                try:
+                    return float(cleaned)
+                except Exception:
+                    return 0.0
+            return 0.0
+
+        # Leer cantidad de la celda J9 (área construida)
+        cantidad = 1.0
+        if ws is not None:
+            try:
+                cantidad = parse_number(ws['J9'].value)
+            except Exception:
+                cantidad = 1.0
+
+        for item_def in items_map:
+            col = item_def['col']
+            subtotal = 0.0
+            if col < len(value_row):
+                cell_val = value_row[col]
+                subtotal = parse_number(cell_val)
+            items.append({
+                'excel_name': item_def['excel_name'],
+                'odoo_name': item_def['odoo_name'],
+                'description': item_def['excel_name'],
+                'quantity': cantidad,
+                'subtotal': subtotal,
+            })
+
+        # Ya no se valida que haya al menos un ítem con valor
+        return items
+
+    def _extract_item_from_row(self, row):
+        """
+        Extrae la información de un ítem de una fila del Excel
+        Estructura: cantidad, materiales, equipos, mano de obra, subtotal
+        """
+        if len(row) < 5:
+            return None
+        
+        # Intentar extraer información numérica
+        numeric_values = []
+        for i, cell in enumerate(row):
+            if isinstance(cell, (int, float)):
+                numeric_values.append({
+                    'column': i,
+                    'value': cell
+                })
+        
+        if not numeric_values:
+            return None
+        
+        # Por ahora, creamos un ítem básico
+        return {
+            'description': str(row[0]) if row[0] else 'Ítem sin descripción',
+            'values': numeric_values
+        }
+
+    def _extract_disenos_item(self, row, item_name):
+        """
+        Extrae un ítem de la sección DISEÑOS Y PLANIFICACIÓN
+        Estructura típica: nombre | valor1 | valor2 | valor3 | valor4 | subtotal
+        """
+        # Los valores están en las columnas, ignorando la primera (nombre)
+        values = []
+        for cell in row[1:]:
+            if isinstance(cell, (int, float)):
+                values.append(cell)
+        
+        # Si hay valores numéricos, crear el ítem
+        if values:
+            # El subtotal es el último valor
+            subtotal = values[-1] if values else 0
+            
+            return {
+                'name': item_name,
+                'description': item_name,
+                'quantity': 1.0,
+                'subtotal': subtotal,
+                'all_values': values  # Guardar todos los valores para debug
+            }
+        
+        return None
+
+    def _load_data_to_quotation(self, items):
+        """
+        Carga los ítems extraídos en la cotización (sale.order)
+        """
+        if not items:
+            raise UserError('No se encontraron ítems en la sección DISEÑOS Y PLANIFICACIÓN del archivo')
+        
+        SaleOrderLine = self.env['sale.order.line']
+        sequence = 1
+        
+        # Crear línea de sección para DISEÑOS Y PLANIFICACIÓN
+        SaleOrderLine.create({
+            'order_id': self.sale_order_id.id,
+            'display_type': 'line_section',
+            'name': 'DISEÑOS Y PLANIFICACIÓN',
+            'sequence': sequence,
+        })
+        sequence += 1
+        
+        # Crear líneas para cada ítem
+        for item in items:
+            # Buscar producto usando el nombre mapeado de Odoo
+            product = self._get_product_by_name(item['odoo_name'])
+            
+            if not product:
+                raise UserError(f"No se encontró el producto '{item['odoo_name']}' en Odoo. "
+                               f"Nombre en Excel: {item['excel_name']}")
+            
+            SaleOrderLine.create({
+                'order_id': self.sale_order_id.id,
+                'product_id': product.id,
+                'name': product.display_name,
+                'product_uom_qty': item.get('quantity', 1.0),
+                'price_unit': item.get('subtotal', 0.0),
+                'sequence': sequence,
+            })
+            sequence += 1
+
+    def _get_or_create_product(self, item):
+        """
+        Obtiene o crea un producto basado en la descripción del ítem
+        """
+        Product = self.env['product.product']
+        
+        # Buscar producto existente por nombre
+        products = Product.search([
+            ('name', 'ilike', item.get('description', ''))
+        ], limit=1)
+        
+        if products:
+            return products[0]
+        
+        # Crear nuevo producto
+        return Product.create({
+            'name': item.get('description', 'Producto importado'),
+            'type': 'service',
+            'list_price': 0.0,
+        })
+
+    def _get_product_by_name(self, product_identifier):
+        """
+        Busca un producto por:
+        1. Nombre exacto (case-insensitive)
+        2. Referencia/código
+        3. Nombre parcial
+        
+        product_identifier puede ser: nombre completo, código corto, etc.
+        """
+        Product = self.env['product.product']
+        
+        # Primero intentar búsqueda por referencia/código
+        products = Product.search([
+            ('default_code', '=', product_identifier)
+        ], limit=1)
+        
+        if products:
+            return products[0]
+        
+        # Búsqueda case-insensitive por nombre exacto
+        products = Product.search([
+            ('name', '=ilike', product_identifier)
+        ], limit=1)
+        
+        if products:
+            return products[0]
+        
+        # Búsqueda parcial por nombre
+        products = Product.search([
+            ('name', 'ilike', product_identifier)
+        ], limit=1)
+        
+        if products:
+            return products[0]
+        
+        # Búsqueda parcial por referencia
+        products = Product.search([
+            ('default_code', 'ilike', product_identifier)
+        ], limit=1)
+        
+        return products[0] if products else None
