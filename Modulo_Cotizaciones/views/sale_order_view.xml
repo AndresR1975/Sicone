@@ -14,6 +14,11 @@
                         class="oe_highlight"/>
                 </group>
             </xpath>
+            <xpath expr="//field[@name='order_line']/list/field[@name='product_uom'][last()]" position="after">
+                <field name="materiales" optional="show"/>
+                <field name="equipos" optional="show"/>
+                <field name="mano_obra" optional="show"/>
+            </xpath>
         </field>
     </record>
 </odoo>

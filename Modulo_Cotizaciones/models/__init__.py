@@ -1,8 +1,10 @@
 # -*- coding: utf-8 -*-
 
+# from . import proyecto_sicone
 from . import proyecto_sicone
 from . import sale_order
 from . import cotizacion_template
+from . import sale_order_line
 # from . import cotizacion_sicone
 # from . import cotizacion_version
 # from . import cotizacion_diseno
