@@ -231,6 +231,70 @@ class ImportExcelWizard(models.TransientModel):
         except Exception:
             pass
 
+        # Agregar ítem Cubierta, Superboard y Shingle: tomar siempre la fila 43 (índice 43, 1-based)
+        try:
+            value_row_shingle = list(ws.iter_rows(min_row=43, max_row=43, values_only=True))[0]
+            if value_row_shingle and any(v is not None for v in value_row_shingle):
+                descripcion_shingle = 'Cubierta, Superboard y Shingle'
+                ref_shingle = 'CUBIERTA_SHINGLE'
+                uom_shingle = value_row_shingle[1] if len(value_row_shingle) > 1 else ''
+                cantidad_shingle = value_row_shingle[2] if len(value_row_shingle) > 2 and isinstance(value_row_shingle[2], (int, float)) else 1.0
+                materiales_shingle = parse_val(value_row_shingle[4]) if len(value_row_shingle) > 3 else 0.0
+                equipos_shingle = parse_val(value_row_shingle[6]) if len(value_row_shingle) > 5 else 0.0
+                mano_obra_shingle = parse_val(value_row_shingle[8]) if len(value_row_shingle) > 7 else 0.0
+                subtotal_shingle = parse_val(value_row_shingle[9]) if len(value_row_shingle) > 9 else 0.0
+
+                product_shingle = self._get_product_by_name(ref_shingle)
+                if not product_shingle:
+                    raise UserError("No se encontró el producto 'CUBIERTA_SHINGLE' en Odoo para la sección de especificaciones.")
+
+                SaleOrderLine.create({
+                    'order_id': self.sale_order_id.id,
+                    'product_id': product_shingle.id,
+                    'name': descripcion_shingle,
+                    'product_uom_qty': cantidad_shingle,
+                    'price_unit': subtotal_shingle / cantidad_shingle if cantidad_shingle else 0.0,
+                    'materiales': materiales_shingle,
+                    'equipos': equipos_shingle,
+                    'mano_obra': mano_obra_shingle,
+                    'sequence': sequence,
+                })
+                sequence += 1
+        except Exception:
+            pass
+
+        # Agregar ítem Entrepiso Placa Fácil: tomar siempre la fila 46 (índice 46, 1-based)
+        try:
+            value_row_entrepiso = list(ws.iter_rows(min_row=46, max_row=46, values_only=True))[0]
+            if value_row_entrepiso and any(v is not None for v in value_row_entrepiso):
+                descripcion_entrepiso = 'Entrepiso Placa Fácil'
+                ref_entrepiso = 'ENTREPISO_PLACA'
+                uom_entrepiso = value_row_entrepiso[1] if len(value_row_entrepiso) > 1 else ''
+                cantidad_entrepiso = value_row_entrepiso[2] if len(value_row_entrepiso) > 2 and isinstance(value_row_entrepiso[2], (int, float)) else 1.0
+                materiales_entrepiso = parse_val(value_row_entrepiso[4]) if len(value_row_entrepiso) > 3 else 0.0
+                equipos_entrepiso = parse_val(value_row_entrepiso[6]) if len(value_row_entrepiso) > 5 else 0.0
+                mano_obra_entrepiso = parse_val(value_row_entrepiso[8]) if len(value_row_entrepiso) > 7 else 0.0
+                subtotal_entrepiso = parse_val(value_row_entrepiso[9]) if len(value_row_entrepiso) > 9 else 0.0
+
+                product_entrepiso = self._get_product_by_name(ref_entrepiso)
+                if not product_entrepiso:
+                    raise UserError("No se encontró el producto 'ENTREPISO_PLACA' en Odoo para la sección de especificaciones.")
+
+                SaleOrderLine.create({
+                    'order_id': self.sale_order_id.id,
+                    'product_id': product_entrepiso.id,
+                    'name': descripcion_entrepiso,
+                    'product_uom_qty': cantidad_entrepiso,
+                    'price_unit': subtotal_entrepiso / cantidad_entrepiso if cantidad_entrepiso else 0.0,
+                    'materiales': materiales_entrepiso,
+                    'equipos': equipos_entrepiso,
+                    'mano_obra': mano_obra_entrepiso,
+                    'sequence': sequence,
+                })
+                sequence += 1
+        except Exception:
+            pass
+
     def _parse_excel_structure(self, ws):
         """
         Parsea la estructura del Excel según el formato F-CDO-2014
