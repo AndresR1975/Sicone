@@ -1,5 +1,10 @@
 from odoo import models, fields
 
+class SaleOrderLine(models.Model):
+    _inherit = 'sale.order.line'
+
+    capitulo = fields.Char(string='Capítulo', index=True)
+
 class SaleOrder(models.Model):
     _inherit = 'sale.order'
 
@@ -44,4 +49,5 @@ class SaleOrder(models.Model):
                         'product_uom_qty': item.quantity or 1.0,
                         'product_uom': item.uom_id.id or item.product_id.uom_id.id,
                         'sequence': item.sequence,
+                        'capitulo': chapter.name,
                     })

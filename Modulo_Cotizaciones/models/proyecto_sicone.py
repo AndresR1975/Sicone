@@ -3,6 +3,57 @@
 from odoo import models, fields, api
 from odoo.exceptions import ValidationError
 
+class SaleOrder(models.Model):
+    _inherit = 'sale.order'
+
+    resumen_estructura = fields.Monetary(string="Estructura (Resumen)", readonly=True, currency_field='currency_id')
+    resumen_otros = fields.Monetary(string="Otros (Resumen)", readonly=True, currency_field='currency_id')
+    resumen_disenos = fields.Monetary(string="Diseños (Resumen)", readonly=True, currency_field='currency_id')
+
+    resumen_total_costo_directo = fields.Monetary(
+        string="Total Costo Directo",
+        readonly=True,
+        currency_field='currency_id',
+        compute='_compute_resumen_total_costo_directo'
+    )
+
+    # ADMINISTRACIÓN DEL PROYECTO
+    comision_ventas = fields.Monetary(string="Comisión Ventas", readonly=True, currency_field='currency_id')
+    imprevistos = fields.Monetary(string="Imprevistos", readonly=True, currency_field='currency_id')
+    porcentaje_sugerido_admon = fields.Float(string="% Sugerido Admon / Costo", readonly=True)
+    vlr_sugerido_admon = fields.Monetary(string="Vlr Sugerido Admon", readonly=True, currency_field='currency_id')
+    calculo_admon = fields.Monetary(string="Cálculo Admon", readonly=True, currency_field='currency_id')
+    administracion = fields.Monetary(string="Administración", readonly=True, currency_field='currency_id')
+    logistica = fields.Monetary(string="Logística", readonly=True, currency_field='currency_id')
+    porcentaje_sugerido_utilidad = fields.Float(string="% Sugerido Utilidad / Costo", readonly=True)
+    vlr_sugerido_utilidad = fields.Monetary(string="Vlr Sugerido Utilidad", readonly=True, currency_field='currency_id')
+    calculo_utilidad = fields.Monetary(string="Cálculo Utilidad", readonly=True, currency_field='currency_id')
+    utilidad = fields.Monetary(string="Utilidad", readonly=True, currency_field='currency_id')
+    total_aiu = fields.Monetary(string="Total AIU", readonly=True, currency_field='currency_id')
+
+    # VALOR TOTAL DEL PROYECTO
+    valor_total_directos = fields.Monetary(string="Directos (Valor Total)", readonly=True, currency_field='currency_id')
+    valor_total_aiu = fields.Monetary(string="AIU (Valor Total)", readonly=True, currency_field='currency_id')
+    valor_total_subtotal_costo_directo = fields.Monetary(string="Subtotal Costo Directo", readonly=True, currency_field='currency_id')
+    valor_total_descuento = fields.Monetary(string="Descuento", readonly=True, currency_field='currency_id')
+    valor_total_total_costo_directo = fields.Monetary(string="Total Costo Directo (Valor Total)", readonly=True, currency_field='currency_id')
+    valor_total_m2 = fields.Float(string="Valor m²", readonly=True)
+
+    # VALOR TOTAL DEL PROYECTO CON CIMENTACIONES Y COMPLEMENTARIOS
+    costo_directo_cim_comp = fields.Monetary(string="Costo Directo (Cim/Comp)", readonly=True, currency_field='currency_id')
+    cimentaciones = fields.Monetary(string="Cimentaciones", readonly=True, currency_field='currency_id')
+    complementarios = fields.Monetary(string="Complementarios", readonly=True, currency_field='currency_id')
+    total_costo_proyecto_cim_comp = fields.Monetary(string="Total Costo Proyecto (Cim/Comp)", readonly=True, currency_field='currency_id')
+    valor_m2_cim_comp = fields.Float(string="Valor m² (Cim/Comp)", readonly=True)
+
+    def _compute_resumen_total_costo_directo(self):
+        for order in self:
+            order.resumen_total_costo_directo = (
+                (order.resumen_estructura or 0.0)
+                + (order.resumen_otros or 0.0)
+                + (order.resumen_disenos or 0.0)
+            )
+
 
 class ProyectoSicone(models.Model):
     """

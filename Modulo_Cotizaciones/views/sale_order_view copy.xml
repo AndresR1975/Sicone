@@ -10,7 +10,7 @@
                     <field name="proyecto_id" domain="[('partner_id', '=', partner_id)]"/>
                     <field name="cotizacion_template_id" invisible="not proyecto_id"/>
                     <button name="action_load_template_lines" type="object" string="Cargar capítulos e ítems"
-                        invisible="1"
+                        invisible="not proyecto_id or not cotizacion_template_id"
                         class="oe_highlight"/>
                 </group>
             </xpath>
@@ -18,7 +18,6 @@
                 <field name="materiales" optional="show"/>
                 <field name="equipos" optional="show"/>
                 <field name="mano_obra" optional="show"/>
-                <field name="capitulo" invisible="1"/>
             </xpath>
             <xpath expr="//field[@name='order_line']" position="after">
                     <div class="d-flex justify-content-end">

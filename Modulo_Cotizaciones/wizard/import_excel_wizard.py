@@ -37,7 +37,7 @@ class ImportExcelWizard(models.TransientModel):
             defaults['sale_order_id'] = self.env.context.get('active_id')
         return defaults
 
-    def action_import_excel(self):
+    def action_import_excel(self): 
         """
         Parsea el archivo Excel y carga los datos en la cotización (sale.order)
         """
@@ -66,12 +66,29 @@ class ImportExcelWizard(models.TransientModel):
             # Cargar la sección ESPECIFICACIONES GENERALES DEL PROYECTO
             self._import_especificaciones_generales(ws)
 
+            # Guardar el archivo como adjunto a la cotización
+            from datetime import datetime
+            now_str = datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
+            base_name = self.filename or 'cotizacion_importada.xlsx'
+            if '.' in base_name:
+                name_part, ext = base_name.rsplit('.', 1)
+                new_name = f"{name_part}_{now_str}.{ext}"
+            else:
+                new_name = f"{base_name}_{now_str}"
+            self.env['ir.attachment'].create({
+                'name': new_name,
+                'datas': self.excel_file,
+                'res_model': 'sale.order',
+                'res_id': self.sale_order_id.id,
+                'type': 'binary',
+                'mimetype': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            })
             return {
                 'type': 'ir.actions.client',
                 'tag': 'display_notification',
                 'params': {
                     'title': 'Importación exitosa',
-                    'message': f'Se cargaron {len(parsed_data)} líneas en la cotización (más especificaciones generales)',
+                    'message': f'Se cargaron {len(parsed_data)} líneas en la cotización (más especificaciones generales) y el archivo fue adjuntado.',
                     'type': 'success',
                     'sticky': False,
                 }
@@ -292,6 +309,236 @@ class ImportExcelWizard(models.TransientModel):
                     'sequence': sequence,
                 })
                 sequence += 1
+        except Exception:
+            pass
+
+        # Agregar ítem Pérgolas y Estructura sin Techo: tomar siempre la fila 52 (índice 52, 1-based)
+        try:
+            value_row_pergolas = list(ws.iter_rows(min_row=52, max_row=52, values_only=True))[0]
+            if value_row_pergolas and any(v is not None for v in value_row_pergolas):
+                descripcion_pergolas = 'Pérgolas y Estructura sin Techo'
+                ref_pergolas = 'PERGOLAS_SIN_TECHO'
+                uom_pergolas = value_row_pergolas[1] if len(value_row_pergolas) > 1 else ''
+                cantidad_pergolas = value_row_pergolas[2] if len(value_row_pergolas) > 2 and isinstance(value_row_pergolas[2], (int, float)) else 1.0
+                materiales_pergolas = parse_val(value_row_pergolas[4]) if len(value_row_pergolas) > 4 else 0.0
+                equipos_pergolas = parse_val(value_row_pergolas[6]) if len(value_row_pergolas) > 6 else 0.0
+                mano_obra_pergolas = parse_val(value_row_pergolas[8]) if len(value_row_pergolas) > 8 else 0.0
+                subtotal_pergolas = parse_val(value_row_pergolas[9]) if len(value_row_pergolas) > 9 else 0.0
+
+                product_pergolas = self._get_product_by_name(ref_pergolas)
+                if not product_pergolas:
+                    raise UserError("No se encontró el producto 'PERGOLAS_SIN_TECHO' en Odoo para la sección de especificaciones.")
+
+                SaleOrderLine.create({
+                    'order_id': self.sale_order_id.id,
+                    'product_id': product_pergolas.id,
+                    'name': descripcion_pergolas,
+                    'product_uom_qty': cantidad_pergolas,
+                    'price_unit': subtotal_pergolas / cantidad_pergolas if cantidad_pergolas else 0.0,
+                    'materiales': materiales_pergolas,
+                    'equipos': equipos_pergolas,
+                    'mano_obra': mano_obra_pergolas,
+                    'sequence': sequence,
+                })
+                sequence += 1
+        except Exception:
+            pass
+
+        # Guardar resumen de costos directos en campos de solo lectura de sale.order
+        try:
+            row_estructura = list(ws.iter_rows(min_row=58, max_row=58, values_only=True))[0]
+            row_otros = list(ws.iter_rows(min_row=59, max_row=59, values_only=True))[0]
+            row_disenos = list(ws.iter_rows(min_row=60, max_row=60, values_only=True))[0]
+            row_total = list(ws.iter_rows(min_row=61, max_row=61, values_only=True))[0]
+            estructura_val = 0.0
+            otros_val = 0.0
+            disenos_val = 0.0
+            total_val = 0.0
+            def parse_val(val):
+                if isinstance(val, (int, float)):
+                    return float(val)
+                if isinstance(val, str):
+                    cleaned = val.replace('$','').replace(' ','').replace('.','').replace(',','.')
+                    try:
+                        return float(cleaned)
+                    except Exception:
+                        return 0.0
+                return 0.0
+            # Column J is index 9
+            if row_estructura and len(row_estructura) > 9:
+                estructura_val = parse_val(row_estructura[9])
+            if row_otros and len(row_otros) > 9:
+                otros_val = parse_val(row_otros[9])
+            if row_disenos and len(row_disenos) > 9:
+                disenos_val = parse_val(row_disenos[9])
+            if row_total and len(row_total) > 9:
+                total_val = parse_val(row_total[9])
+            self.sale_order_id.write({
+                'resumen_estructura': estructura_val,
+                'resumen_otros': otros_val,
+                'resumen_disenos': disenos_val,
+                'resumen_total_costo_directo': total_val,
+            })
+        except Exception:
+            pass
+
+        # Guardar ADMINISTRACIÓN DEL PROYECTO en campos de solo lectura de sale.order
+        try:
+            row_comision_ventas = list(ws.iter_rows(min_row=64, max_row=64, values_only=True))[0]
+            row_imprevistos = list(ws.iter_rows(min_row=65, max_row=65, values_only=True))[0]
+            row_pct_admon = list(ws.iter_rows(min_row=66, max_row=66, values_only=True))[0]
+            row_vlr_sugerido_admon = list(ws.iter_rows(min_row=67, max_row=67, values_only=True))[0]
+            row_calculo_admon = list(ws.iter_rows(min_row=68, max_row=68, values_only=True))[0]
+            row_administracion = list(ws.iter_rows(min_row=69, max_row=69, values_only=True))[0]
+            row_logistica = list(ws.iter_rows(min_row=70, max_row=70, values_only=True))[0]
+            row_pct_utilidad = list(ws.iter_rows(min_row=71, max_row=71, values_only=True))[0]
+            row_vlr_sugerido_utilidad = list(ws.iter_rows(min_row=72, max_row=72, values_only=True))[0]
+            row_calculo_utilidad = list(ws.iter_rows(min_row=73, max_row=73, values_only=True))[0]
+            row_utilidad = list(ws.iter_rows(min_row=74, max_row=74, values_only=True))[0]
+            row_total_aiu = list(ws.iter_rows(min_row=75, max_row=75, values_only=True))[0]
+
+            def parse_pct(val):
+                if isinstance(val, (int, float)):
+                    return float(val)
+                if isinstance(val, str):
+                    cleaned = val.replace('%','').replace(',','.').replace(' ','')
+                    try:
+                        return float(cleaned)
+                    except Exception:
+                        return 0.0
+                return 0.0
+
+            vals_admin = {
+                'comision_ventas': parse_val(row_comision_ventas[9]) if row_comision_ventas and len(row_comision_ventas) > 9 else 0.0,
+                'imprevistos': parse_val(row_imprevistos[9]) if row_imprevistos and len(row_imprevistos) > 9 else 0.0,
+                'porcentaje_sugerido_admon': parse_pct(row_pct_admon[9]) if row_pct_admon and len(row_pct_admon) > 9 else 0.0,
+                'vlr_sugerido_admon': parse_val(row_vlr_sugerido_admon[9]) if row_vlr_sugerido_admon and len(row_vlr_sugerido_admon) > 9 else 0.0,
+                'calculo_admon': parse_val(row_calculo_admon[9]) if row_calculo_admon and len(row_calculo_admon) > 9 else 0.0,
+                'administracion': parse_val(row_administracion[9]) if row_administracion and len(row_administracion) > 9 else 0.0,
+                'logistica': parse_val(row_logistica[9]) if row_logistica and len(row_logistica) > 9 else 0.0,
+                'porcentaje_sugerido_utilidad': parse_pct(row_pct_utilidad[9]) if row_pct_utilidad and len(row_pct_utilidad) > 9 else 0.0,
+                'vlr_sugerido_utilidad': parse_val(row_vlr_sugerido_utilidad[9]) if row_vlr_sugerido_utilidad and len(row_vlr_sugerido_utilidad) > 9 else 0.0,
+                'calculo_utilidad': parse_val(row_calculo_utilidad[9]) if row_calculo_utilidad and len(row_calculo_utilidad) > 9 else 0.0,
+                'utilidad': parse_val(row_utilidad[9]) if row_utilidad and len(row_utilidad) > 9 else 0.0,
+                'total_aiu': parse_val(row_total_aiu[9]) if row_total_aiu and len(row_total_aiu) > 9 else 0.0,
+            }
+            self.sale_order_id.write(vals_admin)
+        except Exception:
+            pass
+
+        # Guardar VALOR TOTAL DEL PROYECTO en campos de solo lectura de sale.order
+        try:
+            row_directos = list(ws.iter_rows(min_row=78, max_row=78, values_only=True))[0]
+            row_aiu = list(ws.iter_rows(min_row=79, max_row=79, values_only=True))[0]
+            row_subtotal = list(ws.iter_rows(min_row=80, max_row=80, values_only=True))[0]
+            row_descuento = list(ws.iter_rows(min_row=81, max_row=81, values_only=True))[0]
+            row_total_costo = list(ws.iter_rows(min_row=82, max_row=82, values_only=True))[0]
+            row_valor_m2 = list(ws.iter_rows(min_row=83, max_row=83, values_only=True))[0]
+
+            def parse_val_m2(val):
+                if isinstance(val, (int, float)):
+                    return float(val)
+                if isinstance(val, str):
+                    cleaned = val.replace('$','').replace(' ','').replace('.','').replace(',','.').replace('*10M','').replace('m2','').replace('²','')
+                    try:
+                        return float(cleaned)
+                    except Exception:
+                        return 0.0
+                return 0.0
+
+            vals_total = {
+                'valor_total_directos': parse_val(row_directos[9]) if row_directos and len(row_directos) > 9 else 0.0,
+                'valor_total_aiu': parse_val(row_aiu[9]) if row_aiu and len(row_aiu) > 9 else 0.0,
+                'valor_total_subtotal_costo_directo': parse_val(row_subtotal[9]) if row_subtotal and len(row_subtotal) > 9 else 0.0,
+                'valor_total_descuento': parse_val(row_descuento[9]) if row_descuento and len(row_descuento) > 9 else 0.0,
+                'valor_total_total_costo_directo': parse_val(row_total_costo[9]) if row_total_costo and len(row_total_costo) > 9 else 0.0,
+                'valor_total_m2': parse_val_m2(row_valor_m2[9]) if row_valor_m2 and len(row_valor_m2) > 9 else 0.0,
+            }
+            self.sale_order_id.write(vals_total)
+        except Exception:
+            pass
+
+                # Guardar VALOR TOTAL DEL PROYECTO CON CIMENTACIONES Y COMPLEMENTARIOS en campos de solo lectura de sale.order
+        try:
+            row_costo_directo = list(ws.iter_rows(min_row=86, max_row=86, values_only=True))[0]
+            row_cimentaciones = list(ws.iter_rows(min_row=87, max_row=87, values_only=True))[0]
+            row_complementarios = list(ws.iter_rows(min_row=88, max_row=88, values_only=True))[0]
+            row_total_costo = list(ws.iter_rows(min_row=89, max_row=89, values_only=True))[0]
+            row_valor_m2 = list(ws.iter_rows(min_row=90, max_row=90, values_only=True))[0]
+
+            def parse_val_m2_cim_comp(val):
+                if isinstance(val, (int, float)):
+                    return float(val)
+                if isinstance(val, str):
+                    cleaned = val.replace('$','').replace(' ','').replace('.','').replace(',','.').replace('*10M','').replace('m2','').replace('²','')
+                    try:
+                        return float(cleaned)
+                    except Exception:
+                        return 0.0
+                return 0.0
+
+            vals_cim_comp = {
+                'costo_directo_cim_comp': parse_val(row_costo_directo[9]) if row_costo_directo and len(row_costo_directo) > 9 else 0.0,
+                'cimentaciones': parse_val(row_cimentaciones[9]) if row_cimentaciones and len(row_cimentaciones) > 9 else 0.0,
+                'complementarios': parse_val(row_complementarios[9]) if row_complementarios and len(row_complementarios) > 9 else 0.0,
+                'total_costo_proyecto_cim_comp': parse_val(row_total_costo[9]) if row_total_costo and len(row_total_costo) > 9 else 0.0,
+                'valor_m2_cim_comp': parse_val_m2_cim_comp(row_valor_m2[9]) if row_valor_m2 and len(row_valor_m2) > 9 else 0.0,
+            }
+            self.sale_order_id.write(vals_cim_comp)
+        except Exception:
+            pass
+
+        # Agregar capítulo de CARGOS Y AJUSTES (AIU y Descuentos)
+        try:
+            SaleOrderLine = self.env['sale.order.line']
+            sequence = SaleOrderLine.search_count([('order_id', '=', self.sale_order_id.id)]) + 1000
+            # Crear línea de sección
+            SaleOrderLine.create({
+                'order_id': self.sale_order_id.id,
+                'display_type': 'line_section',
+                'name': 'CARGOS Y AJUSTES',
+                'sequence': sequence,
+            })
+            sequence += 1
+            # Obtener valores de AIU (J75) y Descuentos (J81)
+            row_aiu = list(ws.iter_rows(min_row=75, max_row=75, values_only=True))[0]
+            row_desc = list(ws.iter_rows(min_row=81, max_row=81, values_only=True))[0]
+            def parse_val(val):
+                if isinstance(val, (int, float)):
+                    return float(val)
+                if isinstance(val, str):
+                    cleaned = val.replace('$','').replace(' ','').replace('.','').replace(',','.')
+                    try:
+                        return float(cleaned)
+                    except Exception:
+                        return 0.0
+                return 0.0
+            aiu_val = parse_val(row_aiu[9]) if row_aiu and len(row_aiu) > 9 else 0.0
+            desc_val = parse_val(row_desc[9]) if row_desc and len(row_desc) > 9 else 0.0
+            # Buscar productos por referencia
+            product_aiu = self._get_product_by_name('AIU')
+            product_desc = self._get_product_by_name('DESCUENTOS')
+            if product_aiu:
+                SaleOrderLine.create({
+                    'order_id': self.sale_order_id.id,
+                    'product_id': product_aiu.id,
+                    'name': product_aiu.display_name,
+                    'product_uom_qty': 1.0,
+                    'price_unit': aiu_val,
+                    'sequence': sequence,
+                    'capitulo': 'CARGOS Y AJUSTES',
+                })
+                sequence += 1
+            if product_desc:
+                SaleOrderLine.create({
+                    'order_id': self.sale_order_id.id,
+                    'product_id': product_desc.id,
+                    'name': product_desc.display_name,
+                    'product_uom_qty': 1.0,
+                    'price_unit': desc_val,
+                    'sequence': sequence,
+                    'capitulo': 'CARGOS Y AJUSTES',
+                })
         except Exception:
             pass
 
