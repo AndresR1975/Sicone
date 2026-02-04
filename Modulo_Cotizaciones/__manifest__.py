@@ -53,21 +53,12 @@
           
         # Vistas
         'views/proyecto_views.xml',
-        # 'views/cotizacion_views.xml',
-        # 'views/cotizacion_version_views.xml',
-        # 'views/precio_referencia_views.xml',
         'views/sale_order_view.xml',
         'views/cotizacion_template_views.xml',
+        'views/cotizacion_ponderada_views.xml',
         'views/menus.xml',
         'views/import_excel_wizard_view.xml',
         
-        # Wizards
-        # 'wizard/importar_excel_views.xml',
-        # 'wizard/exportar_excel_views.xml',
-        
-        # Reportes
-        # 'report/cotizacion_report.xml',
-        # 'report/cotizacion_templates.xml',
     ],
     'demo': [],
     'installable': True,

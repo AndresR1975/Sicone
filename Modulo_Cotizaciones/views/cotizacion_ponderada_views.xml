@@ -1,0 +1,29 @@
+<odoo>
+    <record id="view_cotizacion_ponderada_tree" model="ir.ui.view">
+        <field name="name">cotizacion.ponderada.tree</field>
+        <field name="model">cotizacion.ponderada</field>
+        <field name="arch" type="xml">
+            <list create="false">
+                <field name="concepto" readonly="1"/>
+                <field name="valor" readonly="1"/>
+                <field name="peso" widget="percentage" readonly="1"/>
+            </list>
+        </field>
+    </record>
+
+    <record id="view_cotizacion_ponderada_form" model="ir.ui.view">
+        <field name="name">cotizacion.ponderada.form</field>
+        <field name="model">cotizacion.ponderada</field>
+        <field name="arch" type="xml">
+            <form>
+                <sheet>
+                    <group>
+                        <field name="concepto"/>
+                        <field name="valor"/>
+                        <field name="peso"/>
+                    </group>
+                </sheet>
+            </form>
+        </field>
+    </record>
+</odoo>

@@ -57,7 +57,33 @@ class ImportExcelWizard(models.TransientModel):
             # Cargar el workbook leyendo valores calculados (no fórmulas)
             wb = openpyxl.load_workbook(excel_file, data_only=True)
             ws = wb.active
-            
+
+            # --- IMPORTAR COTIZACIÓN PONDERADA ---
+            if 'Cotizacion Ponderada' in wb.sheetnames:
+                ws_ponderada = wb['Cotizacion Ponderada']
+                CotizacionPonderada = self.env['cotizacion.ponderada']
+                # Eliminar registros previos para esta cotización
+                CotizacionPonderada.search([('sale_order_id', '=', self.sale_order_id.id)]).unlink()
+                # Buscar la fila de títulos
+                start_row = None
+                for idx, row in enumerate(ws_ponderada.iter_rows(values_only=True)):
+                    if row and 'CONCEPTO' in [str(cell).upper() for cell in row]:
+                        start_row = idx
+                        break
+                if start_row is not None:
+                    # Leer las filas de datos
+                    for row in ws_ponderada.iter_rows(min_row=start_row+2, values_only=True):
+                        concepto = row[0]
+                        valor = row[1]
+                        peso = row[2]
+                        if concepto and valor is not None and peso is not None:
+                            CotizacionPonderada.create({
+                                'sale_order_id': self.sale_order_id.id,
+                                'concepto': str(concepto),
+                                'valor': float(valor) if isinstance(valor, (int, float)) else 0.0,
+                                'peso': float(peso) if isinstance(peso, (int, float)) else 0.0,
+                            })
+
             # Parsear la estructura del Excel
             parsed_data = self._parse_excel_structure(ws)
             # Cargar los datos en la cotización (DISEÑOS Y PLANIFICACIÓN)

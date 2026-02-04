@@ -103,6 +103,12 @@
                         </div>
                     </div>
             </xpath>
+            <!-- Añadir la pestaña Cotización Ponderada dentro del notebook del record principal -->
+            <xpath expr="//notebook" position="inside">
+                <page string="Cotización Ponderada">
+                    <field name="cotizacion_ponderada_ids" mode="list,form"/>
+                </page>
+            </xpath>
         </field>
     </record>
 </odoo>

@@ -20,6 +20,8 @@ class SaleOrder(models.Model):
         help='Plantilla de capítulos e ítems para poblar la cotización.'
     )
 
+    cotizacion_ponderada_ids = fields.One2many('cotizacion.ponderada', 'sale_order_id', string='Cotización Ponderada')
+
     def action_load_template_lines(self):
         """
         Pobla las líneas de la cotización con los capítulos (como secciones)
