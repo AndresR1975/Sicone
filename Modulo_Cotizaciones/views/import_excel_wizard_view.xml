@@ -41,8 +41,8 @@
             <field name="inherit_id" ref="sale.view_order_form"/>
             <field name="arch" type="xml">
                 <xpath expr="//button[@name='action_quotation_send']" position="after">
-                    <button name="%(import_excel_wizard_action)d" type="action" string="Importar de Excel" 
-                            class="oe_highlight" icon="fa-upload"/>
+                        <button name="%(import_excel_wizard_action)d" type="action" string="Importar de Excel" 
+                            class="oe_highlight" icon="fa-upload" invisible="state != 'draft'"/>
                 </xpath>
             </field>
         </record>

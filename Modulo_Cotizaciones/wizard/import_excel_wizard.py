@@ -49,6 +49,13 @@ class ImportExcelWizard(models.TransientModel):
         if not self.sale_order_id:
             raise UserError('Debe seleccionar una cotización')
 
+        if self.sale_order_id.state == 'draft':
+            # Limpiar líneas de la orden
+            self.sale_order_id.order_line.unlink()
+            # Limpiar Cotización Ponderada
+            self.env['cotizacion.ponderada'].search([('sale_order_id', '=', self.sale_order_id.id)]).unlink()
+            # Aquí puedes agregar limpieza de otros modelos adicionales si los creas en el futuro
+
         try:
             # Decodificar el archivo
             excel_data = base64.b64decode(self.excel_file)
