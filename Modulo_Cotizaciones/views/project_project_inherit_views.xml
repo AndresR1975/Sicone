@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!-- Vista de lista de proyectos personalizada -->
+    <record id="view_project_project_tree_sicone" model="ir.ui.view">
+        <field name="name">project.project.tree.sicone</field>
+        <field name="model">project.project</field>
+        <field name="inherit_id" ref="project.view_project"/>
+        <field name="arch" type="xml">
+            <xpath expr="//list" position="attributes">
+                <attribute name="decoration-success">estado == 'finalizado'</attribute>
+                <attribute name="decoration-danger">estado == 'cancelado'</attribute>
+            </xpath>
+            <field name="name" position="after">
+                <field name="codigo"/>
+                <field name="estado"/>
+            </field>
+        </field>
+    </record>
+
+    <!-- Vista de formulario de proyectos personalizada -->
+    <record id="view_project_project_form_sicone" model="ir.ui.view">
+        <field name="name">project.project.form.sicone</field>
+        <field name="model">project.project</field>
+        <field name="inherit_id" ref="project.edit_project"/>
+        <field name="arch" type="xml">
+            <xpath expr="//sheet/group[1]" position="before">
+                <group string="Identificación SICONE">
+                    <field name="codigo" readonly="1"/>
+                    <field name="estado"/>
+                    <field name="cotizacion_template_id"/>
+                </group>
+            </xpath>
+            <xpath expr="//sheet/group[1]" position="after">
+                <group string="Características Técnicas">
+                    <field name="area_base"/>
+                    <field name="area_cubierta"/>
+                    <field name="area_entrepiso"/>
+                </group>
+            </xpath>
+            <xpath expr="//sheet/group[last()]" position="after">
+                <group string="Fechas">
+                    <field name="fecha_creacion" readonly="1"/>
+                    <field name="fecha_inicio_estimada"/>
+                    <field name="fecha_fin_estimada"/>
+                </group>
+                <group string="Control">
+                    <field name="usuario_creacion_id" readonly="1"/>
+                    <field name="notas"/>
+                </group>
+            </xpath>
+        </field>
+    </record>
+
+    <!-- Vista de búsqueda personalizada -->
+    <record id="view_project_project_search_sicone" model="ir.ui.view">
+        <field name="name">project.project.search.sicone</field>
+        <field name="model">project.project</field>
+        <field name="inherit_id" ref="project.view_project_project_filter"/>
+        <field name="arch" type="xml">
+            <field name="name" position="after">
+                <field name="codigo"/>
+                <field name="estado"/>
+            </field>
+        </field>
+    </record>
+</odoo>

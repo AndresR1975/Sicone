@@ -39,20 +39,22 @@
         'web',
         'sale',
         'account',
+        'project',
     ],
     'external_dependencies': {
         'python': ['openpyxl'],
     },
     'data': [
         # Seguridad
-        'security/sicone_security.xml',
         'security/ir.model.access.csv',
-        
+
         'data/secuencias.xml',
+        'data/sicone_project_sequence.xml',
         # 'data/precios_referencia_data.xml',
           
         # Vistas
         'views/proyecto_views.xml',
+        'views/project_project_inherit_views.xml',
         'views/sale_order_view.xml',
         'views/cotizacion_template_views.xml',
         'views/cotizacion_ponderada_views.xml',

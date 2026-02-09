@@ -2,6 +2,7 @@
 
 # from . import proyecto_sicone
 from . import proyecto_sicone
+from . import project_project_inherit
 from . import sale_order
 from . import cotizacion_template
 from . import sale_order_line

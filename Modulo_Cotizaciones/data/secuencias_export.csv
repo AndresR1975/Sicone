@@ -1,2 +1,3 @@
 Código de la secuencia,Nombre,Prefijo,Tamaño de la secuencia,Empresa,Número siguiente real,Paso,Implementación
 sicone.proyecto,Secuencia Proyecto SICONE,PROY/%(year)s/,4,,1,1,Sin espacio
+sicone.project,Secuencia Proyecto SICONE,PROY/%(year)s/,4,,1,1,Sin espacio

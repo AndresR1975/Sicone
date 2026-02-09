@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!-- Secuencia para Código de Proyecto SICONE -->
+    <record id="seq_sicone_project" model="ir.sequence">
+        <field name="name">Secuencia Proyecto SICONE</field>
+        <field name="code">sicone.project</field>
+        <field name="prefix">PROY/%(year)s/</field>
+        <field name="padding">4</field>
+        <field name="number_next">1</field>
+        <field name="number_increment">1</field>
+        <field name="implementation">no_gap</field>
+        <field name="use_date_range">False</field>
+    </record>
+</odoo>

@@ -1,14 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <odoo>
-    <!-- Menú principal SICONE -->
-    <menuitem id="menu_sicone_root" name="SICONE" sequence="1"/>
-
-    <!-- Menú de Proyectos -->
-    <menuitem id="menu_sicone_proyectos" name="Proyectos" parent="menu_sicone_root" sequence="10"/>
-
-    <!-- Acción de proyectos -->
-    <record id="action_sicone_proyecto" model="ir.actions.act_window">
-        <field name="name">Proyectos</field>
+    <!-- Acción de proyectos SICONE restaurada -->
+    <record id="action_sicone_project" model="ir.actions.act_window">
+        <field name="name">Proyectos SICONE</field>
         <field name="res_model">sicone.proyecto</field>
         <field name="view_mode">list,form</field>
         <field name="help" type="html">
@@ -16,7 +10,26 @@
         </field>
     </record>
 
-    <menuitem id="menu_sicone_proyecto_list" name="Lista de Proyectos" parent="menu_sicone_proyectos" action="action_sicone_proyecto" sequence="1"/>
+    <menuitem id="menu_sicone_proyecto_list" name="Lista de Proyectos SICONE" parent="menu_sicone_proyectos" action="action_sicone_project" sequence="2"/>
+
+    <!-- Acción y menú para proyectos Odoo estándar (project.project) -->
+    <record id="action_project_project_list" model="ir.actions.act_window">
+        <field name="name">Lista de Proyectos Odoo</field>
+        <field name="res_model">project.project</field>
+        <field name="view_mode">list,form</field>
+        <field name="help" type="html">
+            <p>Visualice y gestione los proyectos estándar de Odoo personalizados para SICONE.</p>
+        </field>
+    </record>
+    <menuitem id="menu_project_project_list" name="Lista de Proyectos Odoo" parent="menu_sicone_proyectos" action="action_project_project_list" sequence="3"/>
+    <!-- Menú principal SICONE -->
+    <menuitem id="menu_sicone_root" name="SICONE" sequence="1"/>
+
+    <!-- Menú de Proyectos -->
+    <menuitem id="menu_sicone_proyectos" name="Proyectos" parent="menu_sicone_root" sequence="10"/>
+
+    <!-- Menú de proyectos usa el modelo estándar project.project -->
+    <menuitem id="menu_sicone_project_list" name="Lista de Proyectos" parent="menu_sicone_proyectos" action="project.open_view_project_all" sequence="1"/>
         <!-- Acción de Cotizaciones (sale.order) -->
         <record id="action_sicone_sale_order" model="ir.actions.act_window">
             <field name="name">Cotizaciones</field>
