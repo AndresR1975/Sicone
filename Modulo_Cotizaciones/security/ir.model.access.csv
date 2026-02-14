@@ -4,3 +4,4 @@ access_cotizacion_template_chapter_all,sicone.cotizacion.template.chapter,model_
 access_cotizacion_template_item_all,sicone.cotizacion.template.item,model_sicone_cotizacion_template_item,,1,1,1,1
 access_import_excel_wizard_user,sicone.import.excel.wizard,model_sicone_import_excel_wizard,,1,1,1,0
 access_cotizacion_ponderada_all,cotizacion.ponderada.all,model_cotizacion_ponderada,,1,1,1,1
+access_sicone_proyecto_all,sicone.proyecto,model_sicone_proyecto,,1,1,1,1
